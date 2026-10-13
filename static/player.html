@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pantalla de jugadores · Mesa de D&amp;D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Alegreya+Sans:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/player.css">
+</head>
+<body>
+  <div class="player-layout">
+    <section class="player-map" id="map"><div class="empty">El máster aún no ha mostrado ningún mapa.</div></section>
+    <aside class="player-side">
+      <div id="clock" class="card" hidden></div>
+      <div id="message" class="card message" hidden></div>
+      <div id="combat" class="card" hidden></div>
+      <div class="card"><h3>Tiradas</h3><ul id="rolls" class="player-rolls"></ul></div>
+      <button class="btn sm" id="full" type="button">Pantalla completa</button>
+    </aside>
+  </div>
+  <script type="module" src="js/player.js"></script>
+</body>
+</html>

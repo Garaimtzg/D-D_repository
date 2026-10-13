@@ -1,0 +1,87 @@
+/* Variables de tema y maquetación general */
+:root {
+  --bg: #17120e;
+  --bg-2: #211a14;
+  --panel: #2a211a;
+  --panel-2: #33281f;
+  --line: #4a3b2d;
+  --text: #efe3cf;
+  --muted: #b29f86;
+  --gold: #d9a94a;
+  --gold-2: #f0d38c;
+  --red: #c2463c;
+  --green: #5d9b4a;
+  --blue: #4f86c6;
+  --purple: #9a6ac9;
+  --jugador: #4f86c6;
+  --pnj: #c99b3d;
+  --enemigo: #c2463c;
+  --radius: 10px;
+  --shadow: 0 6px 24px rgba(0, 0, 0, .45);
+  --font-title: "IM Fell English SC", Georgia, serif;
+  --font: "Alegreya Sans", system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(ellipse at top, #2b2016 0%, var(--bg) 60%) fixed;
+  color: var(--text);
+  font: 15px/1.45 var(--font);
+}
+h1, h2, h3, h4 { font-family: var(--font-title); font-weight: 400; margin: 0 0 .4em; color: var(--gold-2); }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.2rem; }
+a { color: var(--gold-2); }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Cabecera */
+.top {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 8px 16px;
+  background: rgba(23, 18, 14, .94);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand h1 { font-size: 1.45rem; margin: 0; }
+.brand svg { width: 32px; height: 36px; }
+.nav { display: flex; gap: 2px; flex-wrap: wrap; flex: 1; }
+.nav a {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 11px; border-radius: 8px;
+  color: var(--muted); text-decoration: none; font-weight: 600;
+}
+.nav a:hover { background: var(--panel); color: var(--text); }
+.nav a[aria-current="page"] { background: var(--panel-2); color: var(--gold-2); box-shadow: inset 0 -2px 0 var(--gold); }
+.nav svg { width: 18px; height: 18px; }
+.top-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+/* Contenido */
+main#view { padding: 16px; max-width: 1500px; margin: 0 auto; }
+.split { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+.split > .sidebar { position: sticky; top: 70px; max-height: calc(100vh - 86px); overflow: auto; }
+.grid { display: grid; gap: 14px; }
+.grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.auto { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+.row.end { justify-content: flex-end; }
+.stack > * + * { margin-top: 10px; }
+.grow { flex: 1; min-width: 0; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.center { text-align: center; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .split > .sidebar { position: static; max-height: none; }
+  .grid.cols-2, .grid.cols-3 { grid-template-columns: minmax(0, 1fr); }
+  .nav a span { display: none; }
+}
+.split > * { min-width: 0; }
