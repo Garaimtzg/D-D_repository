@@ -1,23 +1,14 @@
 """Arranca la mesa de D&D.
 
     python app.py              -> http://localhost:8000 (solo en este ordenador)
-    python app.py --lan        -> accesible para tus amigos desde la misma red wifi
+    python app.py --lan        -> accesible desde móviles y otros equipos de la misma wifi
 """
 import argparse
-import socket
 import webbrowser
 
 from server.config import DATA_DIR
 from server.handler import make_server
-
-
-def lan_ip():
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        try:
-            s.connect(("10.255.255.255", 1))
-            return s.getsockname()[0]
-        except OSError:
-            return "127.0.0.1"
+from server.network import lan_ip
 
 
 def main():
@@ -43,8 +34,12 @@ def main():
     print(f"Mesa de D&D en {url}  (Ctrl+C para salir)")
     if args.lan:
         print(f"Pantalla de jugadores para tus amigos: http://{lan_ip()}:{port}/player.html")
+        print(f"Mesa del máster desde el móvil:        http://{lan_ip()}:{port}/")
     if not args.no_browser:
-        webbrowser.open(url)
+        try:  # en el móvil (Termux, a-Shell) puede no haber navegador que abrir
+            webbrowser.open(url)
+        except Exception:  # noqa: BLE001
+            pass
     try:
         server.serve_forever()
     except KeyboardInterrupt:

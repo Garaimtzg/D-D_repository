@@ -85,3 +85,20 @@ main#view { padding: 16px; max-width: 1500px; margin: 0 auto; }
   .nav a span { display: none; }
 }
 .split > * { min-width: 0; }
+
+/* Móvil: cabecera compacta, menú deslizable y márgenes para pantallas con muesca */
+.top { padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+@media (max-width: 640px) {
+  .top { gap: 8px; padding-bottom: 6px; }
+  .brand h1 { font-size: 1.15rem; }
+  .brand svg { width: 26px; height: 30px; }
+  .nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { flex: none; padding: 8px 10px; }
+  .top-tools { margin-left: auto; }
+  .top-tools .qd:not(.primary) { display: none; }
+  .top-tools a.btn { font-size: 0; gap: 0; }        /* «Pantalla jugadores» queda solo con el icono */
+  main#view { padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
+  .btn { min-height: 36px; }
+  input, select, textarea { font-size: 16px; }       /* evita el zoom automático de iOS al escribir */
+}

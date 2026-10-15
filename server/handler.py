@@ -10,11 +10,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from . import api, backup, config
+from . import api, backup, config, network
 from .storage import JsonStore
 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 
 class App:
@@ -40,6 +42,9 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/api/backup":
             return self._export_backup()
+        if path == "/api/info":
+            host, port = self.server.server_address[:2]
+            return self._json(200, network.info(host, port))
         if path.startswith("/api/"):
             return self._api("GET", path)
         if path.startswith("/uploads/"):

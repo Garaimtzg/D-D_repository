@@ -95,3 +95,4 @@ details.box[open] { padding-bottom: 10px; }
 
 .mini-player { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); max-width: 260px; }
 .mini-player span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+code.url { display: block; padding: 8px 10px; background: #1b1511; border: 1px solid var(--line); border-radius: 7px; color: var(--gold-2); font-size: 1rem; word-break: break-all; user-select: all; }

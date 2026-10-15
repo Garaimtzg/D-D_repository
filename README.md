@@ -24,6 +24,37 @@ Para cerrar la mesa, cierra la ventana negra de la consola.
   la iniciativa (sin PG de los enemigos ni los ocultos), la hora, los mensajes y las tiradas públicas.
 - Si solo hay una pantalla, alterna entre las dos ventanas; las tiradas secretas y las notas no salen en la de jugadores.
 
+### En el móvil
+
+**Opción 1 — El móvil se conecta al ordenador del máster (recomendada).**
+Arranca con `Iniciar Mesa DnD (móviles).bat` (o `sh iniciar.sh --lan`). La consola, y el botón
+**📱 Móvil** de la app, muestran las direcciones que hay que abrir en el móvil, por ejemplo
+`http://192.168.1.20:8000/` (mesa del máster) y `.../player.html` (pantalla de jugadores).
+El móvil tiene que estar en la misma wifi. La primera vez Windows preguntará por el cortafuegos:
+permite el acceso en **redes privadas**.
+
+Para tenerla como una app: en Android, menú ⋮ → «Añadir a pantalla de inicio»; en iPhone,
+Compartir → «Añadir a pantalla de inicio». Se abre a pantalla completa, sin barra del navegador.
+
+Ojo: en este modo, cualquiera conectado a esa wifi puede abrir también la mesa del máster.
+Úsalo en casa o en una red de confianza.
+
+**Opción 2 — Todo en un móvil Android, sin ordenador.**
+Instala [Termux](https://f-droid.org/packages/com.termux/) (desde F-Droid) y ejecuta en él:
+
+```bash
+pkg install python git
+git clone <url-de-este-repositorio> mesa-dnd
+cd mesa-dnd
+python app.py --no-browser
+```
+
+Después abre `http://localhost:8000` en Chrome (y si quieres, «Añadir a pantalla de inicio»).
+Deja Termux abierto en segundo plano mientras juegas. Para que tus amigos vean la pantalla de
+jugadores desde sus móviles, usa `python app.py --no-browser --lan`.
+
+En iPhone no se puede dejar el servidor funcionando en segundo plano, así que allí usa la opción 1.
+
 ### Cada uno con su propia copia
 
 Cualquiera puede descargarse la carpeta y tener su mesa local para dirigir sus partidas.
@@ -61,13 +92,15 @@ Las fuentes decorativas se cargan de Google Fonts; sin internet se usan las del 
 ```
 app.py                  arranque (argumentos de línea de comandos)
 Iniciar Mesa DnD.bat    arranque con doble clic en Windows
-iniciar.sh              arranque en macOS / Linux
+Iniciar Mesa DnD (móviles).bat  igual, pero accesible desde móviles de la misma wifi
+iniciar.sh              arranque en macOS / Linux / Android (Termux)
 server/
   config.py             rutas y límites
   handler.py            servidor HTTP: estáticos, subidas y API
   api.py                rutas de la API JSON
   storage.py            almacén JSON (un fichero por colección)
   backup.py             exportar / importar la campaña en .zip
+  network.py            direcciones de red para conectar móviles
   dice.py               intérprete de tiradas
   rules.py              tablas y reglas 5e, cálculo de encuentros
   generators.py         generadores aleatorios
@@ -75,6 +108,7 @@ server/
 static/
   index.html            app del máster
   player.html           pantalla de jugadores
+  manifest.webmanifest  permite instalarla en el móvil como app
   css/                  base, componentes, secciones y pantalla de jugadores
   js/main.js            navegación
   js/core/              api, dom, reglas, dados, audio

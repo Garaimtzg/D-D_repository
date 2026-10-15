@@ -101,10 +101,42 @@ async function mount(root, [selId]) {
       const r = stage.getBoundingClientRect();
       zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
     }, { passive: false });
+    // Arrastrar con un dedo o el ratón; pellizcar con dos dedos para hacer zoom.
+    const pointers = new Map();
     let drag = null;
-    stage.addEventListener('pointerdown', (e) => { drag = { x: e.clientX - view.x, y: e.clientY - view.y }; stage.setPointerCapture(e.pointerId); stage.classList.add('dragging'); });
-    stage.addEventListener('pointermove', (e) => { if (!drag) return; view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply(); });
-    stage.addEventListener('pointerup', () => { drag = null; stage.classList.remove('dragging'); });
+    let pinch = null;
+    const local = (p) => { const r = stage.getBoundingClientRect(); return { x: p.x - r.left, y: p.y - r.top }; };
+    const startGesture = () => {
+      const pts = [...pointers.values()];
+      if (pts.length === 1) { drag = { x: pts[0].x - view.x, y: pts[0].y - view.y }; pinch = null; }
+      else if (pts.length >= 2) { drag = null; pinch = { dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y), mid: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 } }; }
+      else { drag = pinch = null; }
+      stage.classList.toggle('dragging', pointers.size > 0);
+    };
+    stage.addEventListener('pointerdown', (e) => {
+      try { stage.setPointerCapture(e.pointerId); } catch { /* algunos navegadores no lo permiten */ }
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      startGesture();
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch) {
+        const [a, b] = [...pointers.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        view.x += mid.x - pinch.mid.x;
+        view.y += mid.y - pinch.mid.y;
+        const m = local(mid);
+        zoomAt(dist / (pinch.dist || 1), m.x, m.y);
+        pinch = { dist, mid };
+      } else if (drag) {
+        view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply();
+      }
+    });
+    const end = (e) => { pointers.delete(e.pointerId); startGesture(); };
+    stage.addEventListener('pointerup', end);
+    stage.addEventListener('pointercancel', end);
     stage.addEventListener('dblclick', fit);
     const onResize = () => fit();
     window.addEventListener('resize', onResize);

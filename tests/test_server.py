@@ -193,6 +193,20 @@ class ApiTests(unittest.TestCase):
         status, _ = self.json_call("POST", "/api/backup", raw=b"no soy un zip")
         self.assertEqual(status, 400)
 
+    def test_info_and_manifest(self):
+        status, info = self.json_call("GET", "/api/info")
+        self.assertEqual(status, 200)
+        self.assertFalse(info["lan"])  # el servidor de pruebas solo escucha en 127.0.0.1
+        self.assertIsNone(info["master"])
+        status, manifest = self.json_call("GET", "/manifest.webmanifest")
+        self.assertEqual((status, manifest["display"]), (200, "standalone"))
+
+    def test_network_info_lan(self):
+        from server import network
+        info = network.info("0.0.0.0", 8000)
+        self.assertTrue(info["lan"])
+        self.assertTrue(info["player"].endswith(":8000/player.html"))
+
     def test_unknown_routes(self):
         self.assertEqual(self.call("GET", "/api/nada")[0], 404)
         self.assertEqual(self.call("PATCH", "/api/characters")[0], 501)
