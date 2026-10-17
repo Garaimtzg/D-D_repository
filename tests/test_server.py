@@ -7,6 +7,7 @@ import unittest
 import urllib.error
 import urllib.request
 import zipfile
+from pathlib import Path
 
 from server import dice, generators, rules
 from server.handler import make_server
@@ -76,6 +77,36 @@ class GeneratorTests(unittest.TestCase):
             self.assertTrue(out["title"])
 
 
+    def test_tavern_names_agree_in_gender(self):
+        for seed in range(60):
+            title = generators.tavern(random.Random(seed))["title"]
+            article, noun = title.split()[:2]
+            gender = dict(generators.TAVERN_A)[noun]
+            self.assertEqual(article, "El" if gender == "m" else "La", title)
+            if gender == "f":
+                self.assertFalse(title.endswith(("Dorado", "Borracho", "Tuerto", "Dormido")), title)
+
+
+class MobilePageTests(unittest.TestCase):
+    def test_mobile_page_is_up_to_date(self):
+        import importlib.util
+        root = Path(__file__).resolve().parent.parent
+        spec = importlib.util.spec_from_file_location("build_movil", root / "tools" / "build_movil.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        current = (root / "static" / "dados-movil.html").read_text(encoding="utf-8")
+        # Git en Windows puede cambiar los finales de línea al descargar el repositorio
+        self.assertEqual(current.splitlines(), mod.build().splitlines(), "Ejecuta: python tools/build_movil.py")
+
+    def test_mobile_page_is_self_contained(self):
+        root = Path(__file__).resolve().parent.parent
+        page = (root / "static" / "dados-movil.html").read_text(encoding="utf-8")
+        self.assertNotIn("<script src", page)
+        self.assertNotIn('rel="stylesheet"', page)
+        self.assertIn("Dice3D", page)
+        self.assertIn("DiceNotation", page)
+
+
 class StorageTests(unittest.TestCase):
     def test_crud(self):
         with tempfile.TemporaryDirectory() as d:
@@ -141,21 +172,6 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("error", err)
 
-    def test_player_view_hides_secrets(self):
-        _, combat = self.json_call("POST", "/api/combats", {
-            "name": "Emboscada", "status": "active", "round": 1, "turn": 0,
-            "combatants": [
-                {"name": "Ana", "type": "jugador", "hp": 10, "maxHp": 12},
-                {"name": "Goblin", "type": "enemigo", "hp": 3, "maxHp": 7},
-                {"name": "Asesino", "type": "enemigo", "hp": 30, "maxHp": 30, "hidden": True},
-            ]})
-        self.json_call("PUT", "/api/settings", {"activeCombat": combat["id"]})
-        _, view = self.json_call("GET", "/api/player")
-        names = [c["name"] for c in view["combat"]["order"]]
-        self.assertEqual(names, ["Ana", "Goblin"])
-        self.assertEqual(view["combat"]["order"][1]["health"], "Malherido")
-        self.assertNotIn("hp", view["combat"]["order"][1])
-
     def test_upload_roundtrip_and_validation(self):
         status, up = self.json_call("POST", "/api/uploads", raw=b"\x89PNGfake", headers={"X-Filename": "mapa.png"})
         self.assertEqual(status, 201)
@@ -193,19 +209,9 @@ class ApiTests(unittest.TestCase):
         status, _ = self.json_call("POST", "/api/backup", raw=b"no soy un zip")
         self.assertEqual(status, 400)
 
-    def test_info_and_manifest(self):
-        status, info = self.json_call("GET", "/api/info")
-        self.assertEqual(status, 200)
-        self.assertFalse(info["lan"])  # el servidor de pruebas solo escucha en 127.0.0.1
-        self.assertIsNone(info["master"])
-        status, manifest = self.json_call("GET", "/manifest.webmanifest")
-        self.assertEqual((status, manifest["display"]), (200, "standalone"))
-
-    def test_network_info_lan(self):
-        from server import network
-        info = network.info("0.0.0.0", 8000)
-        self.assertTrue(info["lan"])
-        self.assertTrue(info["player"].endswith(":8000/player.html"))
+    def test_removed_network_routes(self):
+        self.assertEqual(self.call("GET", "/api/player")[0], 404)
+        self.assertEqual(self.call("GET", "/api/info")[0], 404)
 
     def test_unknown_routes(self):
         self.assertEqual(self.call("GET", "/api/nada")[0], 404)

@@ -10,12 +10,11 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from . import api, backup, config, network
+from . import api, backup, config
 from .storage import JsonStore
 
 mimetypes.add_type("text/javascript", ".js")
 mimetypes.add_type("image/webp", ".webp")
-mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("image/svg+xml", ".svg")
 
 
@@ -29,9 +28,9 @@ class App:
 class Handler(SimpleHTTPRequestHandler):
     app: App = None
 
-    def log_message(self, fmt, *args):  # registro más discreto
-        if not self.path.startswith("/api/player"):
-            super().log_message(fmt, *args)
+    def log_request(self, code="-", size="-"):  # la consola solo muestra peticiones fallidas
+        if isinstance(code, int) and code >= 400:
+            super().log_request(code, size)
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
@@ -42,9 +41,6 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/api/backup":
             return self._export_backup()
-        if path == "/api/info":
-            host, port = self.server.server_address[:2]
-            return self._json(200, network.info(host, port))
         if path.startswith("/api/"):
             return self._api("GET", path)
         if path.startswith("/uploads/"):

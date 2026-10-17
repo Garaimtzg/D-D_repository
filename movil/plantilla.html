@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#120c09">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Dados · Mesa de D&amp;D</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 20.7 7v10L12 22l-8.7-5V7Z' fill='%23c23b37' stroke='%23f8dc94'/%3E%3C/svg%3E">
+<!-- Generado por tools/build_movil.py a partir de movil/ y static/js/lib/. No lo edites a mano. -->
+<style>
+/*{{CSS}}*/
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <button class="who" id="who" type="button" aria-label="Quién tira y color de los dados"><span class="who-dot" id="whoDot"></span><span id="whoName">Jugador</span></button>
+    <div class="top-actions">
+      <button class="icon-btn" id="shake" type="button" aria-label="Agitar el móvil para tirar" title="Agitar para tirar">📳</button>
+      <button class="icon-btn" id="sound" type="button" aria-label="Sonido">🔊</button>
+      <button class="icon-btn" id="histBtn" type="button" aria-label="Historial">📜</button>
+    </div>
+  </header>
+
+  <section class="tray" id="tray">
+    <canvas id="cv" aria-label="Bandeja de dados"></canvas>
+    <div class="hint" id="hint"><b>Toca un dado</b><span>o prepara una tirada y pulsa «Tirar»</span></div>
+    <div class="result" id="result" hidden></div>
+  </section>
+
+  <section class="controls">
+    <div class="mode" role="group" aria-label="Modo">
+      <button type="button" data-mode="now" aria-pressed="true">Al momento</button>
+      <button type="button" data-mode="pool" aria-pressed="false">Preparar</button>
+    </div>
+    <div class="dice" id="dice"></div>
+    <div class="row">
+      <div class="seg" id="adv" role="group" aria-label="Ventaja">
+        <button type="button" data-v="" aria-pressed="true">Normal</button>
+        <button type="button" data-v="adv" aria-pressed="false">Ventaja</button>
+        <button type="button" data-v="dis" aria-pressed="false">Desv.</button>
+      </div>
+      <div class="mod"><button type="button" id="modMinus" aria-label="Restar 1">−</button><b id="modVal">+0</b><button type="button" id="modPlus" aria-label="Sumar 1">+</button></div>
+    </div>
+    <div class="row pool-row" id="poolRow" hidden>
+      <span class="pool" id="pool">Bandeja vacía</span>
+      <button type="button" class="ghost" id="clear">Vaciar</button>
+      <button type="button" class="roll" id="roll">¡Tirar!</button>
+    </div>
+    <form class="expr" id="exprForm">
+      <input id="expr" placeholder="2d6+3 · 4d6kh3 · d%" autocomplete="off" aria-label="Tirada libre">
+      <button type="submit">Tirar</button>
+    </form>
+  </section>
+</main>
+
+<aside class="sheet" id="histSheet" hidden>
+  <div class="sheet-head"><b>Historial</b><button type="button" class="ghost" id="histClear">Borrar</button><button type="button" class="icon-btn" id="histClose" aria-label="Cerrar">✕</button></div>
+  <ul id="hist"></ul>
+</aside>
+
+<aside class="sheet" id="whoSheet" hidden>
+  <div class="sheet-head"><b>¿Quién tira?</b><button type="button" class="icon-btn" id="whoClose" aria-label="Cerrar">✕</button></div>
+  <label class="field">Nombre<input id="whoInput" maxlength="30" placeholder="Tu personaje"></label>
+  <div class="swatches" id="swatches"></div>
+</aside>
+
+<script>
+/*{{DICE3D}}*/
+</script>
+<script>
+/*{{NOTATION}}*/
+</script>
+<script>
+/*{{APP}}*/
+</script>
+</body>
+</html>

@@ -1,25 +1,27 @@
-// Herramientas del máster: generadores, encuentros, reloj, temporizadores, monedas, tablas propias...
+// Herramientas del máster: campaña (copia .zip), generadores, encuentros, reloj, temporizadores,
+// narración, monedas, reparto de botín, tablas aleatorias propias, viajes y dados para el móvil.
 import { api } from '../core/api.js';
-import { h, clear, bind, field, selectEl, toast, toastError, confirmDialog, pickFiles } from '../core/dom.js';
+import { h, clear, icon, bind, field, selectEl, segmented, toast, toastError, confirmDialog, pickFiles, promptDialog } from '../core/dom.js';
 import { CRS, newCharacter } from '../core/dnd.js';
+import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
 
-const ICON = '<path d="M14 6a4 4 0 0 0 5 5l-9 9-3-3 9-9a4 4 0 0 0-2-2z"/>';
-const TABLES_KEY = 'dnd.tools.tables';
+export default { id: 'herramientas', title: 'Herramientas', icon: 'herramientas', hint: 'Generadores, reloj, temporizadores y copia de la campaña · tecla 7', mount };
 
-export default { id: 'herramientas', title: 'Herramientas', icon: ICON, mount };
+const tile = (title, iconName, cls, ...content) => h('section', { class: `panel tool ${cls || ''}` },
+  h('div', { class: 'panel-head' }, h('h3', {}, h('span', { class: 'tool-ic' }, icon(iconName, 18)), title)), ...content);
 
 async function mount(root) {
   const settings = await api.settings();
   const timers = [];
   root.append(h('div', { class: 'tools-grid' },
-    backupCard(), generatorsCard(), encounterCard(), clockCard(settings), timerCard(timers), playerMessageCard(settings),
-    coinsCard(), splitCard(), tablesCard(), travelCard()));
+    campaignTile(settings), generatorsTile(), clockTile(settings), timerTile(timers), narrationTile(settings),
+    encounterTile(), tablesTile(settings), coinsTile(), lootTile(), travelTile(), mobileTile()));
   return () => timers.forEach(clearInterval);
 }
 
-// -- Copia de seguridad de la campaña -----------------------------------------
-function backupCard() {
+// -------------------------------------------------------------------- campaña
+function campaignTile(settings) {
   async function importBackup() {
     const [file] = await pickFiles('.zip,application/zip');
     if (!file) return;
@@ -29,248 +31,250 @@ function backupCard() {
       const res = await fetch('/api/backup', { method: 'POST', body: file });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-      toast('Campaña cargada. Recargando…');
+      toast('Campaña cargada. Recargando…', { kind: 'good' });
       setTimeout(() => location.reload(), 800);
     } catch (e) { toastError(e); }
   }
-  return h('div', { class: 'card' }, h('h3', {}, 'Campaña'),
-    h('p', { class: 'small muted', style: { marginTop: 0 } },
-      'Todo se guarda en este ordenador. Descarga una copia (.zip con fichas, combates, notas, mapas y música) para guardarla o pasársela a otro máster.'),
+  return tile('Campaña', 'save', 'campaign',
+    h('div', { class: 'campaign-name' }, h('span', { class: 'tiny muted' }, 'Nombre'), h('b', {}, settings.campaignName || 'Mi campaña')),
+    h('p', { class: 'small muted' }, 'Todo se guarda solo en este ordenador (carpeta data). Descarga una copia en .zip con fichas, combates, notas, mapas y música para guardarla o pasársela a otro máster.'),
     h('div', { class: 'row' },
-      h('a', { class: 'btn sm primary', href: '/api/backup', download: '' }, '⬇ Descargar copia'),
-      h('button', { class: 'btn sm', type: 'button', onclick: importBackup }, '⬆ Cargar copia')));
+      h('a', { class: 'btn primary', href: '/api/backup', download: '' }, icon('download', 16), 'Descargar copia (.zip)'),
+      h('button', { class: 'btn', type: 'button', onclick: importBackup }, icon('upload', 16), 'Cargar copia')));
 }
 
-// -- Generadores --------------------------------------------------------------
-function generatorsCard() {
+// ---------------------------------------------------------------- generadores
+function generatorsTile() {
   const p = { race: '', tier: 1, climate: 'templado' };
-  const out = h('ul', { class: 'gen-out' });
-  const kinds = [['pnj', 'PNJ'], ['nombre', 'Nombre'], ['taberna', 'Taberna'], ['botin', 'Botín'], ['gancho', 'Gancho'], ['clima', 'Clima'], ['baratija', 'Baratija']];
+  const out = h('div', { class: 'gen-out' });
+  const kinds = [['pnj', 'PNJ', 'user'], ['nombre', 'Nombre', 'feather'], ['taberna', 'Taberna', 'tavern'], ['botin', 'Botín', 'gem'],
+    ['gancho', 'Gancho', 'compass'], ['clima', 'Clima', 'cloud'], ['baratija', 'Baratija', 'sparkle']];
 
-  async function gen(kind) {
+  async function gen(kind, iconName) {
     try {
       const r = await api.post(`/api/generate/${kind}`, p);
-      out.prepend(h('li', {},
-        h('div', { class: 'row between' }, h('b', {}, r.title),
-          h('div', { class: 'row' },
-            kind === 'pnj' && h('button', { class: 'btn sm', type: 'button', onclick: async (e) => {
-              await api.create('characters', newCharacter('pnj', { name: r.title, race: r.race, cls: r.occupation, notes: r.text }));
-              e.target.disabled = true;
-              toast(`${r.title} guardado en Personajes.`);
-            } }, 'Guardar como PNJ'),
-            h('button', { class: 'btn sm ghost', type: 'button', onclick: () => navigator.clipboard?.writeText(`${r.title}: ${r.text}`).then(() => toast('Copiado.')) }, 'Copiar'))),
-        h('div', { class: 'small' }, r.text)));
-      while (out.children.length > 15) out.lastChild.remove();
+      sfx[kind === 'botin' ? 'coins' : kind === 'taberna' ? 'page' : 'magic']();
+      const card = h('article', { class: 'gen-card' },
+        h('div', { class: 'gen-ic' }, icon(iconName, 20)),
+        h('div', { class: 'grow' }, h('b', {}, r.title), h('p', {}, r.text)),
+        h('div', { class: 'gen-actions' },
+          kind === 'pnj' && h('button', { class: 'btn xs', type: 'button', onclick: async (e) => {
+            await api.create('characters', newCharacter('pnj', { name: r.title, race: r.race, cls: r.occupation, notes: r.text }));
+            e.currentTarget.disabled = true;
+            toast(`${r.title} guardado en Personajes.`, { kind: 'good', iconName: 'user' });
+          } }, icon('plus', 12), 'Guardar PNJ'),
+          h('button', { class: 'btn xs ghost', type: 'button', onclick: () => navigator.clipboard?.writeText(`${r.title}: ${r.text}`).then(() => toast('Copiado.', { iconName: 'copy' })) }, icon('copy', 12))));
+      out.prepend(card);
+      while (out.children.length > 8) out.lastChild.remove();
     } catch (e) { toastError(e); }
   }
 
-  return h('div', { class: 'card span-2' }, h('h3', {}, 'Generadores'),
+  return tile('Generadores', 'sparkle', 'wide',
     h('div', { class: 'row' },
       field('Raza', selectEl([['', 'Al azar'], 'humano', 'elfo', 'enano', 'mediano', 'orco', 'dracónido', 'tiefling', 'gnomo'], '', (v) => { p.race = v; })),
       field('Nivel del botín', selectEl([[1, '1–4'], [2, '5–10'], [3, '11–16'], [4, '17–20']], 1, (v) => { p.tier = Number(v); })),
       field('Clima', selectEl([['templado', 'Templado'], ['frio', 'Frío'], ['calido', 'Cálido']], 'templado', (v) => { p.climate = v; }))),
-    h('div', { class: 'row', style: { marginTop: '8px' } }, kinds.map(([k, l]) => h('button', { class: 'btn sm primary', type: 'button', onclick: () => gen(k) }, l))),
+    h('div', { class: 'gen-buttons' }, kinds.map(([k, l, ic]) => h('button', { class: 'gen-btn', type: 'button', onclick: () => gen(k, ic) }, icon(ic, 22), l))),
     out);
 }
 
-// -- Calculadora de encuentros -----------------------------------------------
-function encounterCard() {
+// ----------------------------------------------------------------- encuentros
+function encounterTile() {
   const s = { levels: '1, 1, 1, 1', crs: ['1/4', '1/4', '1/2'] };
-  const result = h('div', { class: 'small' });
+  const result = h('div', { class: 'enc-result' });
   const list = h('div', { class: 'row' });
-
   async function calc() {
     const levels = s.levels.split(/[\s,;]+/).map(Number).filter((n) => n >= 1 && n <= 20);
     try {
       const r = await api.post('/api/encounter', { levels, crs: s.crs });
-      clear(result, h('div', { class: 'big-diff' }, r.difficulty),
-        h('div', {}, `PX ajustados: ${r.adjusted_xp} (×${r.multiplier}) · PX reales: ${r.base_xp} · ${r.xp_per_player} por jugador`),
-        h('div', { class: 'muted' }, `Umbrales del grupo — fácil ${r.thresholds['fácil']}, media ${r.thresholds.media}, difícil ${r.thresholds['difícil']}, mortal ${r.thresholds.mortal}`));
+      clear(result, h('div', { class: `big-diff d-${r.difficulty.normalize('NFD').replace(/\p{M}/gu, '')}` }, r.difficulty),
+        h('div', { class: 'small' }, `${r.adjusted_xp} PX ajustados (×${r.multiplier}) · ${r.base_xp} PX reales · ${r.xp_per_player} por jugador`),
+        h('div', { class: 'tiny muted' }, `Fácil ${r.thresholds['fácil']} · media ${r.thresholds.media} · difícil ${r.thresholds['difícil']} · mortal ${r.thresholds.mortal}`));
     } catch (e) { clear(result, e.message); }
   }
-
-  function drawList() {
-    clear(list, s.crs.map((cr, i) => h('span', { class: 'chip' }, `VD ${cr}`,
-      h('button', { type: 'button', 'aria-label': 'Quitar', onclick: () => { s.crs.splice(i, 1); drawList(); calc(); } }, '✕'))));
-  }
-  const crSel = selectEl(CRS, '1', () => {}, { style: 'width:auto' });
+  const drawList = () => clear(list, s.crs.map((cr, i) => h('span', { class: 'chip enemigo' }, `VD ${cr}`,
+    h('button', { type: 'button', 'aria-label': 'Quitar', onclick: () => { s.crs.splice(i, 1); drawList(); calc(); } }, '✕'))));
+  const crSel = selectEl(CRS, '1', () => {}, { style: 'width:auto', 'aria-label': 'Valor de desafío' });
   drawList();
   calc();
-  return h('div', { class: 'card' }, h('h3', {}, 'Calculadora de encuentros'),
+  return tile('Calculadora de encuentros', 'combate', '',
     field('Niveles del grupo (separados por comas)', bind(s, 'levels', { onChange: calc })),
     h('div', { class: 'eyebrow' }, 'Monstruos'), list,
-    h('div', { class: 'row', style: { marginTop: '6px' } }, crSel,
-      h('button', { class: 'btn sm', type: 'button', onclick: () => { s.crs.push(crSel.value); drawList(); calc(); } }, '+ Añadir monstruo')),
-    h('div', { style: { marginTop: '10px' } }, result));
+    h('div', { class: 'row' }, crSel, h('button', { class: 'btn sm', type: 'button', onclick: () => { s.crs.push(crSel.value); drawList(); calc(); } }, icon('plus', 14), 'Añadir monstruo')),
+    result);
 }
 
-// -- Reloj del mundo ----------------------------------------------------------
-function clockCard(settings) {
+// ------------------------------------------------------------------------ reloj
+function clockTile(settings) {
   const clock = settings.clock || { day: 1, minutes: 8 * 60 };
-  const show = h('div', { class: 'clock' });
+  const dial = h('div', { class: 'dial' });
+  const label = h('div', { class: 'clock-label' });
   const period = (m) => { const hh = Math.floor(m / 60); return hh < 6 ? 'Madrugada' : hh < 12 ? 'Mañana' : hh < 14 ? 'Mediodía' : hh < 20 ? 'Tarde' : 'Noche'; };
   const draw = () => {
-    const hh = String(Math.floor(clock.minutes / 60)).padStart(2, '0');
-    const mm = String(clock.minutes % 60).padStart(2, '0');
-    clear(show, h('b', {}, `Día ${clock.day} · ${hh}:${mm}`), h('span', { class: 'muted' }, ` ${period(clock.minutes)}`));
+    const hh = Math.floor(clock.minutes / 60);
+    const night = hh < 6 || hh >= 20;
+    dial.style.setProperty('--angle', `${(clock.minutes / 1440) * 360}deg`);
+    dial.classList.toggle('night', night);
+    clear(dial, h('span', { class: 'dial-body' }, icon(night ? 'moon' : 'sun', 22)));
+    clear(label, h('b', {}, `Día ${clock.day}`), h('span', { class: 'clock-time' }, `${String(hh).padStart(2, '0')}:${String(clock.minutes % 60).padStart(2, '0')}`),
+      h('span', { class: 'muted small' }, period(clock.minutes)));
   };
   const advance = (mins) => {
     const total = clock.minutes + mins;
     clock.day += Math.floor(total / 1440);
     clock.minutes = ((total % 1440) + 1440) % 1440;
     if (clock.day < 1) { clock.day = 1; clock.minutes = 0; }
+    sfx.click();
     draw();
     api.saveSettings({ clock }).catch(toastError);
   };
   draw();
-  return h('div', { class: 'card' }, h('h3', {}, 'Reloj del mundo'), show,
-    h('div', { class: 'row', style: { marginTop: '8px' } },
-      [['+1 asalto', 0.1], ['+10 min', 10], ['+1 h', 60], ['+8 h', 480], ['+1 día', 1440], ['−1 h', -60]].map(([l, m]) =>
-        h('button', { class: 'btn sm', type: 'button', onclick: () => advance(Math.round(m) || 1) }, l)),
-      h('button', { class: 'btn sm', type: 'button', onclick: () => {
-        const toDawn = ((6 * 60 - clock.minutes) + 1440) % 1440 || 1440;
-        advance(toDawn);
-      } }, 'Al amanecer')),
-    h('p', { class: 'small muted' }, 'La hora se muestra en la pantalla de jugadores. 1 asalto = 6 segundos (se redondea a 1 minuto).'));
+  return tile('Reloj del mundo', 'clock', '',
+    h('div', { class: 'row nowrap clock-row' }, dial, label),
+    h('div', { class: 'row' },
+      [['+1 min', 1], ['+10 min', 10], ['+1 h', 60], ['+8 h', 480], ['+1 día', 1440], ['−1 h', -60]].map(([l, m]) => h('button', { class: 'btn xs', type: 'button', onclick: () => advance(m) }, l)),
+      h('button', { class: 'btn xs', type: 'button', onclick: () => advance(((6 * 60 - clock.minutes) + 1440) % 1440 || 1440) }, icon('sun', 12), 'Amanecer')),
+    h('p', { class: 'tiny muted' }, 'La hora aparece sobre la mesa; de noche el tablero se oscurece.'));
 }
 
-// -- Temporizadores -----------------------------------------------------------
-function timerCard(timers) {
+// -------------------------------------------------------------- temporizadores
+function timerTile(timers) {
   const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
   const turn = { len: 60, left: 60, run: false };
   const session = { secs: 0, run: false };
-  const turnEl = h('span', { class: 'timer' }, fmt(turn.left));
-  const sessEl = h('b', { class: 'tnum' }, fmt(0));
+  const ring = h('div', { class: 'timer-ring' });
+  const sessEl = h('b', { class: 'tnum' });
   const turnBtn = h('button', { class: 'btn sm primary', type: 'button', onclick: () => { turn.run = !turn.run; draw(); } });
-  const sessBtn = h('button', { class: 'btn sm', type: 'button', onclick: () => { session.run = !session.run; draw(); } });
+  const sessBtn = h('button', { class: 'btn xs', type: 'button', onclick: () => { session.run = !session.run; draw(); } });
   const draw = () => {
-    turnEl.textContent = fmt(turn.left);
-    turnEl.classList.toggle('low', turn.left <= 10);
+    ring.style.setProperty('--p', turn.left / turn.len);
+    ring.classList.toggle('low', turn.left <= 10);
+    clear(ring, h('span', {}, fmt(turn.left)));
     sessEl.textContent = `${Math.floor(session.secs / 3600)}h ${fmt(session.secs % 3600)}`;
-    turnBtn.textContent = turn.run ? 'Pausa' : 'Empezar';
-    sessBtn.textContent = session.run ? 'Pausa' : 'Empezar';
+    clear(turnBtn, icon(turn.run ? 'pause' : 'play', 14), turn.run ? 'Pausa' : 'Empezar');
+    clear(sessBtn, icon(session.run ? 'pause' : 'play', 12), session.run ? 'Pausa' : 'Empezar');
   };
   timers.push(setInterval(() => {
     if (turn.run && turn.left > 0) {
       turn.left -= 1;
-      if (turn.left === 0) { turn.run = false; toast('⏰ ¡Se acabó el tiempo del turno!'); beep(); }
+      if (turn.left === 0) { turn.run = false; toast('¡Se acabó el tiempo del turno!', { iconName: 'hourglass' }); sfx.gong(); }
+      else if (turn.run && turn.left <= 5) sfx.click();
     }
     if (session.run) session.secs += 1;
     draw();
   }, 1000));
   draw();
-  return h('div', { class: 'card' }, h('h3', {}, 'Temporizadores'),
-    h('div', { class: 'row between' }, turnEl,
-      field('Duración del turno', selectEl([[30, '30 s'], [60, '1 min'], [90, '1:30'], [120, '2 min'], [300, '5 min']], 60, (v) => { turn.len = turn.left = Number(v); draw(); }))),
-    h('div', { class: 'row' }, turnBtn, h('button', { class: 'btn sm', type: 'button', onclick: () => { turn.left = turn.len; turn.run = true; draw(); } }, 'Reiniciar')),
-    h('div', { class: 'row between', style: { marginTop: '12px' } }, h('span', {}, 'Duración de la sesión: ', sessEl),
-      h('div', { class: 'row' }, sessBtn, h('button', { class: 'btn sm', type: 'button', onclick: () => { session.secs = 0; draw(); } }, 'A cero'))));
+  return tile('Temporizadores', 'hourglass', '',
+    h('div', { class: 'row nowrap' }, ring,
+      h('div', { class: 'stack grow' },
+        field('Duración del turno', selectEl([[30, '30 s'], [60, '1 min'], [90, '1:30'], [120, '2 min'], [300, '5 min']], 60, (v) => { turn.len = turn.left = Number(v); draw(); })),
+        h('div', { class: 'row' }, turnBtn, h('button', { class: 'btn sm', type: 'button', onclick: () => { turn.left = turn.len; turn.run = true; draw(); } }, icon('refresh', 14), 'Reiniciar')))),
+    h('div', { class: 'row between session' }, h('span', { class: 'small' }, icon('clock', 14), ' Sesión: ', sessEl),
+      h('div', { class: 'row nowrap' }, sessBtn, h('button', { class: 'btn xs ghost', type: 'button', onclick: () => { session.secs = 0; draw(); } }, 'A cero'))));
 }
 
-function beep() {
-  try {
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.frequency.value = 660;
-    g.gain.setValueAtTime(0.2, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-    o.connect(g).connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + 0.8);
-  } catch { /* sin audio */ }
-}
-
-// -- Mensaje para la pantalla de jugadores -----------------------------------
-function playerMessageCard(settings) {
+// ------------------------------------------------------------------ narración
+function narrationTile(settings) {
   const s = { text: settings.playerMessage || '' };
-  const send = (text) => api.saveSettings({ playerMessage: text }).then(() => toast(text ? 'Mensaje enviado a la pantalla de jugadores.' : 'Mensaje retirado.')).catch(toastError);
-  return h('div', { class: 'card' }, h('h3', {}, 'Mensaje a los jugadores'),
-    field('Texto que aparece en la pantalla de jugadores', bind(s, 'text', { type: 'textarea', rows: 3, placeholder: 'Una niebla espesa cubre el camino…' })),
-    h('div', { class: 'row', style: { marginTop: '6px' } },
-      h('button', { class: 'btn sm primary', type: 'button', onclick: () => send(s.text) }, 'Mostrar'),
-      h('button', { class: 'btn sm', type: 'button', onclick: () => { s.text = ''; send(''); } }, 'Quitar')));
+  const send = (text) => api.saveSettings({ playerMessage: text })
+    .then(() => toast(text ? 'La narración aparece sobre la mesa.' : 'Narración retirada.', { iconName: 'feather' })).catch(toastError);
+  const presets = ['Una niebla espesa cubre el camino…', 'Se oye un rugido en la oscuridad.', 'El suelo empieza a temblar.', 'Huele a azufre y a ceniza.'];
+  return tile('Narración en la mesa', 'feather', '',
+    bind(s, 'text', { type: 'textarea', rows: 3, placeholder: 'El viento trae el eco de unos tambores…' }),
+    h('div', { class: 'row' }, presets.map((p) => h('button', { class: 'btn xs ghost', type: 'button', onclick: (e) => { s.text = p; e.currentTarget.closest('.tool').querySelector('textarea').value = p; } }, p.slice(0, 24) + '…'))),
+    h('div', { class: 'row' },
+      h('button', { class: 'btn sm primary', type: 'button', onclick: () => send(s.text) }, icon('mesa', 14), 'Mostrar en la mesa'),
+      h('button', { class: 'btn sm', type: 'button', onclick: (e) => { s.text = ''; e.currentTarget.closest('.tool').querySelector('textarea').value = ''; send(''); } }, 'Quitar')));
 }
 
-// -- Conversor de monedas -----------------------------------------------------
-function coinsCard() {
+// -------------------------------------------------------- tablas aleatorias
+function tablesTile(settings) {
+  const tables = settings.randomTables || [{ name: 'Encuentros en el camino', items: 'Mercaderes perdidos\nLobos hambrientos\nUn puente roto\nBandidos disfrazados de peregrinos\nUn ciervo blanco que observa\nNada… por ahora' }];
+  let idx = 0;
+  let saveT = 0;
+  const persist = () => { clearTimeout(saveT); saveT = setTimeout(() => api.saveSettings({ randomTables: tables }).catch(toastError), 500); };
+  const body = h('div', { class: 'stack' });
+  const outcome = h('div', { class: 'table-outcome', hidden: true });
+  const draw = () => {
+    const t = tables[idx];
+    clear(body,
+      h('div', { class: 'row nowrap' },
+        selectEl(tables.map((x, i) => [i, x.name]), idx, (v) => { idx = Number(v); draw(); }, { 'aria-label': 'Tabla' }),
+        h('button', { class: 'btn icon sm', type: 'button', 'data-tip': 'Nueva tabla', onclick: async () => {
+          const name = await promptDialog('Nueva tabla', 'Nombre', `Tabla ${tables.length + 1}`);
+          if (!name) return;
+          tables.push({ name, items: '' }); idx = tables.length - 1; persist(); draw();
+        } }, icon('plus', 15)),
+        tables.length > 1 && h('button', { class: 'btn icon sm ghost', type: 'button', 'data-tip': 'Borrar tabla', onclick: () => { tables.splice(idx, 1); idx = 0; persist(); draw(); } }, icon('trash', 15))),
+      bind(t, 'items', { type: 'textarea', rows: 5, onChange: persist, placeholder: 'Una opción por línea', 'aria-label': 'Opciones, una por línea' }),
+      h('button', { class: 'btn sm primary', type: 'button', onclick: async () => {
+        const items = t.items.split('\n').map((x) => x.trim()).filter(Boolean);
+        if (!items.length) return toast('La tabla está vacía.');
+        const r = await roll(`1d${Math.max(2, items.length)}`, { label: t.name });
+        if (!r) return;
+        clear(outcome, h('span', { class: 'outcome-n' }, r.total), h('b', {}, items[(r.total - 1) % items.length]));
+        outcome.hidden = false;
+      } }, icon('dados', 15), 'Tirar en la tabla'),
+      outcome);
+  };
+  draw();
+  return tile('Tablas aleatorias', 'list', '', body);
+}
+
+// ---------------------------------------------------------------- monedas
+function coinsTile() {
   const RATES = { pc: 1, pa: 10, pe: 50, po: 100, pp: 1000 };
   const NAMES = { pc: 'cobre', pa: 'plata', pe: 'electro', po: 'oro', pp: 'platino' };
+  const COLORS = { pc: '#c27a45', pa: '#c9d1d9', pe: '#d8cf8c', po: '#f0c24a', pp: '#e6eef5' };
   const s = { pc: 0, pa: 0, pe: 0, po: 0, pp: 0 };
   const out = h('div', { class: 'small' });
   const calc = () => {
     const total = Object.entries(s).reduce((t, [k, v]) => t + (Number(v) || 0) * RATES[k], 0);
-    clear(out, h('div', {}, h('b', {}, `${(total / 100).toLocaleString('es-ES')} po`), ` en total (${total.toLocaleString('es-ES')} pc)`),
-      h('div', { class: 'muted' }, 'Sin electro: ', ['pp', 'po', 'pa', 'pc'].reduce((acc, k) => {
-        const n = Math.floor(acc.rest / RATES[k]);
-        if (n) acc.parts.push(`${n} ${NAMES[k]}`);
-        acc.rest -= n * RATES[k];
-        return acc;
-      }, { rest: total, parts: [] }).parts.join(', ') || '0'));
+    let rest = total;
+    const parts = [];
+    for (const k of ['pp', 'po', 'pa', 'pc']) { const n = Math.floor(rest / RATES[k]); if (n) parts.push(`${n} ${NAMES[k]}`); rest -= n * RATES[k]; }
+    clear(out, h('div', { class: 'coin-total' }, `${(total / 100).toLocaleString('es-ES')} po`), h('div', { class: 'muted' }, parts.join(', ') || 'Nada'));
   };
   calc();
-  return h('div', { class: 'card' }, h('h3', {}, 'Conversor de monedas'),
-    h('div', { class: 'coins' }, Object.keys(RATES).map((k) => field(k.toUpperCase(), bind(s, k, { type: 'number', min: 0, onChange: calc })))),
-    h('div', { style: { marginTop: '8px' } }, out),
-    h('p', { class: 'small muted' }, '1 pp = 10 po · 1 po = 2 pe = 10 pa · 1 pa = 10 pc'));
+  return tile('Conversor de monedas', 'coins', '',
+    h('div', { class: 'coins dark' }, Object.keys(RATES).map((k) => h('label', { class: 'coin' },
+      h('span', { class: 'coin-face', style: { '--coin': COLORS[k] } }, k.toUpperCase()), bind(s, k, { type: 'number', min: 0, onChange: calc, 'aria-label': NAMES[k] })))),
+    out, h('p', { class: 'tiny muted' }, '1 pp = 10 po · 1 po = 2 pe = 10 pa · 1 pa = 10 pc'));
 }
 
-// -- Reparto de botín ---------------------------------------------------------
-function splitCard() {
+function lootTile() {
   const s = { gold: 100, people: 4 };
   const out = h('div');
   const calc = () => {
     const n = Math.max(1, Number(s.people) || 1);
     const cp = Math.round((Number(s.gold) || 0) * 100);
     const each = Math.floor(cp / n);
-    clear(out, h('b', {}, `${(each / 100).toLocaleString('es-ES')} po por cabeza`), h('span', { class: 'muted' }, cp - each * n ? ` · sobran ${cp - each * n} pc para el fondo común` : ''));
+    clear(out, h('div', { class: 'coin-total' }, `${(each / 100).toLocaleString('es-ES')} po`), h('div', { class: 'small muted' }, 'por cabeza', cp - each * n ? ` · sobran ${cp - each * n} pc para el fondo común` : ''));
   };
   calc();
-  return h('div', { class: 'card' }, h('h3', {}, 'Repartir botín'),
-    h('div', { class: 'row' }, field('Oro total', bind(s, 'gold', { type: 'number', min: 0, onChange: calc })), field('Personas', bind(s, 'people', { type: 'number', min: 1, onChange: calc }))),
-    h('div', { style: { marginTop: '8px' } }, out));
+  return tile('Repartir botín', 'gem', '',
+    h('div', { class: 'row nowrap' }, field('Oro total', bind(s, 'gold', { type: 'number', min: 0, onChange: calc })), field('Personas', bind(s, 'people', { type: 'number', min: 1, onChange: calc }))), out);
 }
 
-// -- Tablas aleatorias propias -----------------------------------------------
-function tablesCard() {
-  let tables;
-  try { tables = JSON.parse(localStorage.getItem(TABLES_KEY)) || null; } catch { tables = null; }
-  tables ??= [{ name: 'Encuentros en el camino', items: 'Mercaderes perdidos\nLobos hambrientos\nUn puente roto\nBandidos disfrazados de peregrinos\nUn ciervo blanco que observa\nNada… por ahora' }];
-  let idx = 0;
-  const persist = () => { try { localStorage.setItem(TABLES_KEY, JSON.stringify(tables)); } catch { /* sin almacenamiento */ } };
-  const body = h('div', { class: 'stack' });
-  const draw = () => {
-    const t = tables[idx];
-    clear(body,
-      h('div', { class: 'row' },
-        selectEl(tables.map((x, i) => [i, x.name]), idx, (v) => { idx = Number(v); draw(); }, { style: 'flex:1' }),
-        h('button', { class: 'btn sm', type: 'button', onclick: () => { tables.push({ name: `Tabla ${tables.length + 1}`, items: '' }); idx = tables.length - 1; persist(); draw(); } }, '+ Nueva'),
-        tables.length > 1 && h('button', { class: 'btn sm danger', type: 'button', onclick: () => { tables.splice(idx, 1); idx = 0; persist(); draw(); } }, 'Borrar')),
-      field('Nombre', bind(t, 'name', { onChange: persist })),
-      field('Una opción por línea', bind(t, 'items', { type: 'textarea', rows: 5, onChange: persist })),
-      h('button', { class: 'btn sm primary', type: 'button', onclick: async () => {
-        const items = t.items.split('\n').map((x) => x.trim()).filter(Boolean);
-        if (!items.length) return toast('La tabla está vacía.');
-        const r = await roll(`1d${Math.max(2, items.length)}`, { label: t.name, quiet: true });
-        if (r) toast(h('div', {}, h('div', { class: 'small muted' }, `${t.name} (${r.total})`), h('b', {}, items[(r.total - 1) % items.length])), { ms: 7000 });
-      } }, 'Tirar en la tabla'));
-  };
-  draw();
-  return h('div', { class: 'card' }, h('h3', {}, 'Tablas aleatorias propias'), body);
-}
-
-// -- Viajes -------------------------------------------------------------------
-function travelCard() {
+function travelTile() {
   const s = { miles: 24, pace: 24 };
   const out = h('div');
   const calc = () => {
     const days = (Number(s.miles) || 0) / Number(s.pace);
-    clear(out, h('b', {}, `${days.toFixed(1)} días`), h('span', { class: 'muted' }, ` (${Math.ceil(days * 8)} horas de marcha)`));
+    clear(out, h('div', { class: 'coin-total' }, `${days.toFixed(1)} días`), h('div', { class: 'small muted' }, `${Math.ceil(days * 8)} horas de marcha`));
   };
   calc();
-  return h('div', { class: 'card' }, h('h3', {}, 'Calculadora de viaje'),
-    h('div', { class: 'row' }, field('Distancia (millas)', bind(s, 'miles', { type: 'number', min: 0, onChange: calc })),
-      field('Ritmo', selectEl([[30, 'Rápido (30/día)'], [24, 'Normal (24/día)'], [18, 'Lento (18/día)']], 24, (v) => { s.pace = Number(v); calc(); }))),
-    h('div', { style: { marginTop: '8px' } }, out),
-    h('p', { class: 'small muted' }, 'Rápido: −5 a Percepción pasiva. Lento: se puede avanzar con sigilo. A caballo o en carro, igual pero con más carga.'));
+  return tile('Viajes', 'compass', '',
+    h('div', { class: 'row nowrap' }, field('Millas', bind(s, 'miles', { type: 'number', min: 0, onChange: calc })),
+      field('Ritmo', selectEl([[30, 'Rápido'], [24, 'Normal'], [18, 'Lento']], 24, (v) => { s.pace = Number(v); calc(); }))),
+    out, h('p', { class: 'tiny muted' }, 'Rápido (30 millas/día): −5 a Percepción pasiva. Lento (18): se puede avanzar con sigilo.'));
+}
+
+// ---------------------------------------------------------- dados en el móvil
+function mobileTile() {
+  return tile('Dados en el móvil', 'dados', 'mobile',
+    h('p', { class: 'small' }, 'Una página de dados que funciona sola en cualquier móvil, sin instalar nada y sin internet.'),
+    h('ol', { class: 'small steps' }, h('li', {}, 'Descárgala con el botón.'), h('li', {}, 'Pásala al móvil (WhatsApp, correo, cable…).'), h('li', {}, 'Ábrela en el navegador del móvil.')),
+    h('a', { class: 'btn primary', href: '/dados-movil.html', download: 'dados-movil.html' }, icon('download', 16), 'Descargar dados-movil.html'),
+    h('a', { class: 'btn ghost sm', href: '/dados-movil.html', target: '_blank', rel: 'noopener' }, icon('eye', 14), 'Probarla aquí'));
 }

@@ -38,8 +38,12 @@ SECRETS = ["trabaja para el villano", "es un cambiaformas", "robó a los aventur
            "sabe dónde está la entrada oculta", "debe dinero a la Mano Negra", "es noble de incógnito",
            "mató a alguien hace años", "oye una voz en sueños", "no tiene ningún secreto", "es un espía del rey"]
 
-TAVERN_A = ["Jabalí", "Grifo", "Dragón", "Barril", "Cuervo", "Ciervo", "Hacha", "Sirena", "Caldero", "Lobo", "Yunque"]
-TAVERN_B = ["Dorado", "Borracho", "Tuerto", "Risueño", "de Plata", "Dormido", "Ahumado", "Errante", "Herrumbroso", "Bailarín"]
+# (nombre, género) y (masculino, femenino): «El Grifo Dorado», «La Sirena Dorada»
+TAVERN_A = [("Jabalí", "m"), ("Grifo", "m"), ("Dragón", "m"), ("Barril", "m"), ("Cuervo", "m"), ("Ciervo", "m"),
+            ("Sirena", "f"), ("Caldero", "m"), ("Lobo", "m"), ("Yunque", "m"), ("Jarra", "f"), ("Rosa", "f"), ("Lechuza", "f")]
+TAVERN_B = [("Dorado", "Dorada"), ("Borracho", "Borracha"), ("Tuerto", "Tuerta"), ("Risueño", "Risueña"),
+            ("de Plata", "de Plata"), ("Dormido", "Dormida"), ("Ahumado", "Ahumada"), ("Errante", "Errante"),
+            ("Herrumbroso", "Herrumbrosa"), ("Bailarín", "Bailarina")]
 TAVERN_DISH = ["estofado de cordero", "pan negro y queso curado", "trucha a la brasa", "gachas con miel",
                "costillas de jabalí", "sopa de ajo", "empanada de setas", "pollo con ciruelas"]
 
@@ -110,7 +114,9 @@ def npc(race="", rng=None):
 
 def tavern(rng=None):
     rng = rng or random.Random()
-    title = f"El {rng.choice(TAVERN_A)} {rng.choice(TAVERN_B)}"
+    noun, gender = rng.choice(TAVERN_A)
+    masc, fem = rng.choice(TAVERN_B)
+    title = f"El {noun} {masc}" if gender == "m" else f"La {noun} {fem}"
     owner = name("", rng)["title"]
     text = (f"Lo regenta {owner}. Plato del día: {rng.choice(TAVERN_DISH)}. "
             f"Habitación: {rng.choice([2, 5, 8])} pp la noche. Rumor: {rng.choice(HOOKS)}")

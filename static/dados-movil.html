@@ -1,0 +1,1129 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#120c09">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Dados · Mesa de D&amp;D</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 20.7 7v10L12 22l-8.7-5V7Z' fill='%23c23b37' stroke='%23f8dc94'/%3E%3C/svg%3E">
+<!-- Generado por tools/build_movil.py a partir de movil/ y static/js/lib/. No lo edites a mano. -->
+<style>
+:root {
+  --gold: #e2b456; --gold-2: #f8dc94; --text: #f3e8d4; --muted: #a8937a; --line: rgba(226, 184, 112, .22);
+  --panel: #241a13; --sunken: #140e0a; --crimson: #e0524a; --emerald: #4cc38a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  color: var(--text); font: 500 16px/1.4 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  background: radial-gradient(900px 500px at 20% -10%, rgba(255, 168, 76, .14), transparent 60%), linear-gradient(180deg, #1a120d, #0c0806);
+  overscroll-behavior: none; user-select: none; -webkit-user-select: none;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+.app { display: flex; flex-direction: column; height: 100dvh; padding: max(10px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom)); gap: 10px; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.who { display: flex; align-items: center; gap: 9px; padding: 7px 14px 7px 8px; border-radius: 999px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); font-weight: 700; max-width: 60%; }
+.who span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-dot { flex: none; width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 2px #0c0806, 0 0 0 3.5px currentColor; }
+.top-actions { display: flex; gap: 6px; }
+.icon-btn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0, 0, 0, .3); font-size: 1.1rem; display: grid; place-items: center; }
+.icon-btn[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); }
+
+.tray {
+  position: relative; flex: 1; min-height: 200px; border-radius: 22px; padding: 10px; overflow: hidden;
+  background: repeating-linear-gradient(88deg, rgba(0, 0, 0, .1) 0 2px, transparent 2px 9px), linear-gradient(180deg, #5b3b22, #2c1a0e);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5), inset 0 2px 0 rgba(255, 220, 170, .18);
+}
+.tray::before { content: ""; position: absolute; inset: 10px; border-radius: 14px; background: radial-gradient(ellipse at 50% 40%, #276446, #15392a 65%, #0c2219); box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .55), inset 0 8px 34px rgba(0, 0, 0, .7); }
+#cv { position: absolute; inset: 10px; width: calc(100% - 20px); height: calc(100% - 20px); z-index: 1; }
+.hint { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; text-align: center; gap: 4px; color: rgba(220, 240, 225, .6); pointer-events: none; }
+.hint b { font-size: 1.15rem; }
+.result {
+  position: absolute; top: 18px; left: 50%; transform: translateX(-50%); z-index: 3; min-width: 150px; max-width: 86%; padding: 8px 18px 10px;
+  border-radius: 16px; text-align: center; background: rgba(12, 8, 6, .82); border: 1px solid #a8782a; backdrop-filter: blur(6px);
+  animation: pop .35s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes pop { from { opacity: 0; transform: translate(-50%, -10px) scale(.8); } }
+.result .lbl { font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.result .total { font: 800 3rem/1 Georgia, serif; color: var(--gold-2); text-shadow: 0 0 20px rgba(226, 180, 86, .5); }
+.result .detail { font-size: .76rem; color: #d6c3a5; }
+.result.crit { border-color: var(--emerald); } .result.crit .total { color: #9dffbf; }
+.result.fumble { border-color: var(--crimson); } .result.fumble .total { color: #ff9c92; }
+.result .tag { font-weight: 900; letter-spacing: .14em; font-size: .78rem; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; }
+.mode, .seg { display: flex; padding: 3px; gap: 3px; border-radius: 12px; background: var(--sunken); border: 1px solid var(--line); }
+.mode button, .seg button { flex: 1; padding: 8px 6px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 700; font-size: .9rem; }
+.mode button[aria-pressed="true"], .seg button[aria-pressed="true"] { background: linear-gradient(180deg, #f8dc94, #d6a446); color: #2a1906; }
+.dice { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.die {
+  position: relative; height: 62px; border-radius: 14px; border: 1px solid var(--line); color: var(--dc);
+  background: radial-gradient(circle at 50% 35%, rgba(255, 255, 255, .08), transparent 70%), linear-gradient(180deg, #2c2118, #1b140f);
+  display: grid; place-items: center; transition: transform .12s;
+}
+.die:active { transform: scale(.93); }
+.die svg { width: 32px; height: 32px; filter: drop-shadow(0 0 6px currentColor); }
+.die span { position: absolute; bottom: 3px; font-size: .66rem; font-weight: 800; color: #d6c3a5; }
+.die i { position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; background: var(--gold); color: #2a1906; font: 900 .75rem/22px system-ui; font-style: normal; text-align: center; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row .seg { flex: 1; }
+.mod { display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 12px; background: var(--sunken); border: 1px solid var(--line); }
+.mod button { width: 36px; height: 34px; border-radius: 9px; border: 0; background: #2c2118; font-size: 1.2rem; font-weight: 700; }
+.mod b { min-width: 34px; text-align: center; color: var(--gold-2); font-size: 1.05rem; }
+.pool { flex: 1; font-weight: 800; color: var(--gold-2); font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roll { padding: 12px 22px; border-radius: 13px; border: 1px solid #f2cd73; font-weight: 900; font-size: 1.05rem; color: #2a1906; background: linear-gradient(180deg, #f8dc94, #e2b456 45%, #b9862f); box-shadow: 0 3px 0 #6e4c16; }
+.ghost { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-weight: 700; }
+.expr { display: flex; gap: 8px; }
+.expr input { flex: 1; min-width: 0; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--sunken); color: var(--text); font: inherit; font-size: 16px; user-select: text; -webkit-user-select: text; }
+.expr button { padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: #2c2118; font-weight: 800; }
+
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; max-height: 75dvh; overflow: auto; padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+  border-radius: 22px 22px 0 0; background: #1d1510; border-top: 1px solid var(--line); box-shadow: 0 -20px 50px rgba(0, 0, 0, .6);
+  animation: up .3s cubic-bezier(.2, .8, .2, 1);
+}
+@keyframes up { from { transform: translateY(100%); } }
+.sheet-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.sheet-head b { flex: 1; font-size: 1.1rem; color: var(--gold-2); }
+#hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#hist li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(0, 0, 0, .25); }
+#hist li div { flex: 1; min-width: 0; }
+#hist small { display: block; color: var(--muted); font-size: .72rem; }
+#hist .t { font: 800 1.4rem Georgia, serif; color: var(--gold-2); }
+#hist li.crit .t { color: #9dffbf; } #hist li.fumble .t { color: #ff9c92; }
+.field { display: flex; flex-direction: column; gap: 5px; font-size: .78rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.field input { padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--sunken); color: var(--text); font: inherit; font-size: 16px; text-transform: none; letter-spacing: 0; user-select: text; -webkit-user-select: text; }
+.swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 14px; }
+.swatches button { aspect-ratio: 1; border-radius: 50%; border: 3px solid transparent; box-shadow: 0 0 0 1px rgba(255, 255, 255, .2); }
+.swatches button[aria-pressed="true"] { border-color: #fff; }
+@media (min-width: 700px) { .app { max-width: 560px; margin: 0 auto; } .dice { grid-template-columns: repeat(7, 1fr); } }
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <button class="who" id="who" type="button" aria-label="Quién tira y color de los dados"><span class="who-dot" id="whoDot"></span><span id="whoName">Jugador</span></button>
+    <div class="top-actions">
+      <button class="icon-btn" id="shake" type="button" aria-label="Agitar el móvil para tirar" title="Agitar para tirar">📳</button>
+      <button class="icon-btn" id="sound" type="button" aria-label="Sonido">🔊</button>
+      <button class="icon-btn" id="histBtn" type="button" aria-label="Historial">📜</button>
+    </div>
+  </header>
+
+  <section class="tray" id="tray">
+    <canvas id="cv" aria-label="Bandeja de dados"></canvas>
+    <div class="hint" id="hint"><b>Toca un dado</b><span>o prepara una tirada y pulsa «Tirar»</span></div>
+    <div class="result" id="result" hidden></div>
+  </section>
+
+  <section class="controls">
+    <div class="mode" role="group" aria-label="Modo">
+      <button type="button" data-mode="now" aria-pressed="true">Al momento</button>
+      <button type="button" data-mode="pool" aria-pressed="false">Preparar</button>
+    </div>
+    <div class="dice" id="dice"></div>
+    <div class="row">
+      <div class="seg" id="adv" role="group" aria-label="Ventaja">
+        <button type="button" data-v="" aria-pressed="true">Normal</button>
+        <button type="button" data-v="adv" aria-pressed="false">Ventaja</button>
+        <button type="button" data-v="dis" aria-pressed="false">Desv.</button>
+      </div>
+      <div class="mod"><button type="button" id="modMinus" aria-label="Restar 1">−</button><b id="modVal">+0</b><button type="button" id="modPlus" aria-label="Sumar 1">+</button></div>
+    </div>
+    <div class="row pool-row" id="poolRow" hidden>
+      <span class="pool" id="pool">Bandeja vacía</span>
+      <button type="button" class="ghost" id="clear">Vaciar</button>
+      <button type="button" class="roll" id="roll">¡Tirar!</button>
+    </div>
+    <form class="expr" id="exprForm">
+      <input id="expr" placeholder="2d6+3 · 4d6kh3 · d%" autocomplete="off" aria-label="Tirada libre">
+      <button type="submit">Tirar</button>
+    </form>
+  </section>
+</main>
+
+<aside class="sheet" id="histSheet" hidden>
+  <div class="sheet-head"><b>Historial</b><button type="button" class="ghost" id="histClear">Borrar</button><button type="button" class="icon-btn" id="histClose" aria-label="Cerrar">✕</button></div>
+  <ul id="hist"></ul>
+</aside>
+
+<aside class="sheet" id="whoSheet" hidden>
+  <div class="sheet-head"><b>¿Quién tira?</b><button type="button" class="icon-btn" id="whoClose" aria-label="Cerrar">✕</button></div>
+  <label class="field">Nombre<input id="whoInput" maxlength="30" placeholder="Tu personaje"></label>
+  <div class="swatches" id="swatches"></div>
+</aside>
+
+<script>
+/*
+ * Dice3D — dados poliédricos en 3D dibujados en un <canvas>, sin dependencias.
+ *
+ * Los dados se lanzan con física sencilla (rebotes, rozamiento, choques entre ellos),
+ * giran en 3D y terminan mostrando hacia arriba la cara con el valor que se les pide:
+ * el resultado lo decide quien llama (el servidor en Python o el móvil), el motor solo
+ * lo anima.
+ *
+ *   const tray = Dice3D.createTray(canvas, { overlay: true });
+ *   await tray.roll([{ sides: 20, value: 17 }, { sides: 6, value: 3 }], { origin: { x, y } });
+ *
+ * Es un script clásico (no módulo) para poder incrustarlo en la página de dados del móvil,
+ * que se abre como fichero sin servidor.
+ */
+(function (global) {
+  'use strict';
+
+  // ---------------------------------------------------------------- vectores
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const mulS = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const len = (a) => Math.hypot(a[0], a[1], a[2]);
+  const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+
+  // ------------------------------------------------------------- cuaterniones [w, x, y, z]
+  const qMul = (a, b) => [
+    a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+    a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+    a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+    a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
+  ];
+  const qNorm = (q) => { const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1; return [q[0] / l, q[1] / l, q[2] / l, q[3] / l]; };
+  const qAxis = (axis, angle) => { const a = norm(axis); const s = Math.sin(angle / 2); return [Math.cos(angle / 2), a[0] * s, a[1] * s, a[2] * s]; };
+  function qBetween(u, v) { // rotación mínima que lleva u a v (unitarios)
+    const d = dot(u, v);
+    if (d < -0.999999) {
+      let axis = cross([1, 0, 0], u);
+      if (len(axis) < 1e-6) axis = cross([0, 1, 0], u);
+      return qAxis(axis, Math.PI);
+    }
+    const c = cross(u, v);
+    return qNorm([1 + d, c[0], c[1], c[2]]);
+  }
+  function qSlerp(a, b, t) {
+    let d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+    if (d < 0) { b = b.map((x) => -x); d = -d; }
+    if (d > 0.9995) return qNorm(a.map((x, i) => x + (b[i] - x) * t));
+    const th = Math.acos(d);
+    const s = Math.sin(th);
+    const wa = Math.sin((1 - t) * th) / s;
+    const wb = Math.sin(t * th) / s;
+    return a.map((x, i) => x * wa + b[i] * wb);
+  }
+  function qMatrix(q) {
+    const [w, x, y, z] = q;
+    return [
+      1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
+      2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
+      2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y),
+    ];
+  }
+  const mApply = (m, v) => [
+    m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
+    m[3] * v[0] + m[4] * v[1] + m[5] * v[2],
+    m[6] * v[0] + m[7] * v[1] + m[8] * v[2],
+  ];
+  const qRotate = (q, v) => mApply(qMatrix(q), v);
+  function qRandom() {
+    const u1 = Math.random(); const u2 = Math.random() * 2 * Math.PI; const u3 = Math.random() * 2 * Math.PI;
+    const a = Math.sqrt(1 - u1); const b = Math.sqrt(u1);
+    return [a * Math.sin(u2), a * Math.cos(u2), b * Math.sin(u3), b * Math.cos(u3)];
+  }
+
+  // ---------------------------------------------------------------- geometría
+  // Envolvente convexa por fuerza bruta: basta para poliedros de hasta ~20 vértices.
+  function hull(points) {
+    const n = points.length;
+    const eps = 1e-5;
+    const seen = new Set();
+    const faces = [];
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) for (let k = j + 1; k < n; k++) {
+      let nrm = cross(sub(points[j], points[i]), sub(points[k], points[i]));
+      if (len(nrm) < 1e-9) continue;
+      nrm = norm(nrm);
+      let d = dot(nrm, points[i]);
+      let pos = 0; let neg = 0;
+      for (const p of points) { const s = dot(nrm, p) - d; if (s > eps) pos++; else if (s < -eps) neg++; }
+      if (pos && neg) continue;
+      if (pos) { nrm = mulS(nrm, -1); d = -d; }
+      const on = [];
+      points.forEach((p, idx) => { if (Math.abs(dot(nrm, p) - d) <= eps) on.push(idx); });
+      const key = on.slice().sort((a, b) => a - b).join(',');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const c = mulS(on.reduce((acc, idx) => add(acc, points[idx]), [0, 0, 0]), 1 / on.length);
+      const u = norm(sub(points[on[0]], c));
+      const v = cross(nrm, u);
+      on.sort((a, b) => {
+        const pa = sub(points[a], c); const pb = sub(points[b], c);
+        return Math.atan2(dot(pa, v), dot(pa, u)) - Math.atan2(dot(pb, v), dot(pb, u));
+      });
+      faces.push({ idx: on, n: nrm, c });
+    }
+    return faces;
+  }
+
+  const PHI = (1 + Math.sqrt(5)) / 2;
+  const SHAPES = {
+    4: () => [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]],
+    6: () => { const p = []; for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) p.push([x, y, z]); return p; },
+    8: () => [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]],
+    10: () => {
+      const a = (1 - Math.cos(Math.PI / 5)) / (1 + Math.cos(Math.PI / 5)); // hace planas las caras de cometa
+      const p = [[0, 0, 1], [0, 0, -1]];
+      for (let i = 0; i < 10; i++) {
+        const ang = (i * Math.PI) / 5;
+        p.push([Math.cos(ang), Math.sin(ang), i % 2 ? -a : a]);
+      }
+      return p;
+    },
+    12: () => {
+      const p = [];
+      for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) p.push([x, y, z]);
+      for (const a of [-1, 1]) for (const b of [-1, 1]) {
+        p.push([0, a / PHI, b * PHI]);
+        p.push([a / PHI, b * PHI, 0]);
+        p.push([a * PHI, 0, b / PHI]);
+      }
+      return p;
+    },
+    20: () => {
+      const p = [];
+      for (const a of [-1, 1]) for (const b of [-1, 1]) {
+        p.push([0, a, b * PHI]);
+        p.push([a, b * PHI, 0]);
+        p.push([a * PHI, 0, b]);
+      }
+      return p;
+    },
+    2: () => { // moneda: prisma de 16 lados muy plano
+      const p = [];
+      for (let i = 0; i < 16; i++) {
+        const ang = (i * Math.PI) / 8;
+        p.push([Math.cos(ang), Math.sin(ang), 0.16]);
+        p.push([Math.cos(ang), Math.sin(ang), -0.16]);
+      }
+      return p;
+    },
+  };
+
+  const geoCache = {};
+  function geometry(kind) {
+    if (geoCache[kind]) return geoCache[kind];
+    const pts = SHAPES[kind]();
+    const r = Math.max(...pts.map(len));
+    const verts = pts.map((p) => mulS(p, 1 / r));
+    let faces = hull(verts);
+    if (kind === 2) faces = faces.filter((f) => Math.abs(f.n[2]) > 0.9).concat(faces.filter((f) => Math.abs(f.n[2]) <= 0.9));
+    // Vector «arriba» del número de cada cara: hacia un vértice (en el d4, hacia una punta).
+    faces.forEach((f) => {
+      let up = sub(verts[f.idx[0]], f.c);
+      if (kind === 6) up = sub(mulS(add(verts[f.idx[0]], verts[f.idx[1]]), 0.5), f.c); // número recto, hacia una arista
+      if (kind === 10) { // en las cometas del d10, hacia el vértice más lejano (el polo)
+        up = f.idx.map((i) => sub(verts[i], f.c)).sort((a, b) => len(b) - len(a))[0];
+      }
+      up = norm(sub(up, mulS(f.n, dot(up, f.n))));
+      f.up = up;
+      f.size = Math.min(...f.idx.map((i) => len(sub(verts[i], f.c))));
+    });
+    // Caras opuestas suman N+1, como en los dados de verdad.
+    const labelled = kind === 2 ? faces.slice(0, 2) : faces;
+    const N = labelled.length;
+    const labels = new Array(faces.length).fill(0);
+    let next = 1;
+    labelled.forEach((f, i) => {
+      if (labels[i]) return;
+      labels[i] = next;
+      const opp = labelled.findIndex((g, j) => j !== i && !labels[j] && dot(g.n, f.n) < -0.999);
+      if (opp >= 0) labels[opp] = N + 1 - next;
+      next = next + 1;
+      while (labels.includes(next) && next <= N) next++;
+    });
+    geoCache[kind] = { verts, faces, labels };
+    return geoCache[kind];
+  }
+
+  // ------------------------------------------------------------- aspecto
+  const PALETTE = {
+    4: { body: '#2f9e6a', ink: '#f4fff8' },
+    6: { body: '#efe6d2', ink: '#3a2412' },
+    8: { body: '#3567c8', ink: '#f2f6ff' },
+    10: { body: '#8a4fd1', ink: '#fbf5ff' },
+    12: { body: '#d98b22', ink: '#2b1500' },
+    20: { body: '#c23b37', ink: '#fff6ef' },
+    100: { body: '#25262c', ink: '#f1d28a' },
+    2: { body: '#c9a24a', ink: '#3a2a08' },
+    0: { body: '#5c6470', ink: '#ffffff' },
+  };
+  const LABEL_SCALE = { 4: 0.36, 6: 0.5, 8: 0.36, 10: 0.32, 12: 0.32, 20: 0.26, 2: 0.55 };
+  const LIGHT = norm([-0.45, -0.65, 0.9]);
+  const HALF = norm(add(LIGHT, [0, 0, 1]));
+  const CAM = 5.5; // distancia de la cámara en radios: perspectiva suave
+
+  function hexRgb(hex) {
+    const h = hex.replace('#', '');
+    const v = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+  }
+  const shade = (rgb, k, spec = 0) => `rgb(${rgb.map((c) => Math.round(Math.min(255, c * k + 255 * spec))).join(',')})`;
+
+  // ------------------------------------------------------------------ sonido
+  let audioCtx = null;
+  const sound = { enabled: true, volume: 0.6 };
+  function clack(strength) {
+    if (!sound.enabled || strength < 0.05) return;
+    try {
+      audioCtx = audioCtx || new (global.AudioContext || global.webkitAudioContext)();
+      const ctx = audioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const t = ctx.currentTime;
+      const dur = 0.045 + Math.random() * 0.03;
+      const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 3);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1800 + Math.random() * 2600;
+      bp.Q.value = 2.5 + Math.random() * 3;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(Math.min(1, strength) * sound.volume, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      src.connect(bp).connect(g).connect(ctx.destination);
+      src.start(t);
+    } catch (e) { /* sin audio */ }
+  }
+  // Los dados agitándose en la mano o en el cubilete antes de lanzarlos.
+  function rattle(count) {
+    if (!sound.enabled) return;
+    const n = 5 + Math.min(6, count || 1);
+    for (let i = 0; i < n; i++) setTimeout(() => clack(0.12 + Math.random() * 0.22), i * 38 + Math.random() * 22);
+  }
+
+  function chime(good) {
+    if (!sound.enabled) return;
+    try {
+      audioCtx = audioCtx || new (global.AudioContext || global.webkitAudioContext)();
+      const ctx = audioCtx;
+      const t = ctx.currentTime;
+      const notes = good ? [523.25, 659.25, 783.99, 1046.5] : [196, 174.61, 146.83];
+      notes.forEach((f, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = good ? 'triangle' : 'sawtooth';
+        o.frequency.value = f;
+        const start = t + i * (good ? 0.07 : 0.11);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(good ? 0.18 * sound.volume : 0.08 * sound.volume, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + (good ? 0.5 : 0.45));
+        o.connect(g).connect(ctx.destination);
+        o.start(start);
+        o.stop(start + 0.6);
+      });
+    } catch (e) { /* sin audio */ }
+  }
+
+  // ------------------------------------------------------------------ bandeja
+  function createTray(canvas, opts) {
+    opts = Object.assign({ overlay: false, hold: 2400, fade: 700, font: '800 {px}px "Alegreya Sans", "Segoe UI", system-ui, sans-serif' }, opts || {});
+    const ctx = canvas.getContext('2d');
+    const impact = (strength) => { clack(strength); if (opts.onImpact && strength > 0.15) opts.onImpact(strength); };
+    let W = 0; let H = 0; let dpr = 1;
+    let dice = [];
+    let particles = [];
+    let scheduled = false;
+    let destroyed = false;
+    let last = 0;
+    let rollToken = 0;
+    let fadeStart = 0;
+    let alpha = 1;
+    let area = null; // límites de la tirada actual (por defecto, todo el lienzo)
+
+    function resize() {
+      const rect = opts.overlay ? { width: global.innerWidth, height: global.innerHeight } : canvas.getBoundingClientRect();
+      dpr = Math.min(2, global.devicePixelRatio || 1);
+      W = Math.max(1, rect.width);
+      H = Math.max(1, rect.height);
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      if (opts.overlay) { canvas.style.width = `${W}px`; canvas.style.height = `${H}px`; }
+      draw();
+    }
+
+    function bounds() {
+      if (area) return area;
+      const pad = opts.overlay ? Math.min(W, H) * 0.12 : 6;
+      return { x0: pad, y0: pad, x1: W - pad, y1: H - pad };
+    }
+
+    function radiusFor(count) {
+      const b = bounds();
+      const base = opts.overlay ? Math.min(W, H, (b.x1 - b.x0) * 1.6, (b.y1 - b.y0) * 1.6) * 0.055 : Math.min(W, H) * 0.12;
+      const shrink = count > 12 ? 0.6 : count > 6 ? 0.75 : count > 3 ? 0.88 : 1;
+      return Math.max(16, Math.min(opts.overlay ? 58 : 64, base * shrink));
+    }
+
+    function makeDie(spec, i, count, origin, target) {
+      let kind = spec.sides;
+      let labelsOf = null;
+      if (![2, 4, 6, 8, 10, 12, 20].includes(kind)) {
+        if (kind === 3) { kind = 6; labelsOf = (g) => g.labels.map((l) => ((l - 1) % 3) + 1); }
+        else { kind = 20; labelsOf = (g) => g.labels.map(() => 1 + Math.floor(Math.random() * spec.sides)); }
+      }
+      const geo = geometry(kind);
+      const labels = labelsOf ? labelsOf(geo) : geo.labels.slice();
+      let value = spec.value;
+      if (kind === 10 && (value === 0)) value = 10;
+      let face = labels.map((l, fi) => (l === value ? fi : -1)).filter((fi) => fi >= 0);
+      if (!face.length) { // valor fuera de lo normal en este dado: se escribe en una cara cualquiera
+        const fi = Math.floor(Math.random() * labels.length);
+        labels[fi] = value;
+        face = [fi];
+      }
+      const target_face = face[Math.floor(Math.random() * face.length)];
+      const pal = PALETTE[spec.palette || spec.sides] || PALETTE[kind] || PALETTE[0];
+      const body = spec.color || pal.body;
+      const rgb = hexRgb(body);
+      const lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+      const ink = spec.ink || (spec.color ? (lum > 0.6 ? '#2a1a0c' : '#ffffff') : pal.ink);
+      const display = spec.display || (kind === 10 ? (l) => (l === 10 ? '0' : String(l)) : (l) => String(l));
+
+      const r = radiusFor(count);
+      const b = bounds();
+      const spread = (i - (count - 1) / 2) * r * 0.9;
+      const ox = origin ? origin.x : (b.x0 + b.x1) / 2 + spread;
+      const oy = origin ? origin.y : b.y1;
+      const tx = target.x + (Math.random() - 0.5) * Math.min(W, H) * 0.35 + spread;
+      const ty = target.y + (Math.random() - 0.5) * Math.min(W, H) * 0.25;
+      const dx = tx - ox; const dy = ty - oy;
+      const dist = Math.hypot(dx, dy) || 1;
+      // velocidad pensada para que el dado se pare cerca del destino tras volar, rebotar y rodar
+      const speed = Math.max(260, Math.min(1600, dist * 1.05)) * (0.85 + Math.random() * 0.3);
+      const omega = norm([Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5]);
+      const duration = 1500 + Math.random() * 450 + Math.min(600, count * 40);
+
+      return {
+        kind, geo, labels, display, face: target_face, rgb, ink, edge: shade(rgb, 1.25, 0.12),
+        dropped: !!spec.dropped, fx: spec.fx || '', value,
+        x: Math.min(Math.max(ox, r), W - r), y: Math.min(Math.max(oy, r), H - r), h: 70 + Math.random() * 60,
+        vx: (dx / dist) * speed, vy: (dy / dist) * speed, vh: 380 + Math.random() * 260,
+        r, q: qRandom(), w: mulS(omega, 14 + Math.random() * 10), inside: false,
+        t: 0, duration, settleFrom: null, settled: false, settleQ: null, glow: 0,
+      };
+    }
+
+    function targetQuat(d) {
+      const f = d.geo.faces[d.face];
+      const align = qBetween(f.n, [0, 0, 1]);
+      const up = qRotate(align, f.up);
+      const want = -Math.PI / 2 + (Math.random() - 0.5) * 0.5; // número casi derecho, con un poco de gracia
+      const spin = qAxis([0, 0, 1], want - Math.atan2(up[1], up[0]));
+      return qNorm(qMul(spin, align));
+    }
+
+    function step(dt) {
+      const b = bounds();
+      let moving = false;
+      for (const d of dice) {
+        if (d.settled) continue;
+        moving = true;
+        d.t += dt * 1000;
+        const p = d.t / d.duration;
+        // altura y rebotes
+        d.vh -= 2600 * dt;
+        d.h += d.vh * dt;
+        if (d.h <= 0) {
+          d.h = 0;
+          if (d.vh < -90) { impact(Math.min(1, -d.vh / 900)); d.vh = -d.vh * 0.42; d.vx *= 0.86; d.vy *= 0.86; }
+          else d.vh = 0;
+        }
+        // rozamiento en la mesa
+        const fr = d.h <= 0.5 ? (d.settleFrom != null ? 5.5 : 1.9) : 0.25;
+        d.vx *= Math.exp(-fr * dt);
+        d.vy *= Math.exp(-fr * dt);
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        // paredes (solo cuando el dado ya ha entrado en la mesa: puede salir de un botón de fuera)
+        if (!d.inside) d.inside = d.x > b.x0 + d.r && d.x < b.x1 - d.r && d.y > b.y0 + d.r && d.y < b.y1 - d.r;
+        if (d.inside && d.x < b.x0 + d.r) { d.x = b.x0 + d.r; d.vx = Math.abs(d.vx) * 0.65; impact(Math.abs(d.vx) / 900); }
+        if (d.inside && d.x > b.x1 - d.r) { d.x = b.x1 - d.r; d.vx = -Math.abs(d.vx) * 0.65; impact(Math.abs(d.vx) / 900); }
+        if (d.inside && d.y < b.y0 + d.r) { d.y = b.y0 + d.r; d.vy = Math.abs(d.vy) * 0.65; impact(Math.abs(d.vy) / 900); }
+        if (d.inside && d.y > b.y1 - d.r) { d.y = b.y1 - d.r; d.vy = -Math.abs(d.vy) * 0.65; impact(Math.abs(d.vy) / 900); }
+        // giro: en el aire libre; en la mesa, rodando en la dirección del movimiento
+        const speed = Math.hypot(d.vx, d.vy);
+        if (d.h <= 0.5) {
+          const roll = mulS([d.vy, -d.vx, 0], 1 / d.r);
+          const k = Math.min(1, dt * 8);
+          d.w = add(mulS(d.w, 1 - k), mulS(add(roll, [0, 0, d.w[2] * 0.9]), k));
+        }
+        if (d.settleFrom == null && p >= 0.62) { d.settleFrom = d.t; d.q0 = d.q; d.settleQ = targetQuat(d); }
+        if (d.settleFrom != null) {
+          const e = Math.min(1, (d.t - d.settleFrom) / (d.duration - d.settleFrom));
+          const ease = 1 - Math.pow(1 - e, 3);
+          // se sigue integrando un giro residual que se apaga, para que no «encaje» de golpe
+          const dq0 = qMul([0, d.w[0], d.w[1], d.w[2]], d.q0);
+          d.q0 = qNorm(d.q0.map((x, i) => x + 0.5 * dq0[i] * dt * (1 - ease)));
+          d.q = qSlerp(d.q0, d.settleQ, ease);
+          if (e >= 1) {
+            d.settled = true; d.settledAt = performance.now(); d.h = 0; d.q = d.settleQ;
+            if (d.fx) { burst(d); chime(d.fx === 'crit'); }
+          }
+        } else {
+          const wq = [0, d.w[0], d.w[1], d.w[2]];
+          const dq = qMul(wq, d.q);
+          d.q = qNorm(d.q.map((x, i) => x + 0.5 * dq[i] * dt));
+        }
+        if (speed < 1) { d.vx = 0; d.vy = 0; }
+      }
+      // choques entre dados
+      for (let i = 0; i < dice.length; i++) for (let j = i + 1; j < dice.length; j++) {
+        const a = dice[i]; const c = dice[j];
+        if (a.settled && c.settled) continue;
+        const dx = c.x - a.x; const dy = c.y - a.y;
+        const dist = Math.hypot(dx, dy) || 0.001;
+        const min = (a.r + c.r) * 0.82;
+        if (dist < min) {
+          const nx = dx / dist; const ny = dy / dist;
+          const push = (min - dist) / 2;
+          if (!a.settled) { a.x -= nx * push; a.y -= ny * push; }
+          if (!c.settled) { c.x += nx * push; c.y += ny * push; }
+          const rel = (c.vx - a.vx) * nx + (c.vy - a.vy) * ny;
+          if (rel < 0) {
+            const imp = -rel * 0.85;
+            if (!a.settled) { a.vx -= nx * imp; a.vy -= ny * imp; }
+            if (!c.settled) { c.vx += nx * imp; c.vy += ny * imp; }
+            impact(Math.min(1, -rel / 700));
+          }
+        }
+      }
+      // partículas
+      particles = particles.filter((pt) => (pt.life -= dt) > 0);
+      for (const pt of particles) {
+        pt.vy += pt.g * dt;
+        pt.vx *= Math.exp(-1.5 * dt); pt.vy *= Math.exp(-1.5 * dt);
+        pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+      }
+      for (const d of dice) if (d.fx && d.settled) d.glow = Math.min(1, d.glow + dt * 2.5);
+      return moving;
+    }
+
+    function burst(d) {
+      const crit = d.fx === 'crit';
+      const colors = crit ? ['#ffe28a', '#8dffb0', '#ffffff', '#ffd25a'] : ['#ff5a4a', '#8b1a12', '#ff9a6a', '#3a0b08'];
+      for (let i = 0; i < (crit ? 70 : 45); i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = (crit ? 160 : 90) + Math.random() * (crit ? 380 : 200);
+        particles.push({
+          x: d.x, y: d.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - (crit ? 120 : 0),
+          g: crit ? 380 : -60, life: 0.7 + Math.random() * 0.8, max: 1.5,
+          size: (crit ? 2 : 3) + Math.random() * (crit ? 3 : 5), color: colors[i % colors.length], smoke: !crit,
+        });
+      }
+    }
+
+    // ---------------------------------------------------------------- dibujo
+    function drawDie(d) {
+      const m = qMatrix(d.q);
+      const R = d.r * (1 + d.h * 0.0022);
+      const pts = d.geo.verts.map((v) => {
+        const p = mApply(m, v);
+        const s = CAM / (CAM - p[2]);
+        return [d.x + p[0] * R * s, d.y - d.h * 0.12 + p[1] * R * s, p[2], s];
+      });
+      // sombra
+      const sh = Math.max(0, 1 - d.h / 260);
+      const sx = d.x + d.h * 0.28 + R * 0.12; const sy = d.y + d.h * 0.42 + R * 0.22;
+      const grad = ctx.createRadialGradient(sx, sy, R * 0.1, sx, sy, R * (1.15 + d.h * 0.004));
+      grad.addColorStop(0, `rgba(0,0,0,${0.42 * sh + 0.08})`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, R * (1.15 + d.h * 0.004), R * (0.95 + d.h * 0.003), 0, 0, Math.PI * 2);
+      ctx.fill();
+      // halo de crítico / pifia
+      if (d.glow > 0) {
+        const pulse = 0.75 + 0.25 * Math.sin(performance.now() / 180);
+        const col = d.fx === 'crit' ? '120,255,160' : '255,60,40';
+        const g2 = ctx.createRadialGradient(d.x, d.y, R * 0.4, d.x, d.y, R * 2.1);
+        g2.addColorStop(0, `rgba(${col},${0.45 * d.glow * pulse})`);
+        g2.addColorStop(1, `rgba(${col},0)`);
+        ctx.fillStyle = g2;
+        ctx.beginPath(); ctx.arc(d.x, d.y, R * 2.1, 0, Math.PI * 2); ctx.fill();
+      }
+      const faces = d.geo.faces.map((f, fi) => ({ f, fi, n: mApply(m, f.n) })).filter((o) => o.n[2] > 0.0001)
+        .sort((a, b) => a.n[2] - b.n[2]);
+      const labelScale = LABEL_SCALE[d.kind] || 0.28;
+      for (const { f, fi, n } of faces) {
+        const diff = Math.max(0, dot(n, LIGHT));
+        const spec = Math.pow(Math.max(0, dot(n, HALF)), 28) * 0.55;
+        const k = 0.42 + 0.68 * diff;
+        ctx.beginPath();
+        f.idx.forEach((vi, j) => (j ? ctx.lineTo(pts[vi][0], pts[vi][1]) : ctx.moveTo(pts[vi][0], pts[vi][1])));
+        ctx.closePath();
+        ctx.fillStyle = shade(d.rgb, k, spec);
+        ctx.fill();
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = Math.max(1, R * 0.035);
+        ctx.strokeStyle = d.edge;
+        ctx.globalAlpha *= 0.55;
+        ctx.stroke();
+        ctx.globalAlpha /= 0.55;
+        // número sobre la cara, deformado con la perspectiva de la cara
+        const label = d.labels[fi];
+        if (!label || n[2] < 0.18) continue;
+        const c = mApply(m, f.c);
+        const s = CAM / (CAM - c[2]);
+        const up = mApply(m, f.up);
+        const right = cross(n, up);
+        const cx = d.x + c[0] * R * s; const cy = d.y - d.h * 0.12 + c[1] * R * s;
+        const px = Math.round(R * labelScale * (f.size / 0.5 > 1.6 ? 1.15 : 1));
+        const text = d.display(label);
+        ctx.save();
+        ctx.setTransform(dpr * right[0] * s, dpr * right[1] * s, dpr * -up[0] * s, dpr * -up[1] * s, dpr * cx, dpr * cy);
+        ctx.font = opts.font.replace('{px}', px);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.globalAlpha *= Math.min(1, (n[2] - 0.18) * 3);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fillText(text, px * 0.04, px * 0.07);
+        ctx.fillStyle = d.ink;
+        ctx.fillText(text, 0, 0);
+        if ((text === '6' || text === '9') && d.kind > 8) ctx.fillRect(-px * 0.28, px * 0.5, px * 0.56, px * 0.09);
+        ctx.restore();
+      }
+      if (d.dropped && d.settled) { // dado descartado (ventaja, 4d6kh3…): se apaga
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, R * 1.05, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(15,10,8,0.55)';
+        ctx.fill();
+      }
+    }
+
+    function draw() {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = alpha;
+      const order = dice.slice().sort((a, b) => a.h - b.h);
+      for (const d of order) drawDie(d);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'lighter';
+      for (const pt of particles) {
+        const a = Math.max(0, pt.life / pt.max) * alpha;
+        ctx.globalAlpha = pt.smoke ? a * 0.5 : a;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, pt.size * (pt.smoke ? 1 + (1 - a) * 2 : 1), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+
+    function loop(now) {
+      // subpasos fijos: la física va a tiempo real aunque el navegador dibuje pocos fotogramas
+      let remaining = Math.min(0.25, (now - last) / 1000 || 0.016);
+      last = now;
+      let moving = false;
+      while (remaining > 0.0005) {
+        const dt = Math.min(1 / 120, remaining);
+        moving = step(dt) || moving;
+        remaining -= dt;
+      }
+      if (!moving && opts.overlay && dice.length) {
+        fadeStart = fadeStart || now + opts.hold;
+        if (now > fadeStart) alpha = Math.max(0, 1 - (now - fadeStart) / opts.fade);
+        if (alpha <= 0) { dice = []; particles = []; alpha = 1; fadeStart = 0; }
+      }
+      draw();
+      const glowing = dice.some((d) => d.glow > 0 && now - d.settledAt < 5000); // el halo late unos segundos
+      if (dice.length && (moving || particles.length || glowing || (opts.overlay && dice.length))) schedule();
+    }
+
+    // Siguiente fotograma. Si el navegador no los pide (ventana minimizada o tapada), un temporizador
+    // sigue moviendo los dados para que la tirada termine igualmente.
+    function schedule() {
+      if (scheduled || destroyed) return;
+      scheduled = true;
+      let fired = false;
+      const fire = (t) => {
+        if (fired) return;
+        fired = true;
+        cancelAnimationFrame(id);
+        clearTimeout(tm);
+        scheduled = false;
+        if (!destroyed) loop(t);
+      };
+      const id = requestAnimationFrame(fire);
+      const tm = setTimeout(() => fire(performance.now()), 120);
+    }
+
+    function start() {
+      if (!scheduled) { last = performance.now(); schedule(); }
+    }
+
+    function roll(specs, rollOpts) {
+      rollOpts = rollOpts || {};
+      const token = ++rollToken;
+      resize(); // mide de nuevo: el lienzo puede haber cambiado de tamaño o acabar de entrar en la página
+      const list = specs.slice(0, rollOpts.max || 24);
+      area = rollOpts.bounds || null;
+      const b = bounds();
+      const target = rollOpts.target || { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+      alpha = 1; fadeStart = 0; particles = [];
+      dice = list.map((s, i) => makeDie(s, i, list.length, rollOpts.origin || null, target));
+      start();
+      if (rollOpts.rattle !== false) rattle(list.length);
+      const deadline = performance.now() + 6000 + list.length * 60;
+      return new Promise((resolve) => {
+        const check = () => {
+          if (token === rollToken && performance.now() > deadline) { // seguro por si el navegador deja de dibujar
+            for (const d of dice) if (!d.settled) { d.q = d.settleQ || targetQuat(d); d.settled = true; d.settledAt = performance.now(); d.h = 0; }
+            draw();
+          }
+          if (token !== rollToken) return resolve(null); // otra tirada la ha sustituido
+          if (dice.every((d) => d.settled)) {
+            const cx = dice.reduce((s, d) => s + d.x, 0) / dice.length;
+            const cy = dice.reduce((s, d) => s + d.y, 0) / dice.length;
+            const top = Math.min(...dice.map((d) => d.y - d.r));
+            resolve({ x: cx, y: cy, top });
+          } else setTimeout(check, 60);
+        };
+        check();
+      });
+    }
+
+    function clear() { rollToken++; dice = []; particles = []; draw(); }
+
+    const onResize = () => resize();
+    if (opts.overlay) global.addEventListener('resize', onResize);
+    let ro = null;
+    if (!opts.overlay && global.ResizeObserver) { ro = new ResizeObserver(onResize); ro.observe(canvas); }
+    resize();
+
+    return {
+      roll, clear, resize,
+      get busy() { return dice.some((d) => !d.settled); },
+      destroy() { destroyed = true; if (ro) ro.disconnect(); global.removeEventListener('resize', onResize); },
+    };
+  }
+
+  // ------------------------------------------------------------ iconos SVG
+  const ICONS = {
+    4: '<path d="M12 2.6 21.6 19.6H2.4Z"/><path d="M12 2.6 12 13.4M2.4 19.6 12 13.4l9.6 6.2"/>',
+    6: '<path d="M12 2.2 20.8 7v10L12 21.8 3.2 17V7Z"/><path d="M3.2 7 12 12l8.8-5M12 12v9.8"/>',
+    8: '<path d="M12 2 21 12 12 22 3 12Z"/><path d="M3 12h18M12 2 8.2 12 12 22l3.8-10Z"/>',
+    10: '<path d="M12 2 21.5 10.5 12 22 2.5 10.5Z"/><path d="M2.5 10.5 7 12.4 12 9.5l5 2.9 4.5-1.9M7 12.4 12 22l5-9.6M12 2v7.5"/>',
+    12: '<path d="M12 2 21.5 8.9 17.9 20.1H6.1L2.5 8.9Z"/><path d="M12 6.6 16.4 9.8 14.7 15H9.3L7.6 9.8Z"/><path d="M12 2v4.6M21.5 8.9l-5.1.9M17.9 20.1 14.7 15M6.1 20.1 9.3 15M2.5 8.9l5.1.9"/>',
+    20: '<path d="M12 2 20.7 7v10L12 22l-8.7-5V7Z"/><path d="M12 7.2 16.8 15H7.2Z"/><path d="M12 2v5.2M20.7 7l-3.9 8M3.3 7l3.9 8M3.3 17l3.9-2M20.7 17l-3.9-2M12 22l-4.8-7M12 22l4.8-7"/>',
+    100: '<path d="M8 3 14 8.5 8 19.5 2 8.5Z"/><path d="M16 4.5 22 10 16 21l-6-11Z"/>',
+    2: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.5"/>',
+  };
+  function icon(sides, size) {
+    const s = size || 24;
+    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">${ICONS[sides] || ICONS[20]}</svg>`;
+  }
+
+  // Convierte el resultado de una tirada (formato del servidor o de DiceNotation) en dados a animar.
+  function diceFromResult(result, extra) {
+    extra = extra || {};
+    const out = [];
+    const nat = result.crit;
+    for (const p of result.parts || []) {
+      if (!p.rolls) continue;
+      p.rolls.forEach((v, i) => {
+        const dropped = !(p.kept || []).includes(i);
+        if (p.sides === 100) {
+          const tens = v === 100 ? 10 : Math.floor(v / 10) || 10;
+          const units = v % 10 || 10;
+          out.push(Object.assign({ sides: 10, value: tens, dropped, palette: 100, display: (l) => (l === 10 ? '00' : String(l * 10)) }, extra));
+          out.push(Object.assign({ sides: 10, value: units, dropped, palette: 100 }, extra));
+          return;
+        }
+        const spec = Object.assign({ sides: p.sides, value: v, dropped }, extra);
+        if (p.sides === 20 && !dropped && nat && v === result.natural) spec.fx = nat === 'critico' ? 'crit' : 'fumble';
+        out.push(spec);
+      });
+    }
+    return out;
+  }
+
+  global.Dice3D = { createTray, icon, diceFromResult, sound, geometry, rattle, clack };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+/*
+ * DiceNotation — intérprete de tiradas para la página de dados del móvil, que funciona sin servidor.
+ * Es la misma notación y el mismo formato de resultado que server/dice.py:
+ * "1d20+5", "2d6+1d4-1", "4d6kh3", "2d20kl1", "d%"; modo "adv"/"dis" para ventaja/desventaja.
+ */
+(function (global) {
+  'use strict';
+  const MAX_DICE = 200;
+  const MAX_SIDES = 1000;
+  const TERM = /([+-]?)(?:(\d*)d(\d+|%)(?:(kh|kl|k)(\d+))?|(\d+))/iy;
+
+  function randInt(max) { // entero uniforme en [1, max] con el generador criptográfico si existe
+    if (global.crypto && global.crypto.getRandomValues) {
+      const buf = new Uint32Array(1);
+      const limit = Math.floor(0x100000000 / max) * max;
+      do { global.crypto.getRandomValues(buf); } while (buf[0] >= limit);
+      return (buf[0] % max) + 1;
+    }
+    return 1 + Math.floor(Math.random() * max);
+  }
+
+  function roll(expr, mode) {
+    const src = String(expr || '').trim().toLowerCase().replace(/\s+/g, '');
+    if (!src) throw new Error('Escribe una tirada, por ejemplo 1d20+3');
+    let pos = 0; let total = 0; let advUsed = false;
+    const parts = [];
+    while (pos < src.length) {
+      TERM.lastIndex = pos;
+      const m = TERM.exec(src);
+      if (!m || m.index !== pos || TERM.lastIndex === pos) throw new Error(`No entiendo «${src.slice(pos)}»`);
+      if (pos > 0 && !m[1]) throw new Error('Separa los términos con + o -');
+      pos = TERM.lastIndex;
+      const sign = m[1] === '-' ? -1 : 1;
+      if (m[6] !== undefined) {
+        const v = Number(m[6]);
+        parts.push({ term: `${sign < 0 ? '-' : '+'}${v}`, value: sign * v });
+        total += sign * v;
+        continue;
+      }
+      let count = Number(m[2] || 1);
+      const sides = m[3] === '%' ? 100 : Number(m[3]);
+      let keep = (m[4] || '').toLowerCase();
+      let keepN = Number(m[5] || 0);
+      if (keep === 'k') keep = 'kh';
+      if ((mode === 'adv' || mode === 'dis') && !advUsed && sides === 20 && count === 1 && !keep) {
+        count = 2; keep = mode === 'adv' ? 'kh' : 'kl'; keepN = 1; advUsed = true;
+      }
+      if (!(count >= 1 && count <= MAX_DICE) || !(sides >= 2 && sides <= MAX_SIDES)) {
+        throw new Error(`Como mucho ${MAX_DICE} dados de ${MAX_SIDES} caras`);
+      }
+      const rolls = Array.from({ length: count }, () => randInt(sides));
+      let kept = rolls.map((_, i) => i);
+      if (keep) {
+        keepN = Math.max(1, Math.min(keepN, count));
+        const order = kept.slice().sort((a, b) => (keep === 'kh' ? rolls[b] - rolls[a] : rolls[a] - rolls[b]));
+        kept = order.slice(0, keepN).sort((a, b) => a - b);
+      }
+      const value = sign * kept.reduce((s, i) => s + rolls[i], 0);
+      total += value;
+      parts.push({ term: `${sign < 0 ? '-' : '+'}${count}d${sides}${keep}${keep ? keepN : ''}`, sides, rolls, kept, value });
+    }
+    const result = { expr: String(expr).trim(), mode: mode || '', total, parts };
+    const d20 = parts.filter((p) => p.sides === 20);
+    if (d20.length === 1 && d20[0].kept.length === 1) {
+      const nat = d20[0].rolls[d20[0].kept[0]];
+      result.natural = nat;
+      result.crit = nat === 20 ? 'critico' : nat === 1 ? 'pifia' : '';
+    }
+    return result;
+  }
+
+  function describe(r) {
+    return r.parts.map((p) => {
+      if (!p.rolls) return p.term;
+      const dice = p.rolls.map((v, i) => (p.kept.includes(i) ? String(v) : `(${v})`)).join(', ');
+      return `${p.term.replace(/^\+/, '')} [${dice}]`;
+    }).join(' ');
+  }
+
+  global.DiceNotation = { roll, describe };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+// Dados en el móvil: página autónoma (sin servidor ni internet) con los mismos dados 3D de la mesa.
+// Las tiradas se resuelven aquí con DiceNotation y el historial se guarda en el propio móvil.
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(`dados.${k}`); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(`dados.${k}`, JSON.stringify(v)); } catch (e) { /* sin almacenamiento */ } },
+  };
+  const COLORS = ['#c23b37', '#3567c8', '#2f9e6a', '#8a4fd1', '#d98b22', '#efe6d2', '#25262c', '#e0527f', '#2bb3b3', '#c9a24a', '#6b4a26', '#7d8590'];
+  const DICE = [4, 6, 8, 10, 12, 20, 100];
+  const state = {
+    mode: store.get('mode', 'now'), adv: '', mod: 0, pool: {},
+    name: store.get('name', 'Jugador'), color: store.get('color', ''), history: store.get('history', []),
+  };
+
+  Dice3D.sound.enabled = store.get('sound', true);
+  const vibrate = (ms) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) { /* sin vibración */ } };
+  const tray = Dice3D.createTray($('cv'), { onImpact: (s) => vibrate(Math.round(8 + s * 20)) });
+
+  // ----------------------------------------------------------------- tirar
+  async function doRoll(expr, label) {
+    let r;
+    try { r = DiceNotation.roll(expr, state.adv); } catch (e) { showError(e.message); return; }
+    r.label = label || expr;
+    r.time = Date.now();
+    $('hint').hidden = true;
+    $('result').hidden = true;
+    vibrate(15);
+    await tray.roll(Dice3D.diceFromResult(r, state.color ? { color: state.color } : {}));
+    showResult(r);
+    if (r.crit) vibrate(r.crit === 'critico' ? [40, 60, 40, 60, 120] : [200]);
+    state.history.unshift({ label: r.label, total: r.total, detail: DiceNotation.describe(r), crit: r.crit || '', time: r.time, mode: r.mode });
+    state.history = state.history.slice(0, 60);
+    store.set('history', state.history);
+    drawHistory();
+  }
+
+  function showResult(r) {
+    const el = $('result');
+    const cls = r.crit === 'critico' ? 'crit' : r.crit === 'pifia' ? 'fumble' : '';
+    el.className = `result ${cls}`;
+    el.innerHTML = '';
+    const add = (tag, cls2, text) => { const n = document.createElement(tag); n.className = cls2; n.textContent = text; el.append(n); };
+    add('div', 'lbl', `${state.name}: ${r.label}${r.mode === 'adv' ? ' · ventaja' : r.mode === 'dis' ? ' · desventaja' : ''}`);
+    add('div', 'total', String(r.total));
+    add('div', 'detail', DiceNotation.describe(r));
+    if (cls) add('div', 'tag', cls === 'crit' ? '¡CRÍTICO!' : '¡PIFIA!');
+    el.hidden = false;
+  }
+
+  function showError(msg) {
+    const el = $('result');
+    el.className = 'result fumble';
+    el.textContent = msg;
+    el.hidden = false;
+  }
+
+  // ------------------------------------------------------------- controles
+  const poolExpr = () => {
+    const parts = DICE.filter((s) => state.pool[s] > 0).map((s) => `${state.pool[s]}d${s}`);
+    if (state.mod) parts.push(String(state.mod));
+    return parts.join('+').replace(/\+-/g, '-');
+  };
+  const withMod = (expr) => (state.mod ? `${expr}${state.mod > 0 ? '+' : ''}${state.mod}` : expr);
+  const COLORS_BY = { 4: '#4cc38a', 6: '#efe6d2', 8: '#5b9cff', 10: '#a77bff', 12: '#f0a03a', 20: '#ff6b5e', 100: '#f1d28a' };
+
+  function drawDice() {
+    const box = $('dice');
+    box.innerHTML = '';
+    DICE.forEach((s) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'die';
+      b.style.setProperty('--dc', COLORS_BY[s]);
+      b.setAttribute('aria-label', state.mode === 'now' ? `Tirar 1d${s}` : `Añadir 1d${s}`);
+      b.innerHTML = `${Dice3D.icon(s, 32)}<span>d${s}</span>${state.pool[s] ? `<i>${state.pool[s]}</i>` : ''}`;
+      b.addEventListener('click', () => {
+        if (state.mode === 'now') doRoll(withMod(`1d${s}`), `d${s}`);
+        else { state.pool[s] = (state.pool[s] || 0) + 1; vibrate(8); drawDice(); }
+      });
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); if (state.pool[s]) { state.pool[s] -= 1; drawDice(); } });
+      box.append(b);
+    });
+    $('pool').textContent = poolExpr() || 'Bandeja vacía';
+    $('poolRow').hidden = state.mode !== 'pool';
+  }
+
+  document.querySelectorAll('.mode button').forEach((b) => b.addEventListener('click', () => {
+    state.mode = b.dataset.mode;
+    store.set('mode', state.mode);
+    document.querySelectorAll('.mode button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    drawDice();
+  }));
+  document.querySelectorAll('#adv button').forEach((b) => b.addEventListener('click', () => {
+    state.adv = b.dataset.v;
+    document.querySelectorAll('#adv button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  }));
+  const drawMod = () => { $('modVal').textContent = state.mod >= 0 ? `+${state.mod}` : String(state.mod); $('pool').textContent = poolExpr() || 'Bandeja vacía'; };
+  $('modMinus').addEventListener('click', () => { state.mod -= 1; drawMod(); });
+  $('modPlus').addEventListener('click', () => { state.mod += 1; drawMod(); });
+  $('clear').addEventListener('click', () => { state.pool = {}; state.mod = 0; drawMod(); drawDice(); });
+  $('roll').addEventListener('click', () => { const e = poolExpr(); if (e) doRoll(e); });
+  $('exprForm').addEventListener('submit', (e) => { e.preventDefault(); const v = $('expr').value.trim(); if (v) { $('expr').blur(); doRoll(v); } });
+
+  // --------------------------------------------------------------- sonido
+  const drawSound = () => { $('sound').textContent = Dice3D.sound.enabled ? '🔊' : '🔇'; };
+  $('sound').addEventListener('click', () => { Dice3D.sound.enabled = !Dice3D.sound.enabled; store.set('sound', Dice3D.sound.enabled); drawSound(); });
+  drawSound();
+
+  // ---------------------------------------------------- agitar para tirar
+  let shakeOn = false;
+  let lastShake = 0;
+  function onMotion(e) {
+    const a = e.accelerationIncludingGravity || e.acceleration;
+    if (!a) return;
+    const force = Math.hypot(a.x || 0, a.y || 0, a.z || 0);
+    if (force > 24 && Date.now() - lastShake > 1500 && !tray.busy) {
+      lastShake = Date.now();
+      const e2 = state.mode === 'pool' && poolExpr() ? poolExpr() : withMod('1d20');
+      doRoll(e2, state.mode === 'pool' && poolExpr() ? '' : 'd20');
+    }
+  }
+  $('shake').addEventListener('click', async () => {
+    if (!shakeOn && window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') {
+      try { if ((await DeviceMotionEvent.requestPermission()) !== 'granted') return; } catch (e) { return; }
+    }
+    shakeOn = !shakeOn;
+    $('shake').setAttribute('aria-pressed', String(shakeOn));
+    if (shakeOn) window.addEventListener('devicemotion', onMotion);
+    else window.removeEventListener('devicemotion', onMotion);
+    showError(shakeOn ? 'Agita el móvil para tirar (la bandeja o un d20)' : 'Agitar desactivado');
+    $('result').className = 'result';
+  });
+
+  // ------------------------------------------------------------- historial
+  function drawHistory() {
+    const ul = $('hist');
+    ul.innerHTML = '';
+    if (!state.history.length) { const li = document.createElement('li'); li.textContent = 'Aún no has tirado.'; ul.append(li); return; }
+    state.history.forEach((h) => {
+      const li = document.createElement('li');
+      li.className = h.crit === 'critico' ? 'crit' : h.crit === 'pifia' ? 'fumble' : '';
+      const d = document.createElement('div');
+      d.textContent = h.label;
+      const sm = document.createElement('small');
+      sm.textContent = `${h.detail} · ${new Date(h.time).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
+      d.append(sm);
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = h.total;
+      li.append(d, t);
+      ul.append(li);
+    });
+  }
+  $('histBtn').addEventListener('click', () => { $('histSheet').hidden = false; });
+  $('histClose').addEventListener('click', () => { $('histSheet').hidden = true; });
+  $('histClear').addEventListener('click', () => { state.history = []; store.set('history', []); drawHistory(); });
+
+  // ------------------------------------------------------- quién tira y color
+  function drawWho() {
+    $('whoName').textContent = state.name || 'Jugador';
+    $('whoDot').style.background = state.color || '#c23b37';
+    $('whoDot').style.color = state.color || '#c23b37';
+    const sw = $('swatches');
+    sw.innerHTML = '';
+    ['', ...COLORS].forEach((c) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.style.background = c || 'conic-gradient(#4cc38a, #efe6d2, #5b9cff, #a77bff, #f0a03a, #ff6b5e, #4cc38a)';
+      b.setAttribute('aria-label', c ? `Color ${c}` : 'Un color por tipo de dado');
+      b.setAttribute('aria-pressed', String(c === state.color));
+      b.addEventListener('click', () => { state.color = c; store.set('color', c); drawWho(); });
+      sw.append(b);
+    });
+  }
+  $('who').addEventListener('click', () => { $('whoInput').value = state.name; $('whoSheet').hidden = false; });
+  $('whoClose').addEventListener('click', () => { $('whoSheet').hidden = true; });
+  $('whoInput').addEventListener('input', (e) => { state.name = e.target.value.trim() || 'Jugador'; store.set('name', state.name); drawWho(); });
+
+  document.querySelectorAll('.mode button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.mode === state.mode)));
+  drawDice();
+  drawHistory();
+  drawWho();
+}());
+</script>
+</body>
+</html>

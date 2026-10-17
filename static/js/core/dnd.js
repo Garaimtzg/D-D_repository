@@ -7,7 +7,16 @@ export const TYPES = [
   ['enemigo', 'Enemigo'],
 ];
 export const TYPE_LABEL = Object.fromEntries(TYPES);
-export const TYPE_COLOR = { jugador: '#4f86c6', pnj: '#c99b3d', enemigo: '#c2463c' };
+export const TYPE_COLOR = { jugador: '#5b9cff', pnj: '#e2b456', enemigo: '#e0524a' };
+export const TYPE_ICON = { jugador: 'crown', pnj: 'user', enemigo: 'skull' };
+
+// Emoji para reconocer cada estado de un vistazo en fichas, tokens y combate.
+export const CONDITION_ICON = {
+  Agarrado: '🤝', Apresado: '⛓️', Asustado: '😱', Aturdido: '💫', Cegado: '🙈', Derribado: '🛌',
+  Ensordecido: '🔇', Envenenado: '🤢', Hechizado: '💘', Incapacitado: '🚫', Inconsciente: '💤',
+  Invisible: '👻', Paralizado: '🧊', Petrificado: '🗿', Concentrado: '🔮', Bendecido: '✨', Marcado: '🎯',
+};
+export const condLabel = (name) => `${CONDITION_ICON[name] || '•'} ${name}`;
 
 export const ABILITY_KEYS = ['fue', 'des', 'con', 'int', 'sab', 'car'];
 export const ABILITY_SHORT = { fue: 'FUE', des: 'DES', con: 'CON', int: 'INT', sab: 'SAB', car: 'CAR' };
@@ -110,4 +119,17 @@ export function longRest(ch) {
 
 export function shortRest(ch) {
   (ch.resources || []).forEach((r) => { if (r.reset === 'corto') r.used = 0; });
+}
+
+// "2d6+3" -> "4d6+3": en un crítico se duplican los dados, no el modificador.
+export function critExpr(expr) {
+  return String(expr).replace(/(\d*)d(\d+)/gi, (_, n, s) => `${(Number(n) || 1) * 2}d${s}`);
+}
+
+// Progreso de experiencia hacia el siguiente nivel.
+export function xpProgress(xp, table) {
+  const level = table.filter((need) => (xp || 0) >= need).length;
+  const cur = table[level - 1] ?? 0;
+  const next = table[level] ?? null;
+  return { level, cur, next, ratio: next ? ((xp || 0) - cur) / (next - cur) : 1 };
 }

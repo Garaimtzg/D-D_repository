@@ -1,166 +1,82 @@
-// Mapas: imágenes subidas por el máster, con zoom, desplazamiento y opción de mostrarlas a los jugadores.
+// Mapas: galería de las imágenes de la campaña. Cada una se puede poner sobre la mesa,
+// renombrar y acompañar de notas que solo ve el máster.
+import { sfx } from '../core/sfx.js';
 import { api, debounced } from '../core/api.js';
-import { h, clear, bind, field, confirmDialog, toast, toastError, pickFiles } from '../core/dom.js';
+import { h, clear, icon, bind, modal, confirmDialog, toast, toastError, pickFiles, dropZone, fmtDate } from '../core/dom.js';
 
-const ICON = '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>';
+export default { id: 'mapas', title: 'Mapas', icon: 'mapas', hint: 'Imágenes para poner sobre la mesa · tecla 4', mount };
 
-export default { id: 'mapas', title: 'Mapas', icon: ICON, mount };
-
-async function mount(root, [selId]) {
+async function mount(root) {
   const [maps, settings] = await Promise.all([api.list('maps'), api.settings()]);
-  const state = { maps, settings, sel: maps.find((m) => m.id === selId) || null };
+  const state = { maps, settings };
   const save = debounced((m) => api.update('maps', m).catch(toastError), 400);
-  let teardown = null;
+  const onTable = (m) => (state.settings.tableMap || state.settings.shownMap) === m.id;
 
   async function upload(files) {
     const images = files.filter((f) => f.type.startsWith('image/'));
-    if (!images.length) return toast('Elige una imagen (PNG, JPG, WEBP o GIF).');
+    if (!images.length) return toast('Elige una imagen (PNG, JPG, WEBP o GIF).', { kind: 'error' });
     for (const file of images) {
       try {
         const up = await api.upload(file);
-        const m = await api.create('maps', { name: file.name.replace(/\.[^.]+$/, ''), url: up.url, notes: '' });
-        state.maps.push(m);
+        state.maps.unshift(await api.create('maps', { name: file.name.replace(/\.[^.]+$/, ''), url: up.url, notes: '', tokens: [] }));
+        toast(`Mapa «${file.name}» añadido.`, { kind: 'good', iconName: 'mapas' });
       } catch (e) { toastError(e); }
     }
     render();
   }
 
-  async function show(m) {
+  async function putOnTable(m) {
     try {
-      state.settings = await api.saveSettings({ shownMap: m ? m.id : null });
-      toast(m ? `«${m.name}» se ve ahora en la pantalla de jugadores.` : 'Mapa retirado de la pantalla de jugadores.');
-      render();
+      state.settings = await api.saveSettings({ tableMap: m.id });
+      sfx.unroll();
+      location.hash = '#/mesa';
     } catch (e) { toastError(e); }
   }
 
   async function remove(m) {
-    if (!(await confirmDialog(`Se eliminará el mapa «${m.name}» y su imagen.`))) return;
+    if (!(await confirmDialog(`Se eliminará el mapa «${m.name}», su imagen y las fichas colocadas en él.`))) return;
     try {
       await api.remove('maps', m.id);
       await api.removeUpload(m.url);
-      if (state.settings.shownMap === m.id) await show(null);
+      if (onTable(m)) state.settings = await api.saveSettings({ tableMap: null, shownMap: null });
       state.maps = state.maps.filter((x) => x !== m);
-      open(null);
+      render();
     } catch (e) { toastError(e); }
   }
 
-  function open(m) {
-    state.sel = m;
-    history.replaceState(null, '', m ? `#/mapas/${m.id}` : '#/mapas');
-    render();
+  function notesDialog(m) {
+    modal(`Notas de «${m.name}»`, h('div', { class: 'stack' },
+      h('img', { class: 'notes-preview', src: m.url, alt: '' }),
+      bind(m, 'notes', { type: 'textarea', rows: 8, placeholder: 'Trampas, salidas secretas, quién vive aquí…', onChange: () => save(m) }),
+      h('p', { class: 'tiny muted' }, 'Solo para el máster: no aparecen en la mesa.')), undefined, { iconName: 'feather', wide: true });
+  }
+
+  function card(m) {
+    const name = bind(m, 'name', { class: 'map-name', 'aria-label': 'Nombre del mapa', onChange: () => save(m) });
+    return h('article', { class: `map-card ${onTable(m) ? 'on-table' : ''}` },
+      h('button', { class: 'map-frame', type: 'button', onclick: () => putOnTable(m), 'data-tip': 'Poner sobre la mesa' },
+        h('img', { src: m.url, alt: '', loading: 'lazy' }),
+        onTable(m) && h('span', { class: 'ribbon-tag' }, icon('mesa', 13), 'Sobre la mesa'),
+        h('span', { class: 'map-hover' }, icon('mesa', 26), 'Poner en la mesa')),
+      h('div', { class: 'map-info' }, name,
+        h('div', { class: 'row between' },
+          h('span', { class: 'tiny muted' }, `${(m.tokens || []).length} fichas · ${fmtDate(m.created)}`),
+          h('div', { class: 'row nowrap' },
+            h('button', { class: 'btn icon xs ghost', type: 'button', 'data-tip': m.notes ? 'Ver notas' : 'Añadir notas', onclick: () => notesDialog(m) }, icon(m.notes ? 'scroll' : 'feather', 15)),
+            h('button', { class: 'btn icon xs ghost', type: 'button', 'data-tip': 'Eliminar', onclick: () => remove(m) }, icon('trash', 15))))));
   }
 
   function render() {
-    teardown?.();
-    teardown = null;
-    if (state.sel) return renderViewer(state.sel);
-    const drop = h('div', { class: 'card dropzone' },
-      h('div', { class: 'row between' },
-        h('div', {}, h('h3', {}, 'Mapas'), h('p', { class: 'muted', style: { margin: 0 } }, 'Sube una imagen como mapa (o arrástrala aquí). Puedes mostrarla en la pantalla de jugadores.')),
-        h('button', { class: 'btn primary', type: 'button', onclick: async () => upload(await pickFiles('image/*', true)) }, '+ Subir imagen')));
-    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
-    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-    drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); upload([...e.dataTransfer.files]); });
-
+    const drop = dropZone(h('div', { class: 'panel dropzone' },
+      h('div', { class: 'drop-art' }, icon('upload', 34)),
+      h('div', { class: 'grow' }, h('h3', {}, 'Añadir mapas'),
+        h('p', { class: 'muted', style: { margin: 0 } }, 'Arrastra aquí imágenes (PNG, JPG, WEBP o GIF) o súbelas con el botón. Después, pon una sobre la mesa.')),
+      h('button', { class: 'btn primary lg', type: 'button', onclick: async () => upload(await pickFiles('image/*', true)) }, icon('upload', 18), 'Subir imágenes')), upload);
     clear(root, h('div', { class: 'stack' }, drop,
-      state.maps.length ? h('div', { class: 'map-grid' }, state.maps.map((m) => h('button', { class: 'map-card', type: 'button', onclick: () => open(m) },
-        h('img', { src: m.url, alt: '', loading: 'lazy' }),
-        h('div', { class: 'row between' }, h('b', {}, m.name), state.settings.shownMap === m.id && h('span', { class: 'chip' }, '📺 En pantalla')))))
-        : h('div', { class: 'empty' }, 'Todavía no hay mapas.')));
-  }
-
-  function renderViewer(m) {
-    const view = { scale: 1, x: 0, y: 0 };
-    const img = h('img', { src: m.url, alt: m.name, draggable: 'false' });
-    const stage = h('div', { class: 'map-stage' }, img);
-    const zoomLbl = h('span', { class: 'tnum small' }, '100%');
-    const apply = () => {
-      img.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
-      zoomLbl.textContent = `${Math.round(view.scale * 100)}%`;
-    };
-    const fit = () => {
-      const r = stage.getBoundingClientRect();
-      if (!img.naturalWidth) return;
-      view.scale = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
-      view.x = (r.width - img.naturalWidth * view.scale) / 2;
-      view.y = (r.height - img.naturalHeight * view.scale) / 2;
-      apply();
-    };
-    const zoomAt = (factor, cx, cy) => {
-      const next = Math.min(8, Math.max(0.05, view.scale * factor));
-      view.x = cx - (cx - view.x) * (next / view.scale);
-      view.y = cy - (cy - view.y) * (next / view.scale);
-      view.scale = next;
-      apply();
-    };
-    const zoomCenter = (f) => { const r = stage.getBoundingClientRect(); zoomAt(f, r.width / 2, r.height / 2); };
-    img.addEventListener('load', fit);
-
-    stage.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const r = stage.getBoundingClientRect();
-      zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top);
-    }, { passive: false });
-    // Arrastrar con un dedo o el ratón; pellizcar con dos dedos para hacer zoom.
-    const pointers = new Map();
-    let drag = null;
-    let pinch = null;
-    const local = (p) => { const r = stage.getBoundingClientRect(); return { x: p.x - r.left, y: p.y - r.top }; };
-    const startGesture = () => {
-      const pts = [...pointers.values()];
-      if (pts.length === 1) { drag = { x: pts[0].x - view.x, y: pts[0].y - view.y }; pinch = null; }
-      else if (pts.length >= 2) { drag = null; pinch = { dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y), mid: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 } }; }
-      else { drag = pinch = null; }
-      stage.classList.toggle('dragging', pointers.size > 0);
-    };
-    stage.addEventListener('pointerdown', (e) => {
-      try { stage.setPointerCapture(e.pointerId); } catch { /* algunos navegadores no lo permiten */ }
-      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      startGesture();
-    });
-    stage.addEventListener('pointermove', (e) => {
-      if (!pointers.has(e.pointerId)) return;
-      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (pinch) {
-        const [a, b] = [...pointers.values()];
-        const dist = Math.hypot(a.x - b.x, a.y - b.y);
-        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-        view.x += mid.x - pinch.mid.x;
-        view.y += mid.y - pinch.mid.y;
-        const m = local(mid);
-        zoomAt(dist / (pinch.dist || 1), m.x, m.y);
-        pinch = { dist, mid };
-      } else if (drag) {
-        view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply();
-      }
-    });
-    const end = (e) => { pointers.delete(e.pointerId); startGesture(); };
-    stage.addEventListener('pointerup', end);
-    stage.addEventListener('pointercancel', end);
-    stage.addEventListener('dblclick', fit);
-    const onResize = () => fit();
-    window.addEventListener('resize', onResize);
-    teardown = () => window.removeEventListener('resize', onResize);
-
-    const shown = state.settings.shownMap === m.id;
-    clear(root, h('div', { class: 'stack' },
-      h('div', { class: 'card' },
-        h('div', { class: 'row between' },
-          h('div', { class: 'row grow' },
-            h('button', { class: 'btn sm', type: 'button', onclick: () => open(null) }, '◀ Mapas'),
-            bind(m, 'name', { class: 'title-input grow', 'aria-label': 'Nombre del mapa', onChange: () => save(m) })),
-          h('div', { class: 'row' },
-            h('button', { class: 'btn sm icon', type: 'button', 'aria-label': 'Alejar', onclick: () => zoomCenter(1 / 1.25) }, '−'), zoomLbl,
-            h('button', { class: 'btn sm icon', type: 'button', 'aria-label': 'Acercar', onclick: () => zoomCenter(1.25) }, '+'),
-            h('button', { class: 'btn sm', type: 'button', onclick: fit }, 'Ajustar'),
-            h('button', { class: 'btn sm', type: 'button', onclick: () => stage.requestFullscreen?.() }, 'Pantalla completa'),
-            h('button', { class: `btn sm ${shown ? '' : 'primary'}`, type: 'button', onclick: () => show(shown ? null : m) }, shown ? 'Quitar de pantalla jugadores' : '📺 Mostrar a jugadores'),
-            h('button', { class: 'btn sm danger', type: 'button', onclick: () => remove(m) }, 'Eliminar')))),
-      stage,
-      h('div', { class: 'card' }, field('Notas del mapa (solo para el máster)', bind(m, 'notes', { type: 'textarea', rows: 4, onChange: () => save(m) })))));
-    requestAnimationFrame(fit);
+      state.maps.length ? h('div', { class: 'map-grid' }, state.maps.map(card))
+        : h('div', { class: 'empty' }, icon('mapas'), h('h3', {}, 'Todavía no hay mapas'), h('p', {}, 'Sube la imagen de una mazmorra, una ciudad o un mapa del mundo.'))));
   }
 
   render();
-  return () => { teardown?.(); if (save.pending) save.flush(); };
+  return () => save.pending && save.flush();
 }

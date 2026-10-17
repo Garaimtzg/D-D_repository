@@ -110,38 +110,6 @@ def put_settings(app, p, body):
     return 200, app.store.set_doc("settings", current)
 
 
-# -- pantalla de jugadores -----------------------------------------------
-def _health(c):
-    if c.get("hp", 0) <= 0:
-        return "Caído"
-    ratio = c.get("hp", 0) / max(1, c.get("maxHp", 1))
-    return "Ileso" if ratio >= 1 else "Herido" if ratio > 0.5 else "Malherido"
-
-
-def player_view(app, p, body):
-    settings = app.store.get_doc("settings", {})
-    shown_map = app.store.get("maps", settings.get("shownMap")) if settings.get("shownMap") else None
-    combat = app.store.get("combats", settings.get("activeCombat")) if settings.get("activeCombat") else None
-    view_combat = None
-    if combat and combat.get("status") == "active":
-        order = []
-        for i, c in enumerate(combat.get("combatants", [])):
-            if c.get("hidden"):
-                continue
-            entry = {"name": c.get("name"), "type": c.get("type"), "init": c.get("init"),
-                     "conditions": [x.get("name") for x in c.get("conditions", [])],
-                     "current": i == combat.get("turn"), "color": c.get("color")}
-            if c.get("type") == "jugador":
-                entry.update(hp=c.get("hp"), maxHp=c.get("maxHp"), tempHp=c.get("tempHp", 0))
-            else:
-                entry["health"] = _health(c)
-            order.append(entry)
-        view_combat = {"name": combat.get("name"), "round": combat.get("round"), "order": order}
-    rolls = [r for r in app.store.get_doc("rolls", []) if not r.get("secret")][-12:]
-    return 200, {"map": shown_map, "combat": view_combat, "rolls": rolls,
-                 "clock": settings.get("clock"), "message": settings.get("playerMessage", "")}
-
-
 # -- subida de ficheros ---------------------------------------------------
 def upload(app, p, body):
     raw, filename = body
@@ -176,7 +144,6 @@ ROUTES = [
     ("POST", r"/api/encounter", encounter),
     ("GET", r"/api/settings", get_settings),
     ("PUT", r"/api/settings", put_settings),
-    ("GET", r"/api/player", player_view),
     ("POST", r"/api/uploads", upload),
     ("DELETE", r"/api/uploads/(?P<name>[^/]+)", delete_upload),
     ("GET", rf"/api/{_COL}", list_items),
