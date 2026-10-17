@@ -1,4 +1,5 @@
-// Reglas de D&D en el cliente y datos de referencia compartidos (se cargan del servidor una vez).
+// Reglas de D&D (Manual del Jugador 2024) en el cliente. Los datos del manual llegan del servidor
+// una sola vez (reference()) y estas funciones calculan la ficha: CA, PG, espacios, ataques…
 import { api } from './api.js';
 
 export const TYPES = [
@@ -12,29 +13,41 @@ export const TYPE_ICON = { jugador: 'crown', pnj: 'user', enemigo: 'skull' };
 
 // Emoji para reconocer cada estado de un vistazo en fichas, tokens y combate.
 export const CONDITION_ICON = {
-  Agarrado: '🤝', Apresado: '⛓️', Asustado: '😱', Aturdido: '💫', Cegado: '🙈', Derribado: '🛌',
+  Agarrado: '🤝', Apresado: '⛓️', Asustado: '😱', Aturdido: '💫', Cansancio: '🥱', Cegado: '🙈', Derribado: '🛌',
   Ensordecido: '🔇', Envenenado: '🤢', Hechizado: '💘', Incapacitado: '🚫', Inconsciente: '💤',
-  Invisible: '👻', Paralizado: '🧊', Petrificado: '🗿', Concentrado: '🔮', Bendecido: '✨', Marcado: '🎯',
+  Invisible: '👻', Paralizado: '🧊', Petrificado: '🗿', Concentrado: '🔮', Bendecido: '✨', Marcado: '🎯', Maltrecho: '🩸', Oculto: '🫥',
 };
 export const condLabel = (name) => `${CONDITION_ICON[name] || '•'} ${name}`;
 
 export const ABILITY_KEYS = ['fue', 'des', 'con', 'int', 'sab', 'car'];
 export const ABILITY_SHORT = { fue: 'FUE', des: 'DES', con: 'CON', int: 'INT', sab: 'SAB', car: 'CAR' };
+export const ABILITY_NAME = { fue: 'Fuerza', des: 'Destreza', con: 'Constitución', int: 'Inteligencia', sab: 'Sabiduría', car: 'Carisma' };
 export const CRS = ['0', '1/8', '1/4', '1/2', ...Array.from({ length: 30 }, (_, i) => String(i + 1))];
+export const COINS = [['pc', 'Cobre', '#c27a45'], ['pp', 'Plata', '#c9d1d9'], ['pe', 'Electro', '#d8cf8c'], ['po', 'Oro', '#f0c24a'], ['ppt', 'Platino', '#e6eef5']];
 
+let REF = null;
 let refPromise;
-export const reference = () => (refPromise ??= api.get('/api/reference'));
+export const reference = () => (refPromise ??= api.get('/api/reference').then((r) => { REF = r; return r; }));
+export const ref = () => REF;
 let monstersPromise;
 export const monsters = () => (monstersPromise ??= api.get('/api/monsters'));
 
 export const mod = (score) => Math.floor(((Number(score) || 10) - 10) / 2);
 export const fmtMod = (n) => (n >= 0 ? `+${n}` : `${n}`);
+export const fmtM = (m) => `${String(Math.round((Number(m) || 0) * 10) / 10).replace('.', ',')} m`;
 
 export function crValue(cr) {
   if (!cr) return 0;
   const [a, b] = String(cr).split('/');
   return b ? Number(a) / Number(b) : Number(a);
 }
+
+// ------------------------------------------------------------- datos de la ficha
+const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').trim();
+export const classOf = (ch) => REF?.classes.find((c) => c.id === ch.classId) || REF?.classes.find((c) => norm(c.name) === norm(ch.cls)) || null;
+export const speciesOf = (ch) => REF?.species.find((s) => s.id === ch.speciesId) || REF?.species.find((s) => norm(s.name) === norm(ch.race)) || null;
+export const backgroundOf = (ch) => REF?.backgrounds.find((b) => b.id === ch.backgroundId) || REF?.backgrounds.find((b) => norm(b.name) === norm(ch.background)) || null;
+export const hasFeat = (ch, name) => (ch.feats || []).some((f) => norm(f).startsWith(norm(name)));
 
 export function profBonus(ch) {
   if (ch.type === 'enemigo' && ch.cr != null && ch.cr !== '') {
@@ -44,35 +57,148 @@ export function profBonus(ch) {
   return 2 + Math.floor((Math.max(1, Math.min(20, ch.level || 1)) - 1) / 4);
 }
 
-export const initBonus = (ch) => (ch.initBonus ?? '') === '' ? mod(ch.abilities?.des) : Number(ch.initBonus);
+// Cansancio (2024): −2 por nivel a toda prueba con d20 y −1,5 m de velocidad por nivel.
+export const exhaustionPenalty = (ch) => 2 * (ch.exhaustion || 0);
+export const effectiveSpeed = (ch) => Math.max(0, (Number(ch.speed) || 0) - 1.5 * (ch.exhaustion || 0));
+// Expresión de una prueba con d20 con su bonificador y el cansancio ya aplicado.
+export const d20 = (ch, bonus) => `1d20${fmtMod((Number(bonus) || 0) - exhaustionPenalty(ch))}`;
+
+export const initBonus = (ch) => ((ch.initBonus ?? '') === ''
+  ? mod(ch.abilities?.des) + (hasFeat(ch, 'Alerta') ? profBonus(ch) : 0)
+  : Number(ch.initBonus));
 export const saveBonus = (ch, k) => mod(ch.abilities?.[k]) + (ch.saves?.includes(k) ? profBonus(ch) : 0);
 export const skillBonus = (ch, skill) => mod(ch.abilities?.[skill.ability]) + (ch.skills?.[skill.key] || 0) * profBonus(ch);
-
 export function passivePerception(ch) {
   return 10 + mod(ch.abilities?.sab) + (ch.skills?.percepcion || 0) * profBonus(ch);
 }
 
+// Clase de armadura: armadura del manual (con su límite de DES), escudo, Defensa sin armadura y la dote Defensa.
+export function computeAC(ch) {
+  const dex = mod(ch.abilities?.des);
+  const armor = REF?.armor.find((a) => a.name === ch.armor);
+  const cls = classOf(ch);
+  let ac;
+  if (armor) {
+    let cap = armor.dex_max;
+    if (cap === 2 && hasFeat(ch, 'Maestro en armaduras medias') && (ch.abilities?.des || 0) >= 16) cap = 3;
+    ac = armor.base + (cap == null ? dex : Math.min(dex, cap));
+  } else if (cls?.unarmored && !(cls.id === 'monje' && ch.shield)) {
+    ac = 10 + cls.unarmored.reduce((s, k) => s + mod(ch.abilities?.[k]), 0);
+  } else ac = 10 + dex;
+  if (ch.shield) ac += 2;
+  if (armor && hasFeat(ch, 'Defensa')) ac += 1;
+  return ac;
+}
+
+// PG máximos con los valores fijos por nivel del manual (o la media si se prefiere no tirar).
+export function maxHpFor(ch, level = ch.level || 1) {
+  const cls = classOf(ch);
+  if (!cls) return ch.maxHp;
+  const con = mod(ch.abilities?.con);
+  const fixed = REF.hp_fixed[cls.hit_die];
+  let hp = cls.hit_die + con + (level - 1) * Math.max(1, fixed + con);
+  if (speciesOf(ch)?.hp_per_level) hp += level * speciesOf(ch).hp_per_level;
+  if (hasFeat(ch, 'Duro')) hp += 2 * level;
+  return Math.max(1, hp);
+}
+
+// Espacios de conjuro (máximos por nivel de conjuro) según la clase y el nivel.
+export function slotsFor(cls, level) {
+  const out = Array(9).fill(0);
+  if (!cls?.caster || !REF) return out;
+  const i = Math.max(1, Math.min(20, level)) - 1;
+  if (cls.caster === 'pact') {
+    const [n, lvl] = REF.slots.pact[i];
+    out[lvl - 1] = n;
+  } else (REF.slots[cls.caster][i] || []).forEach((n, j) => { out[j] = n; });
+  return out;
+}
+
+export const columnAt = (cls, name, level) => cls?.columns?.[name]?.[Math.max(1, Math.min(20, level)) - 1] ?? null;
+export const masteryCount = (cls, level) => (cls?.masteries ? cls.masteries[Math.max(1, Math.min(20, level)) - 1] || 0 : 0);
+
+// Recursos de clase (furia, canalizar divinidad, puntos de concentración…) para un nivel.
+export function classResources(ch, cls = classOf(ch), level = ch.level || 1) {
+  if (!cls) return [];
+  return (cls.resources || []).map((r) => {
+    let max = r.column ? columnAt(cls, r.column, level) : r.uses;
+    if (typeof max === 'string' && max.startsWith('mod:')) max = Math.max(1, mod(ch.abilities?.[max.slice(4)]));
+    if (max === 'level*5') max = level * 5;
+    let reset = r.reset;
+    if (r.reset_from) for (const [lv, rs] of Object.entries(r.reset_from)) if (level >= Number(lv)) reset = rs;
+    return max ? { name: r.name, max: Number(max), used: 0, reset, auto: true } : null;
+  }).filter(Boolean);
+}
+
+export function featuresUpTo(cls, level) {
+  if (!cls) return [];
+  const out = [];
+  for (let l = 1; l <= level; l++) for (const f of cls.features[l] || []) out.push([l, f]);
+  return out;
+}
+
+// ------------------------------------------------------------------ armas
+export function weaponProficient(ch, w) {
+  const cls = classOf(ch);
+  const training = ch.weaponTraining?.length ? ch.weaponTraining : cls?.weapon_training || [];
+  if (training.includes(w.category)) return true;
+  if (hasFeat(ch, 'Entrenamiento con armas marciales')) return true;
+  if (w.category === 'marcial' && cls?.id === 'monje') return w.properties.includes('Ligera');
+  if (w.category === 'marcial' && cls?.id === 'picaro') return w.properties.includes('Ligera') || w.properties.includes('Sutil');
+  return ch.type !== 'jugador';
+}
+
+export function weaponAttack(ch, w) {
+  const fue = mod(ch.abilities?.fue);
+  const des = mod(ch.abilities?.des);
+  const ability = w.properties.includes('Sutil') ? Math.max(fue, des) : w.kind === 'dist' ? des : fue;
+  const prof = weaponProficient(ch, w) ? profBonus(ch) : 0;
+  const mastery = (ch.masteries || []).includes(w.name);
+  const notes = [w.type, ...w.properties.map((p) => (p === 'Arrojadiza' || p === 'Munición') && w.range ? `${p} (${w.range} m)` : p),
+    mastery ? `Maestría: ${w.mastery}` : null].filter(Boolean).join(' · ');
+  return {
+    name: w.name, bonus: ability + prof,
+    damage: w.damage === '1' ? '1' : `${w.damage}${ability ? fmtMod(ability) : ''}`,
+    notes, weapon: w.name,
+  };
+}
+
+// --------------------------------------------------------------- personaje
 export function newCharacter(type = 'jugador', extra = {}) {
   return {
     type, name: type === 'enemigo' ? 'Nuevo enemigo' : type === 'pnj' ? 'Nuevo personaje' : 'Nuevo aventurero',
-    player: '', race: '', cls: '', level: 1, xp: 0, cr: type === 'enemigo' ? '1/4' : '', creature: '',
-    alignment: '', background: '', attitude: type === 'enemigo' ? 'hostil' : 'neutral', location: '', faction: '',
-    portrait: '', color: TYPE_COLOR[type],
-    hp: 10, maxHp: 10, tempHp: 0, hitDie: 'd8', hitDiceLeft: 1, hpDice: '', ac: 10, speed: 30, initBonus: '',
+    player: '', race: '', speciesId: '', lineage: '', cls: '', classId: '', subclass: '', level: 1, xp: 0,
+    cr: type === 'enemigo' ? '1/4' : '', creature: '',
+    alignment: '', background: '', backgroundId: '', attitude: type === 'enemigo' ? 'hostil' : 'neutral', location: '', faction: '',
+    portrait: '', color: TYPE_COLOR[type], size: 'Mediano',
+    hp: 10, maxHp: 10, tempHp: 0, hitDie: 'd8', hitDiceLeft: 1, hpDice: '', ac: 10, acMode: 'manual', armor: '', shield: false,
+    speed: 9, initBonus: '',
     abilities: { fue: 10, des: 10, con: 10, int: 10, sab: 10, car: 10 },
-    saves: [], skills: {},
-    attacks: [], spellAbility: '', slots: Array.from({ length: 9 }, () => ({ max: 0, used: 0 })), spells: '',
-    resources: [], inventory: [], coins: { pc: 0, pa: 0, pe: 0, po: 0, pp: 0 },
+    saves: [], skills: {}, feats: [], masteries: [], weaponTraining: [], armorTraining: [], tools: '',
+    attacks: [], spellAbility: '', autoSlots: false, slots: Array.from({ length: 9 }, () => ({ max: 0, used: 0 })), spells: '',
+    resources: [], inventory: [], coins: { pc: 0, pp: 0, pe: 0, po: 0, ppt: 0 },
     features: '', notes: '', languages: '',
     conditions: [], exhaustion: 0, inspiration: false, deathSaves: { ok: 0, ko: 0 },
     ...extra,
   };
 }
 
+// Ficha guardada con una versión anterior de la app: se completa y se pasa a las unidades de 2024.
+export function migrateCharacter(c) {
+  const out = { ...newCharacter(c.type), ...c };
+  if (c.coins && 'pa' in c.coins) { // antes: pa = plata, pp = platino
+    out.coins = { pc: c.coins.pc || 0, pp: c.coins.pa || 0, pe: c.coins.pe || 0, po: c.coins.po || 0, ppt: c.coins.pp || 0 };
+  }
+  if (Number(out.speed) > 15) out.speed = Math.round((Number(out.speed) * 0.3) / 1.5) * 1.5; // pies -> metros
+  out.slots = (out.slots || []).map((s) => ({ max: s.max || 0, used: s.used || 0 }));
+  while (out.slots.length < 9) out.slots.push({ max: 0, used: 0 });
+  return out;
+}
+
 export function fromMonster(m) {
   return newCharacter('enemigo', {
     name: m.name, cr: m.cr, creature: m.creature, ac: m.ac, hp: m.hp, maxHp: m.hp, hpDice: m.hpDice,
-    speed: m.speed, abilities: { ...m.abilities }, attacks: m.attacks.map((a) => ({ ...a, notes: '' })),
+    speed: m.speed, size: m.size || 'Mediano', abilities: { ...m.abilities }, attacks: m.attacks.map((a) => ({ ...a, notes: '' })),
     features: m.traits,
   });
 }
@@ -87,6 +213,7 @@ export function combatantFrom(ch, suffix = '') {
     init: null, initBonus: initBonus(ch), hp: ch.hp ?? ch.maxHp ?? 1, maxHp: ch.maxHp ?? ch.hp ?? 1,
     tempHp: ch.tempHp || 0, ac: ch.ac ?? 10, cr: ch.cr ?? '', attacks: (ch.attacks || []).map((a) => ({ ...a })),
     saves: Object.fromEntries(ABILITY_KEYS.map((k) => [k, ch.abilities ? saveBonus(ch, k) : 0])),
+    exhaustion: ch.exhaustion || 0, size: ch.size || 'Mediano', speed: Number(ch.speed) || 9,
     conditions: (ch.conditions || []).map((name) => ({ name, rounds: null })),
     concentration: false, deathSaves: { ok: 0, ko: 0 }, hidden: false, notes: '',
   };
@@ -107,18 +234,25 @@ export function applyHealing(target, amount) {
   target.hp = Math.min(target.maxHp || 0, (target.hp || 0) + Math.max(0, Math.floor(amount)));
 }
 
+// Descanso largo (2024): todos los PG y dados de golpe, −1 cansancio, espacios y recursos.
 export function longRest(ch) {
   ch.hp = ch.maxHp;
   ch.tempHp = 0;
   ch.deathSaves = { ok: 0, ko: 0 };
-  ch.hitDiceLeft = Math.min(ch.level || 1, (ch.hitDiceLeft || 0) + Math.max(1, Math.floor((ch.level || 1) / 2)));
+  ch.hitDiceLeft = ch.level || 1;
   ch.exhaustion = Math.max(0, (ch.exhaustion || 0) - 1);
   (ch.slots || []).forEach((s) => { s.used = 0; });
   (ch.resources || []).forEach((r) => { r.used = 0; });
+  if (speciesOf(ch)?.id === 'humano') ch.inspiration = true; // Ingenioso
 }
 
+// Descanso corto: recursos de descanso corto (algunos solo recuperan un uso) y la magia del pacto.
 export function shortRest(ch) {
-  (ch.resources || []).forEach((r) => { if (r.reset === 'corto') r.used = 0; });
+  (ch.resources || []).forEach((r) => {
+    if (r.reset === 'corto') r.used = 0;
+    if (r.reset === 'corto1') r.used = Math.max(0, (r.used || 0) - 1);
+  });
+  if (classOf(ch)?.caster === 'pact') (ch.slots || []).forEach((s) => { s.used = 0; });
 }
 
 // "2d6+3" -> "4d6+3": en un crítico se duplican los dados, no el modificador.

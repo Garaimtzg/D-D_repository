@@ -12,14 +12,16 @@ import { createWeather, WEATHERS } from '../core/weather.js';
 import { ambience } from '../core/ambience.js';
 import { sfx } from '../core/sfx.js';
 import { roll, onRoll, describe } from '../core/dice.js';
+import { createBattleMap } from '../core/battlemap.js';
+import { loadScenes, findScene, ensureBoard, boardTokens, autoPlace, placeNear } from '../core/board.js';
 
-export default { id: 'mesa', title: 'Mesa', icon: 'mesa', hint: 'Mapa, fichas, iniciativa y dados · tecla 1', mount };
+export default { id: 'mesa', title: 'Mesa', icon: 'mesa', hint: 'Mapa o tablero de combate, iniciativa y dados · tecla 1', mount };
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 
 async function mount(root) {
-  const [settings, maps, chars, rolls] = await Promise.all([
-    api.settings(), api.list('maps'), api.list('characters'), api.get('/api/rolls'),
+  const [settings, maps, chars, rolls, scenes] = await Promise.all([
+    api.settings(), api.list('maps'), api.list('characters'), api.get('/api/rolls'), loadScenes(),
   ]);
   let combat = null;
   if (settings.activeCombat) {
@@ -29,7 +31,7 @@ async function mount(root) {
   const state = {
     settings, maps, chars, combat, rolls,
     map: maps.find((m) => m.id === (settings.tableMap || settings.shownMap)) || null,
-    who: prefs.get('mesa.who', ''), mode: '', mod: 0, player: false,
+    who: prefs.get('mesa.who', ''), mode: '', mod: 0, player: false, view: prefs.get('mesa.view', 'tablero'),
   };
   const view = { scale: 1, x: 0, y: 0 };
   const cleanups = [];
@@ -60,6 +62,85 @@ async function mount(root) {
   const feedEl = h('div', { class: 'panel feed' });
   const exitBtn = h('button', { class: 'btn exit-player', type: 'button', onclick: () => setPlayerMode(false) }, icon('close'), 'Salir del modo jugadores');
   root.append(h('div', { class: 'mesa' }, barEl, h('div', { class: 'mesa-grid' }, frame, h('aside', { class: 'mesa-side' }, partyEl, dockEl, feedEl)), exitBtn));
+
+  // ------------------------------------------------------------ tablero de combate
+  // Si el combate activo tiene escenario, la mesa muestra su cuadrícula en lugar del mapa.
+  let bm = null;
+  const battleScene = () => (state.combat ? findScene(state.combat.board?.scene, scenes) : null);
+  const inBattle = () => !!battleScene() && state.view !== 'mapa';
+  const refreshBattle = () => { if (bm && inBattle()) bm.setTokens(boardTokens(state.combat, { player: state.player })); };
+  function ensureBm() {
+    if (bm) return bm;
+    bm = createBattleMap({
+      catalog: scenes.cat, dm: !state.player,
+      canMove: (t) => !state.player || t.type === 'jugador',
+      onMove: (cid, col, row, meters, jump) => {
+        const c = state.combat;
+        const b = ensureBoard(c);
+        b.pos[cid] = [col, row];
+        if (combatRules.current(c)?.cid === cid && !jump) b.moved[cid] = (b.moved[cid] || 0) + meters;
+        hidePopover();
+        saveCombat(c);
+        refreshBattle();
+      },
+      onTokenClick: (cid, tel) => battlePop(cid, tel),
+      onTokenDbl: (cid) => {
+        const x = state.combat?.combatants.find((y) => y.cid === cid);
+        if (!state.player && x?.charId) location.hash = `#/personajes/${x.charId}`;
+      },
+      onTokenContext: (cid) => {
+        if (state.player || !state.combat?.board?.pos[cid]) return;
+        delete state.combat.board.pos[cid];
+        hidePopover();
+        saveCombat(state.combat);
+        refreshBattle();
+      },
+      onArea: async (cids) => {
+        if (state.player) return;
+        if (await combatRules.areaDialog(state.combat, { chars: state.chars, preselect: cids })) { saveCombat(state.combat); renderAll(); }
+      },
+      onDropToken: (data, col, row) => {
+        const c = state.combat;
+        const x = c?.combatants.find((y) => y.cid === data.cid || (data.charId && !data.cid && y.charId === data.charId));
+        if (!x) return toast('Solo pueden ir al tablero quienes están en el combate.');
+        placeNear(c, battleScene(), scenes.cat, x, col, row);
+        saveCombat(c);
+        refreshBattle();
+      },
+      onBackgroundClick: () => hidePopover(),
+    });
+    board.prepend(bm.el);
+    return bm;
+  }
+  function applyBattle() {
+    const on = inBattle();
+    board.classList.toggle('battle', on);
+    if (on) {
+      ensureBm();
+      bm.el.hidden = false;
+      bm.setDm(!state.player);
+      const sc = battleScene();
+      if (bm.scene !== sc) bm.setScene(sc);
+      refreshBattle();
+    } else if (bm) bm.el.hidden = true;
+  }
+  function battlePop(cid, tel) {
+    const x = state.combat?.combatants.find((y) => y.cid === cid);
+    if (!x || !tel) return;
+    const t = { id: `b-${cid}`, cid, charId: x.charId, name: x.name, color: x.color, portrait: x.portrait, type: x.type };
+    popEl.dataset.id = t.id;
+    fillPopover(t, () => {
+      delete state.combat.board.pos[cid];
+      hidePopover();
+      saveCombat(state.combat);
+      refreshBattle();
+    });
+    popEl.hidden = false;
+    const br = board.getBoundingClientRect();
+    const tr = tel.getBoundingClientRect();
+    popEl.style.left = `${Math.min(br.width - 150, Math.max(150, tr.left - br.left + tr.width / 2))}px`;
+    popEl.style.top = `${Math.min(br.height - 40, tr.bottom - br.top + 8)}px`;
+  }
 
   // -------------------------------------------------------------------- utilidades
   const apply = () => {
@@ -127,11 +208,13 @@ async function mount(root) {
         state.map && h('label', { class: 'row small muted size-ctl', 'data-tip': 'Tamaño de las fichas en este mapa' }, icon('target', 16), sizeInput),
         h('button', { class: 'btn sm', type: 'button', onclick: narrate, 'data-tip': 'Muestra un texto sobre la mesa' }, icon('feather'), 'Narrar'),
         selectEl(WEATHERS, state.settings.tableWeather || '', setWeather, { 'aria-label': 'Clima sobre la mesa', class: 'weather-select', 'data-tip': 'Clima sobre el tablero (con su sonido de ambiente)' })),
-      h('span', { class: 'tiny muted ping-hint', 'data-tip': 'Señala un punto del mapa a toda la mesa' }, h('kbd', {}, 'Mayús'), ' + clic: señalar'),
+      battleScene() && h('div', { class: 'row nowrap mesa-mode dm-only', 'data-tip': 'El combate activo tiene tablero con cuadrícula' },
+        segmented([['tablero', 'Tablero de combate'], ['mapa', 'Mapa']], state.view, (v) => { state.view = v; prefs.set('mesa.view', v); hidePopover(); renderAll(); if (v === 'tablero') setTimeout(() => bm?.fit(), 60); })),
+      h('span', { class: 'tiny muted ping-hint', 'data-tip': 'Señala un punto a toda la mesa' }, h('kbd', {}, 'Mayús'), ' + clic: señalar'),
       h('div', { class: 'row zoom' },
-        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Alejar', onclick: () => zoomCenter(1 / 1.25) }, icon('zoomOut', 18)),
-        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Acercar', onclick: () => zoomCenter(1.25) }, icon('zoomIn', 18)),
-        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Ajustar el mapa', 'data-tip': 'Ajustar (doble clic en el mapa)', onclick: fit }, icon('fit', 18))),
+        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Alejar', onclick: () => (inBattle() ? bm.zoom(1 / 1.25) : zoomCenter(1 / 1.25)) }, icon('zoomOut', 18)),
+        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Acercar', onclick: () => (inBattle() ? bm.zoom(1.25) : zoomCenter(1.25)) }, icon('zoomIn', 18)),
+        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Ajustar el mapa', 'data-tip': 'Ajustar (doble clic en el mapa)', onclick: () => (inBattle() ? bm.fit() : fit()) }, icon('fit', 18))),
       h('button', { class: `btn ${state.player ? '' : 'primary'} dm-only`, type: 'button', onclick: () => setPlayerMode(true),
         'data-tip': 'Pantalla completa sin secretos: oculta los PG de los enemigos, los ocultos y las tiradas secretas' }, icon('eye'), 'Modo jugadores'));
   }
@@ -142,7 +225,7 @@ async function mount(root) {
     if (on) document.documentElement.requestFullscreen?.().catch(() => {});
     else if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     renderAll();
-    setTimeout(fit, 120);
+    setTimeout(() => { fit(); bm?.fit(); }, 150);
   }
   const onFs = () => { if (!document.fullscreenElement && state.player) setPlayerMode(false); };
   document.addEventListener('fullscreenchange', onFs);
@@ -308,6 +391,7 @@ async function mount(root) {
     board.classList.toggle('panning', pointers.size > 0);
   };
   board.addEventListener('pointerdown', (e) => {
+    if (inBattle()) return;
     if (!state.map || e.target.closest('.mtoken, .tk-pop, .narration, .board-clock, .board-empty button')) return;
     if (e.shiftKey) { ping(e); return; }
     hidePopover();
@@ -332,19 +416,19 @@ async function mount(root) {
   board.addEventListener('pointerup', endPointer);
   board.addEventListener('pointercancel', endPointer);
   board.addEventListener('wheel', (e) => {
-    if (!state.map) return;
+    if (!state.map || inBattle()) return;
     e.preventDefault();
     const r = board.getBoundingClientRect();
     zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
-  board.addEventListener('dblclick', (e) => { if (!e.target.closest('.mtoken, .tk-pop')) fit(); });
+  board.addEventListener('dblclick', (e) => { if (!inBattle() && !e.target.closest('.mtoken, .tk-pop')) fit(); });
 
   // Soltar sobre la mesa: una imagen se convierte en mapa; una ficha del panel, en ficha del mapa.
   dropZone(board, (files) => uploadMap(files));
   board.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('application/x-dnd-token')) { e.preventDefault(); board.classList.add('over'); } });
   board.addEventListener('drop', (e) => {
     const raw = e.dataTransfer.getData('application/x-dnd-token');
-    if (!raw) return;
+    if (!raw || inBattle()) return;
     e.preventDefault();
     board.classList.remove('over');
     addToken(JSON.parse(raw), toImage(e.clientX, e.clientY));
@@ -358,14 +442,30 @@ async function mount(root) {
     return el;
   };
   const placeAtCenter = (data) => {
+    if (inBattle()) {
+      const c = state.combat;
+      const x = c.combatants.find((y) => y.cid === data.cid || (data.charId && !data.cid && y.charId === data.charId));
+      if (!x) return toast(`${data.name} no está en el combate.`);
+      const sc = battleScene();
+      placeNear(c, sc, scenes.cat, x, Math.floor(sc.cols / 2), Math.floor(sc.rows / 2));
+      saveCombat(c);
+      refreshBattle();
+      return;
+    }
     const r = board.getBoundingClientRect();
     addToken(data, toImage(r.left + r.width / 2 + (Math.random() - 0.5) * 60, r.top + r.height / 2 + (Math.random() - 0.5) * 60));
   };
 
   // --------------------------------------------------------------- tarjeta de ficha
   function showPopover(t) {
-    const info = tokenInfo(t);
     popEl.dataset.id = t.id;
+    fillPopover(t, () => removeToken(t));
+    popEl.hidden = false;
+    renderTokens();
+    positionPopover();
+  }
+  function fillPopover(t, onRemove) {
+    const info = tokenInfo(t);
     const target = info.cmb || info.ch;
     const canSeeHp = !state.player || info.type === 'jugador';
     clear(popEl,
@@ -380,13 +480,10 @@ async function mount(root) {
       !state.player && target && h('div', { class: 'row' },
         h('button', { class: 'btn sm danger', type: 'button', onclick: () => hpDialog(target, info.cmb) }, icon('drop', 15), 'PG'),
         info.ch && h('button', { class: 'btn sm', type: 'button', onclick: () => { location.hash = `#/personajes/${info.ch.id}`; } }, icon('scroll', 15), 'Ficha'),
-        h('button', { class: 'btn sm ghost', type: 'button', onclick: () => removeToken(t) }, icon('trash', 15), 'Quitar')));
-    popEl.hidden = false;
-    renderTokens();
-    positionPopover();
+        h('button', { class: 'btn sm ghost', type: 'button', onclick: onRemove }, icon('trash', 15), 'Quitar')));
   }
   function positionPopover() {
-    if (popEl.hidden || !state.map) return;
+    if (popEl.hidden || !state.map || popEl.dataset.id?.startsWith('b-')) return;
     const t = state.map.tokens.find((x) => x.id === popEl.dataset.id);
     if (!t) return hidePopover();
     const r = board.getBoundingClientRect();
@@ -437,7 +534,7 @@ async function mount(root) {
       if (action === 'dmg') sfx.hit(); else if (action === 'heal') sfx.heal(); else sfx.shield();
       saveChar(target);
     }
-    const anchor = tokensEl.querySelector(`.mtoken.selected`) || partyEl.querySelector(`[data-key="${target.charId || target.id}"]`);
+    const anchor = (inBattle() ? board.querySelector('.bm-token.selected') : tokensEl.querySelector('.mtoken.selected')) || partyEl.querySelector(`[data-key="${target.charId || target.id}"]`);
     floatNum(anchor || board, action === 'dmg' ? `−${v}` : `+${v}`, action === 'dmg' ? 'dmg' : action === 'heal' ? 'heal' : 'temp');
     renderAll();
   }
@@ -462,6 +559,14 @@ async function mount(root) {
           'data-tip': `${x.name} · iniciativa ${x.init ?? '–'}${showHp ? ` · ${x.hp}/${x.maxHp} PG` : ` · ${combatRules.healthWord(x)}`}${x.conditions.length ? ` · ${x.conditions.map((k) => k.name).join(', ')}` : ''}`,
           'data-tip-pos': 'below',
           onclick: () => {
+            if (inBattle()) {
+              if (state.combat.board?.pos?.[x.cid]) {
+                bm.centerOn(x.cid);
+                bm.select(x.cid);
+                setTimeout(() => { const tel = board.querySelector(`.bm-token[data-id="${x.cid}"]`); if (tel) battlePop(x.cid, tel); }, 480);
+              } else if (!state.player) placeAtCenter({ cid: x.cid, name: x.name });
+              return;
+            }
             const t = state.map?.tokens.find((tk) => tk.cid === x.cid || (x.charId && tk.charId === x.charId && x.type === 'jugador'));
             if (t) { centerOn(t); showPopover(t); } else if (!state.player && state.map) placeAtCenter({ cid: x.cid, charId: x.charId, name: x.name, color: x.color, portrait: x.portrait, type: x.type });
           } },
@@ -483,6 +588,7 @@ async function mount(root) {
     saveCombat(state.combat);
     renderAll();
     if (x && dir > 0) announce(x);
+    if (x && inBattle() && state.combat.board?.pos?.[x.cid]) bm.centerOn(x.cid);
   }
 
   function announce(x) {
@@ -497,7 +603,14 @@ async function mount(root) {
     clear(partyEl,
       h('div', { class: 'panel-head' }, h('h3', {}, icon('crown'), 'El grupo'),
         h('div', { class: 'actions dm-only' }, state.map && party.length > 0 && h('button', { class: 'btn xs', type: 'button', 'data-tip': 'Pon a todo el grupo sobre el mapa',
-          onclick: () => party.forEach((ch) => placeAtCenter({ charId: ch.id, name: ch.name, color: ch.color, portrait: ch.portrait, type: ch.type })) }, icon('plus', 14), 'Al mapa'))),
+          onclick: () => {
+            if (inBattle()) {
+              const n = autoPlace(state.combat, battleScene(), scenes.cat, state.combat.combatants.filter((x) => x.type === 'jugador').map((x) => x.cid));
+              if (n) { saveCombat(state.combat); refreshBattle(); } else toast('El grupo ya está en el tablero (o no está en el combate).');
+              return;
+            }
+            party.forEach((ch) => placeAtCenter({ charId: ch.id, name: ch.name, color: ch.color, portrait: ch.portrait, type: ch.type }));
+          } }, icon('plus', 14), inBattle() ? 'Al tablero' : 'Al mapa'))),
       party.length ? h('div', { class: 'party-list' }, party.map((ch) => {
         const cmb = state.combat?.combatants.find((x) => x.charId === ch.id);
         const src = cmb || ch;
@@ -600,6 +713,7 @@ async function mount(root) {
 
   function renderAll() {
     renderBar();
+    applyBattle();
     renderRibbon();
     renderTokens();
     renderParty();
@@ -607,7 +721,11 @@ async function mount(root) {
     renderFeed();
     renderClock();
     renderNarration();
-    if (!popEl.hidden) { const t = state.map?.tokens.find((x) => x.id === popEl.dataset.id); if (t) showPopover(t); }
+    if (!popEl.hidden) {
+      const id = popEl.dataset.id || '';
+      if (id.startsWith('b-')) { const tel = board.querySelector(`.bm-token[data-id="${id.slice(2)}"]`); if (tel && inBattle()) battlePop(id.slice(2), tel); else hidePopover(); }
+      else { const t = state.map?.tokens.find((x) => x.id === id); if (t) showPopover(t); }
+    }
   }
 
   cleanups.push(onRoll((r) => { state.rolls.push(r); renderFeed(); }));
@@ -619,6 +737,7 @@ async function mount(root) {
   loadMap();
   renderAll();
   return () => {
+    bm?.destroy();
     cleanups.forEach((fn) => fn());
     if (saveMap.pending) saveMap.flush();
     if (saveCombat.pending) saveCombat.flush();

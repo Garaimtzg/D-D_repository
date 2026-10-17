@@ -5,7 +5,7 @@ import { h, clear, icon, segmented, confirmDialog, toast, toastError, pickFiles,
 import { player } from '../core/audio.js';
 import { ambience, AMBIENCES } from '../core/ambience.js';
 
-export default { id: 'musica', title: 'Música', icon: 'musica', hint: 'Música y ambientes · tecla 8', mount };
+export default { id: 'musica', title: 'Música', icon: 'musica', hint: 'Música y ambientes · tecla 9', mount };
 
 const MOODS = [['Taberna', '🍺'], ['Exploración', '🧭'], ['Combate', '⚔️'], ['Jefe', '🐉'], ['Misterio', '🕯️'], ['Mazmorra', '💀'], ['Calma', '🌙'], ['Otra', '🎵']];
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;

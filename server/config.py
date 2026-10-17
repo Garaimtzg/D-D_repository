@@ -6,7 +6,7 @@ STATIC_DIR = ROOT / "static"
 DATA_DIR = ROOT / "data"
 
 # Colecciones que se guardan como JSON en data/<nombre>.json
-COLLECTIONS = ("characters", "combats", "maps", "notes", "quests", "tracks")
+COLLECTIONS = ("characters", "combats", "maps", "notes", "quests", "tracks", "scenes")
 
 MAX_JSON_BYTES = 5 * 1024 * 1024
 MAX_UPLOAD_BYTES = 60 * 1024 * 1024

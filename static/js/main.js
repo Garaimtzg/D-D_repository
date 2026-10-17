@@ -9,6 +9,7 @@ import { player } from './core/audio.js';
 import mesa from './views/mesa.js';
 import characters from './views/characters.js';
 import combat from './views/combat.js';
+import scenes from './views/scenes.js';
 import maps from './views/maps.js';
 import dice from './views/dice.js';
 import tools from './views/tools.js';
@@ -16,7 +17,7 @@ import notes from './views/notes.js';
 import music from './views/music.js';
 import reference from './views/reference.js';
 
-const MAIN = [mesa, combat, characters, maps, dice];
+const MAIN = [mesa, combat, scenes, characters, maps, dice];
 const EXTRA = [notes, tools, music, reference];
 const VIEWS = [...MAIN, ...EXTRA];
 

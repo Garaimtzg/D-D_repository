@@ -4,7 +4,7 @@ import { sfx } from '../core/sfx.js';
 import { api, debounced } from '../core/api.js';
 import { h, clear, icon, bind, modal, confirmDialog, toast, toastError, pickFiles, dropZone, fmtDate } from '../core/dom.js';
 
-export default { id: 'mapas', title: 'Mapas', icon: 'mapas', hint: 'Imágenes para poner sobre la mesa · tecla 4', mount };
+export default { id: 'mapas', title: 'Mapas', icon: 'mapas', hint: 'Imágenes para poner sobre la mesa · tecla 5', mount };
 
 async function mount(root) {
   const [maps, settings] = await Promise.all([api.list('maps'), api.settings()]);

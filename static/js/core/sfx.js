@@ -104,6 +104,16 @@ const SOUNDS = {
   magic() { tone(400, { dur: 0.7, vol: 0.06, to: 1600, type: 'sine' }); [1760, 2093, 2637].forEach((f, i) => tone(f, { dur: 0.5, vol: 0.04, at: 0.15 + i * 0.08 })); noise({ dur: 0.6, vol: 0.03, type: 'highpass', freq: 5000, at: 0.1 }); },
   ping() { tone(1320, { dur: 0.6, vol: 0.12 }); tone(1320, { dur: 0.5, vol: 0.05, at: 0.18 }); tone(1320, { dur: 0.4, vol: 0.02, at: 0.36 }); },
   pin() { tone(180, { dur: 0.1, vol: 0.2, to: 90 }); noise({ dur: 0.05, vol: 0.12, type: 'bandpass', freq: 2200, q: 2 }); },
+  step() { // miniatura que se apoya en la mesa
+    tone(170, { dur: 0.09, vol: 0.16, type: 'sine', to: 95 });
+    noise({ dur: 0.05, vol: 0.07, type: 'bandpass', freq: 1900, q: 3 });
+  },
+  brush() { noise({ dur: 0.14, vol: 0.035, type: 'bandpass', freq: 1300, q: 0.7 }); },
+  tick() { tone(2300, { dur: 0.04, vol: 0.035, type: 'triangle' }); },
+  blast() { // área de efecto
+    noise({ dur: 0.9, vol: 0.12, type: 'lowpass', freq: 200, to: 2600, q: 0.8 });
+    tone(110, { dur: 0.7, vol: 0.12, type: 'sawtooth', to: 50, lp: 600 });
+  },
   unroll() { noise({ dur: 0.7, vol: 0.12, type: 'lowpass', freq: 300, to: 3000, q: 0.6 }); noise({ dur: 0.25, vol: 0.06, type: 'highpass', freq: 3000, at: 0.5 }); },
   thunder() { // trueno lejano
     noise({ dur: 2.8, vol: 0.32, type: 'lowpass', freq: 220, to: 60, q: 0.7, attack: 0.08 });

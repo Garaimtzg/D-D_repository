@@ -1,8 +1,8 @@
 // Reglas del combate compartidas por la Mesa y la sección Combate: turnos, daño, curación,
 // salvaciones de muerte y sincronización de los PG de los jugadores con su ficha.
 import { api } from './api.js';
-import { toast, toastError } from './dom.js';
-import { applyDamage, applyHealing, fmtMod } from './dnd.js';
+import { h, toast, toastError, modal, field, selectEl, bind, token } from './dom.js';
+import { applyDamage, applyHealing, fmtMod, ABILITY_KEYS, ABILITY_SHORT } from './dnd.js';
 import { roll } from './dice.js';
 import { sfx } from './sfx.js';
 
@@ -35,7 +35,7 @@ export function damage(c, x, amount, source = '') {
   sfx.hit();
   log(c, `${x.name} recibe ${amount} de daño${source ? ` (${source})` : ''}. PG ${x.hp}/${x.maxHp}.`);
   if (x.concentration && amount > 0) {
-    const dc = Math.max(10, Math.floor(amount / 2));
+    const dc = Math.min(30, Math.max(10, Math.floor(amount / 2))); // 2024: máximo CD 30
     toast(`${x.name}: salvación de Constitución CD ${dc} para mantener la concentración.`, { ms: 7000, iconName: 'aura' });
     log(c, `${x.name} debe superar CON CD ${dc} o perder la concentración.`);
   }
@@ -77,6 +77,7 @@ export function step(c, dir) {
     const x = current(c);
     if (x.type === 'jugador' || x.hp > 0) break;
   }
+  if (c.board) c.board.moved = {}; // el movimiento se cuenta por turno
   const x = current(c);
   if (c.round > round) sfx.gong(); else sfx.turn();
   if (dir > 0) {
@@ -128,6 +129,7 @@ export function xpReward(c, crXp) {
 
 export function resetCombat(c) {
   c.status = 'planned'; c.round = 0; c.turn = 0; c.log = [];
+  if (c.board) c.board.moved = {};
   c.combatants.forEach((x) => {
     Object.assign(x, { init: null, hp: x.maxHp, tempHp: 0, conditions: [], concentration: false, deathSaves: { ok: 0, ko: 0 } });
   });
@@ -137,5 +139,40 @@ export function resetCombat(c) {
 export function healthWord(x) {
   if (x.hp <= 0) return 'Caído';
   const r = x.hp / Math.max(1, x.maxHp);
-  return r >= 1 ? 'Ileso' : r > 0.5 ? 'Herido' : r > 0.25 ? 'Malherido' : 'A las puertas';
+  return r >= 1 ? 'Ileso' : r > 0.5 ? 'Herido' : r > 0.25 ? 'Maltrecho' : 'A las puertas';
+}
+
+// Daño en área con salvación: se tira la salvación de cada objetivo con su bonificador
+// (y su cansancio) y se aplica el daño, la mitad si salva. Devuelve true si se aplicó.
+export async function areaDialog(c, { chars = [], preselect = null, title = 'Daño en área' } = {}) {
+  const opts = { ability: 'des', dc: 13, damage: '8d6', half: true };
+  const targets = new Set(preselect || c.combatants.filter((x) => x.type !== 'jugador' && x.hp > 0).map((x) => x.cid));
+  const body = h('div', { class: 'stack' },
+    h('div', { class: 'row' },
+      field('Salvación', selectEl(ABILITY_KEYS.map((k) => [k, ABILITY_SHORT[k]]), opts.ability, (v) => { opts.ability = v; })),
+      field('CD', bind(opts, 'dc', { type: 'number', class: 'inline' })),
+      field('Daño (dados o número)', bind(opts, 'damage'), 'grow'),
+      h('label', { class: 'check' }, bind(opts, 'half', { type: 'checkbox' }), 'Mitad si salva')),
+    h('div', { class: 'eyebrow' }, 'Objetivos'),
+    h('div', { class: 'targets' }, c.combatants.map((x) => h('label', { class: `target ${x.type}` },
+      h('input', { type: 'checkbox', checked: targets.has(x.cid), onchange: (e) => (e.target.checked ? targets.add(x.cid) : targets.delete(x.cid)) }),
+      token(x, { size: 30 }), h('span', {}, x.name)))),
+    h('p', { class: 'tiny muted' }, 'Se tira la salvación de cada objetivo con su bonificador y se aplica el daño.'));
+  if (!(await modal(title, body, [{ label: 'Cancelar', value: false }, { label: 'Lanzar', value: true, class: 'primary', icon: 'flame' }], { iconName: 'flame' }))) return false;
+
+  const dmgRoll = /d/i.test(opts.damage) ? await roll(opts.damage, { label: 'Daño en área' }) : { total: Number(opts.damage) || 0 };
+  if (!dmgRoll) return false;
+  const lines = [];
+  for (const x of c.combatants.filter((y) => targets.has(y.cid))) {
+    const r = await roll(`1d20${fmtMod((x.saves?.[opts.ability] || 0) - 2 * (x.exhaustion || 0))}`, { label: `${x.name}: salvación de ${ABILITY_SHORT[opts.ability]}`, who: x.name, quiet: true, secret: x.hidden });
+    if (!r) continue;
+    const saved = r.total >= opts.dc;
+    const dmg = saved ? (opts.half ? Math.floor(dmgRoll.total / 2) : 0) : dmgRoll.total;
+    if (dmg) { damage(c, x, dmg, 'área'); syncCharacter(chars, x); }
+    lines.push(h('li', { class: saved ? 'saved' : 'failed' }, token(x, { size: 30 }), h('b', { class: 'grow' }, x.name),
+      h('span', { class: 'chip' }, `🎲 ${r.total}`), h('span', { class: `chip ${saved ? 'good' : 'bad'}` }, saved ? 'Salva' : 'Falla'), h('b', { class: 'dmg' }, `−${dmg}`)));
+  }
+  log(c, `Área de ${ABILITY_SHORT[opts.ability]} CD ${opts.dc}: ${dmgRoll.total} de daño.`);
+  modal('Resultado del área', h('ul', { class: 'area-result' }, lines), undefined, { iconName: 'flame' });
+  return true;
 }

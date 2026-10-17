@@ -4,7 +4,7 @@ import { sfx } from '../core/sfx.js';
 import { api, debounced } from '../core/api.js';
 import { h, clear, icon, bind, field, selectEl, segmented, searchBox, confirmDialog, toast, toastError, fmtDate } from '../core/dom.js';
 
-export default { id: 'notas', title: 'Notas', icon: 'notas', hint: 'Diario de campaña y misiones · tecla 6', mount };
+export default { id: 'notas', title: 'Notas', icon: 'notas', hint: 'Diario de campaña y misiones · tecla 7', mount };
 
 const QUEST_STATUS = [['activa', 'Activas', 'flame'], ['pendiente', 'Rumores', 'compass'], ['completada', 'Completadas', 'check'], ['fallida', 'Fallidas', 'skull']];
 

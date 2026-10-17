@@ -22,6 +22,10 @@ NAMES = {
                  ["", "", "del Abismo", "Sinnombre"]),
     "gnomo": (["Alston", "Bimpnottin", "Boddynock", "Carlin", "Ellyjobell", "Fonkin", "Nissa", "Orryn", "Zook"],
               ["Beren", "Daergel", "Garrick", "Nackle", "Timbers", "Turen"]),
+    "aasimar": (["Aurelia", "Caelum", "Elarion", "Ilara", "Lumen", "Seraphel", "Solenne", "Tiriel", "Valeria", "Zariel"],
+                ["del Alba", "Luzclara", "Albaestrella", "Corona de Plata", "", ""]),
+    "goliat": (["Aukan", "Eglath", "Gae-Al", "Gauthak", "Ilikan", "Keothi", "Kuori", "Lo-Kag", "Manneo", "Thalai", "Vaunea"],
+               ["Pisapiedras", "Cumbrealta", "Rompetormentas", "Hijo del Trueno", "Escalanubes"]),
 }
 
 OCCUPATIONS = ["tabernera", "herrero", "guardia del pueblo", "sacerdotisa", "mercader ambulante", "cazador",
@@ -65,7 +69,7 @@ HOOKS = [
 WEATHER = {
     "templado": ["Despejado y templado", "Nubes altas, brisa suave", "Llovizna intermitente",
                  "Niebla espesa por la mañana", "Tormenta con aparato eléctrico", "Viento fuerte del norte"],
-    "frio": ["Helada al amanecer", "Nevada ligera", "Ventisca (visibilidad 30 pies)", "Cielo gris y frío seco",
+    "frio": ["Helada al amanecer", "Nevada ligera", "Ventisca (visibilidad 9 m)", "Cielo gris y frío seco",
              "Granizo breve", "Frío extremo: CON CD 10 cada hora sin abrigo"],
     "calido": ["Sol abrasador", "Calor bochornoso", "Tormenta de verano repentina", "Viento caliente y polvo",
                "Calor extremo: CON CD 5 (+1/h) sin agua", "Noche templada y estrellada"],
@@ -77,7 +81,7 @@ TRINKETS = ["un dado que siempre saca 3", "un ojo de cristal que parpadea", "una
             "una carta de amor sin destinatario", "una campanilla que no suena", "una pluma que escribe sola"]
 
 LOOT_ITEMS = {
-    1: ["Poción de curación (2d4+2)", "Pergamino de Proyectil mágico", "Daga de plata", "Cuerda de seda (50 pies)",
+    1: ["Poción de curación (2d4+2)", "Pergamino de Proyectil mágico", "Daga de plata", "Cuerda de seda (15 m)",
         "Antorcha eterna", "Bolsa de canicas", "Kit de sanador", "Gema de 10 po", "Capa de viaje élfica"],
     2: ["Poción de curación mayor (4d4+4)", "Arma +1", "Botas élficas", "Bolsa de contención", "Gema de 100 po",
         "Anillo de salto", "Varita de proyectiles mágicos", "Pergamino de Bola de fuego"],
@@ -86,8 +90,9 @@ LOOT_ITEMS = {
     4: ["Poción de curación suprema (10d4+20)", "Arma +3", "Armadura +2", "Vara de absorción",
         "Gema de 5000 po", "Manual de salud corporal"],
 }
-LOOT_COINS = {1: ("5d6", "pc", "4d6", "pa", "2d6", "po"), 2: ("4d6", "pa", "6d6", "po", "1d6", "pp"),
-              3: ("4d6", "po", "8d6", "po", "3d6", "pp"), 4: ("12d6", "po", "8d6", "pp", "4d6", "pp")}
+# monedas de 2024: pc cobre, pp plata, po oro, ppt platino
+LOOT_COINS = {1: ("5d6", "pc", "4d6", "pp", "2d6", "po"), 2: ("4d6", "pp", "6d6", "po", "1d6", "ppt"),
+              3: ("4d6", "po", "8d6", "po", "3d6", "ppt"), 4: ("12d6", "po", "8d6", "ppt", "4d6", "ppt")}
 
 
 def _dice(rng, spec):
@@ -119,7 +124,7 @@ def tavern(rng=None):
     title = f"El {noun} {masc}" if gender == "m" else f"La {noun} {fem}"
     owner = name("", rng)["title"]
     text = (f"Lo regenta {owner}. Plato del día: {rng.choice(TAVERN_DISH)}. "
-            f"Habitación: {rng.choice([2, 5, 8])} pp la noche. Rumor: {rng.choice(HOOKS)}")
+            f"Habitación: {rng.choice([2, 5, 8])} pp (plata) la noche. Rumor: {rng.choice(HOOKS)}")
     return {"title": title, "text": text}
 
 

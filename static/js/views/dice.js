@@ -5,7 +5,7 @@ import { h, clear, icon, dieIcon, segmented, selectEl, toast, toastError, fmtTim
 import { roll, onRoll, describe, setLocalTray } from '../core/dice.js';
 import { TYPE_LABEL } from '../core/dnd.js';
 
-export default { id: 'dados', title: 'Dados', icon: 'dados', hint: 'Bandeja de dados e historial · tecla 5', mount };
+export default { id: 'dados', title: 'Dados', icon: 'dados', hint: 'Bandeja de dados e historial · tecla 6', mount };
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 const DEFAULT_FAVS = [

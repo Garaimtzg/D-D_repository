@@ -18,7 +18,8 @@
 .combat-actions { gap: 10px; }
 .difficulty { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
 .diff-word { font: 700 1.1rem var(--font-display); text-transform: capitalize; }
-.d-trivial, .d-facil { color: #7fe0a8; } .d-media { color: #f0cf6a; } .d-dificil { color: #ff9f5a; } .d-mortal { color: #ff6b5e; text-shadow: 0 0 14px rgba(224, 82, 74, .6); }
+.d-trivial { color: #9fb7a8; } .d-bajo { color: #7fe0a8; } .d-moderado { color: #f0cf6a; } .d-alto { color: #ff9f5a; } .d-mortal { color: #ff6b5e; text-shadow: 0 0 14px rgba(224, 82, 74, .6); }
+.bad-text { color: #ff8b80; font-weight: 700; }
 .meter-labels { display: grid; grid-template-columns: repeat(4, 1fr); font: 800 .62rem var(--font); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); text-align: center; }
 
 .add-panel > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; color: var(--gold-2); }

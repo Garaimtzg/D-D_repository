@@ -9,7 +9,9 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from server import dice, generators, rules
+from collections import deque
+
+from server import dice, generators, rules, scenes
 from server.handler import make_server
 from server.storage import JsonStore
 
@@ -55,19 +57,56 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(rules.prof_bonus_cr("10"), 4)
         self.assertEqual(rules.level_for_xp(2700), 4)
 
-    def test_encounter_difficulty(self):
-        # 4 personajes de nivel 1 contra 4 goblins: 200 PX x2 = 400 -> mortal (umbral 400)
+    def test_encounter_difficulty_2024_budget(self):
+        # 4 personajes de nivel 1 (presupuesto bajo 200, moderado 300, alto 400) contra 4 goblins (50 PX cada uno)
         r = rules.encounter([1, 1, 1, 1], ["1/4"] * 4)
-        self.assertEqual(r["adjusted_xp"], 400)
-        self.assertEqual(r["difficulty"], "mortal")
-        self.assertEqual(r["xp_per_player"], 50)
-
-    def test_small_party_raises_multiplier(self):
-        self.assertEqual(rules.encounter([3, 3], ["1"])["multiplier"], 1.5)
+        self.assertEqual(r["xp"], 200)
+        self.assertEqual(r["difficulty"], "bajo")
+        self.assertEqual(r["budget"], {"bajo": 200, "moderado": 300, "alto": 400})
+        self.assertEqual(rules.encounter([1, 1, 1, 1], ["1/2"] * 3)["difficulty"], "moderado")
+        self.assertTrue(rules.encounter([1], ["2"])["over_high"])
 
     def test_unknown_cr(self):
         with self.assertRaises(ValueError):
             rules.encounter([1], ["99"])
+
+
+class Phb2024Tests(unittest.TestCase):
+    def setUp(self):
+        from server import phb2024
+        self.d = phb2024.data()
+        self.skills = {k["key"] for k in self.d["skills"]}
+
+    def test_classes(self):
+        classes = self.d["classes"]
+        self.assertEqual(len(classes), 12)
+        for c in classes:
+            self.assertIn(c["hit_die"], (6, 8, 10, 12), c["name"])
+            self.assertEqual(len(c["subclasses"]), 4, c["name"])
+            self.assertTrue(c["features"][1], c["name"])
+            self.assertEqual(len(c["saves"]), 2)
+            self.assertTrue(set(c["skills"]["from"]) <= self.skills, c["name"])
+            self.assertEqual(sorted(c["standard"].values(), reverse=True), self.d["standard_array"], c["name"])
+            for col in c.get("columns", {}).values():
+                self.assertEqual(len(col), 20, c["name"])
+            if c["caster"] in ("full", "half", "pact"):
+                self.assertEqual(len(c["prepared"]), 20, c["name"])
+
+    def test_origins(self):
+        feats = {f["name"] for f in self.d["feats"]}
+        self.assertEqual(len(self.d["species"]), 10)
+        self.assertEqual(len(self.d["backgrounds"]), 16)
+        for b in self.d["backgrounds"]:
+            self.assertIn(b["feat"].split(" (")[0], feats, b["name"])
+            self.assertTrue(set(b["skills"]) <= self.skills, b["name"])
+            self.assertEqual(len(b["abilities"]), 3)
+
+    def test_equipment(self):
+        masteries = {m["name"] for m in self.d["masteries"]}
+        for w in self.d["weapons"]:
+            self.assertIn(w["mastery"], masteries, w["name"])
+        self.assertEqual(len(self.d["slots"]["full"]), 20)
+        self.assertEqual([c["key"] for c in self.d["coins"]], ["pc", "pp", "pe", "po", "ppt"])
 
 
 class GeneratorTests(unittest.TestCase):
@@ -85,6 +124,70 @@ class GeneratorTests(unittest.TestCase):
             self.assertEqual(article, "El" if gender == "m" else "La", title)
             if gender == "f":
                 self.assertFalse(title.endswith(("Dorado", "Borracho", "Tuerto", "Dormido")), title)
+
+
+class SceneTests(unittest.TestCase):
+    """Los escenarios prediseñados deben ser válidos y jugables."""
+
+    @staticmethod
+    def walkable_cells(sc):
+        cols, rows, t = sc["cols"], sc["rows"], sc["tiles"]
+        blocked = {(p["c"] + i, p["r"] + j) for p in sc["props"] if p["k"] in scenes.BLOCKING
+                   for i in range(p.get("w", 1)) for j in range(p.get("h", 1))}
+
+        def ok(x, y):
+            if not (0 <= x < cols and 0 <= y < rows):
+                return False
+            code = t[y * cols + x]
+            return scenes.TERRAIN_COST[code] is not None and code not in scenes.HAZARD and (x, y) not in blocked
+        return ok
+
+    def test_presets_are_valid(self):
+        ids = [sc["id"] for sc in scenes.PRESETS]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertGreaterEqual(len(ids), 8)
+        for sc in scenes.PRESETS:
+            with self.subTest(sc["id"]):
+                self.assertEqual(len(sc["tiles"]), sc["cols"] * sc["rows"])
+                self.assertLessEqual(set(sc["tiles"]), scenes.TERRAIN_CODES)
+                self.assertIn(sc["light"], [k for k, _ in scenes.LIGHTS])
+                for p in sc["props"]:
+                    self.assertIn(p["k"], scenes.PROP_CODES)
+                    self.assertTrue(0 <= p["c"] and p["c"] + p.get("w", 1) <= sc["cols"])
+                    self.assertTrue(0 <= p["r"] and p["r"] + p.get("h", 1) <= sc["rows"])
+                self.assertGreaterEqual(len(sc["spawns"]["party"]), 4)
+                self.assertGreaterEqual(len(sc["spawns"]["enemies"]), 3)
+
+    def test_party_can_reach_the_enemies(self):
+        for sc in scenes.PRESETS:
+            with self.subTest(sc["id"]):
+                ok = self.walkable_cells(sc)
+                for x, y in sc["spawns"]["party"] + sc["spawns"]["enemies"]:
+                    self.assertTrue(ok(x, y), (x, y))
+                start = tuple(sc["spawns"]["party"][0])
+                seen, queue = {start}, deque([start])
+                while queue:
+                    x, y = queue.popleft()
+                    for dx in (-1, 0, 1):
+                        for dy in (-1, 0, 1):
+                            n = (x + dx, y + dy)
+                            if n in seen or not ok(*n) or (dx and dy and not ok(x + dx, y) and not ok(x, y + dy)):
+                                continue
+                            seen.add(n)
+                            queue.append(n)
+                for e in sc["spawns"]["enemies"]:
+                    self.assertIn(tuple(e), seen)
+
+    def test_presets_are_deterministic(self):
+        self.assertEqual(scenes._bosque(), scenes._bosque())
+        self.assertEqual(scenes._cueva(), scenes._cueva())
+
+    def test_catalog(self):
+        cat = scenes.catalog()
+        self.assertEqual(cat["cell_m"], 1.5)
+        codes = {t["code"] for t in cat["terrain"]}
+        self.assertTrue({".", ",", "#", "~", "v", "_"} <= codes)
+        self.assertTrue(any(p["light"] for p in cat["props"]))
 
 
 class MobilePageTests(unittest.TestCase):
@@ -185,7 +288,7 @@ class ApiTests(unittest.TestCase):
     def test_encounter_endpoint(self):
         status, r = self.json_call("POST", "/api/encounter", {"levels": [2, 2, 2], "crs": ["1/2", "1/2"]})
         self.assertEqual(status, 200)
-        self.assertEqual(r["adjusted_xp"], 300)
+        self.assertEqual((r["xp"], r["difficulty"]), (200, "trivial"))
 
     def test_backup_roundtrip(self):
         _, ch = self.json_call("POST", "/api/characters", {"name": "Copia", "type": "pnj"})
@@ -208,6 +311,15 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 400)
         status, _ = self.json_call("POST", "/api/backup", raw=b"no soy un zip")
         self.assertEqual(status, 400)
+
+    def test_scene_catalog_and_custom_scenes(self):
+        status, cat = self.json_call("GET", "/api/scene-catalog")
+        self.assertEqual(status, 200)
+        self.assertTrue(cat["presets"])
+        status, sc = self.json_call("POST", "/api/scenes", {"name": "Sala", "cols": 8, "rows": 6, "tiles": "." * 48, "props": []})
+        self.assertEqual(status, 201)
+        _, listed = self.json_call("GET", "/api/scenes")
+        self.assertEqual([x["name"] for x in listed], ["Sala"])
 
     def test_removed_network_routes(self):
         self.assertEqual(self.call("GET", "/api/player")[0], 404)

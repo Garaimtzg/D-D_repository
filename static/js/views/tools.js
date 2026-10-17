@@ -6,7 +6,7 @@ import { CRS, newCharacter } from '../core/dnd.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
 
-export default { id: 'herramientas', title: 'Herramientas', icon: 'herramientas', hint: 'Generadores, reloj, temporizadores y copia de la campaña · tecla 7', mount };
+export default { id: 'herramientas', title: 'Herramientas', icon: 'herramientas', hint: 'Generadores, reloj, temporizadores y copia de la campaña · tecla 8', mount };
 
 const tile = (title, iconName, cls, ...content) => h('section', { class: `panel tool ${cls || ''}` },
   h('div', { class: 'panel-head' }, h('h3', {}, h('span', { class: 'tool-ic' }, icon(iconName, 18)), title)), ...content);
@@ -71,7 +71,8 @@ function generatorsTile() {
 
   return tile('Generadores', 'sparkle', 'wide',
     h('div', { class: 'row' },
-      field('Raza', selectEl([['', 'Al azar'], 'humano', 'elfo', 'enano', 'mediano', 'orco', 'dracónido', 'tiefling', 'gnomo'], '', (v) => { p.race = v; })),
+      field('Especie', selectEl([['', 'Al azar'], ['aasimar', 'Aasimar'], ['dracónido', 'Dracónido'], ['elfo', 'Elfo'], ['enano', 'Enano'], ['gnomo', 'Gnomo'],
+        ['goliat', 'Goliat'], ['humano', 'Humano'], ['mediano', 'Mediano'], ['orco', 'Orco'], ['tiefling', 'Tiefling']], '', (v) => { p.race = v; })),
       field('Nivel del botín', selectEl([[1, '1–4'], [2, '5–10'], [3, '11–16'], [4, '17–20']], 1, (v) => { p.tier = Number(v); })),
       field('Clima', selectEl([['templado', 'Templado'], ['frio', 'Frío'], ['calido', 'Cálido']], 'templado', (v) => { p.climate = v; }))),
     h('div', { class: 'gen-buttons' }, kinds.map(([k, l, ic]) => h('button', { class: 'gen-btn', type: 'button', onclick: () => gen(k, ic) }, icon(ic, 22), l))),
@@ -87,9 +88,10 @@ function encounterTile() {
     const levels = s.levels.split(/[\s,;]+/).map(Number).filter((n) => n >= 1 && n <= 20);
     try {
       const r = await api.post('/api/encounter', { levels, crs: s.crs });
-      clear(result, h('div', { class: `big-diff d-${r.difficulty.normalize('NFD').replace(/\p{M}/gu, '')}` }, r.difficulty),
-        h('div', { class: 'small' }, `${r.adjusted_xp} PX ajustados (×${r.multiplier}) · ${r.base_xp} PX reales · ${r.xp_per_player} por jugador`),
-        h('div', { class: 'tiny muted' }, `Fácil ${r.thresholds['fácil']} · media ${r.thresholds.media} · difícil ${r.thresholds['difícil']} · mortal ${r.thresholds.mortal}`));
+      const fmt = (n) => n.toLocaleString('es-ES');
+      clear(result, h('div', { class: `big-diff d-${r.over_high ? 'mortal' : r.difficulty}` }, r.over_high ? 'Más que alto' : r.difficulty),
+        h('div', { class: 'small' }, `${fmt(r.xp)} PX de monstruos · ${fmt(r.xp_per_player)} por jugador`),
+        h('div', { class: 'tiny muted' }, `Presupuesto: bajo ${fmt(r.budget.bajo)} · moderado ${fmt(r.budget.moderado)} · alto ${fmt(r.budget.alto)} (2024, sin multiplicadores)`));
     } catch (e) { clear(result, e.message); }
   }
   const drawList = () => clear(list, s.crs.map((cr, i) => h('span', { class: 'chip enemigo' }, `VD ${cr}`,
@@ -223,23 +225,23 @@ function tablesTile(settings) {
 
 // ---------------------------------------------------------------- monedas
 function coinsTile() {
-  const RATES = { pc: 1, pa: 10, pe: 50, po: 100, pp: 1000 };
-  const NAMES = { pc: 'cobre', pa: 'plata', pe: 'electro', po: 'oro', pp: 'platino' };
-  const COLORS = { pc: '#c27a45', pa: '#c9d1d9', pe: '#d8cf8c', po: '#f0c24a', pp: '#e6eef5' };
-  const s = { pc: 0, pa: 0, pe: 0, po: 0, pp: 0 };
+  const RATES = { pc: 1, pp: 10, pe: 50, po: 100, ppt: 1000 };
+  const NAMES = { pc: 'cobre', pp: 'plata', pe: 'electro', po: 'oro', ppt: 'platino' };
+  const COLORS = { pc: '#c27a45', pp: '#c9d1d9', pe: '#d8cf8c', po: '#f0c24a', ppt: '#e6eef5' };
+  const s = { pc: 0, pp: 0, pe: 0, po: 0, ppt: 0 };
   const out = h('div', { class: 'small' });
   const calc = () => {
     const total = Object.entries(s).reduce((t, [k, v]) => t + (Number(v) || 0) * RATES[k], 0);
     let rest = total;
     const parts = [];
-    for (const k of ['pp', 'po', 'pa', 'pc']) { const n = Math.floor(rest / RATES[k]); if (n) parts.push(`${n} ${NAMES[k]}`); rest -= n * RATES[k]; }
+    for (const k of ['ppt', 'po', 'pp', 'pc']) { const n = Math.floor(rest / RATES[k]); if (n) parts.push(`${n} ${NAMES[k]}`); rest -= n * RATES[k]; }
     clear(out, h('div', { class: 'coin-total' }, `${(total / 100).toLocaleString('es-ES')} po`), h('div', { class: 'muted' }, parts.join(', ') || 'Nada'));
   };
   calc();
   return tile('Conversor de monedas', 'coins', '',
     h('div', { class: 'coins dark' }, Object.keys(RATES).map((k) => h('label', { class: 'coin' },
       h('span', { class: 'coin-face', style: { '--coin': COLORS[k] } }, k.toUpperCase()), bind(s, k, { type: 'number', min: 0, onChange: calc, 'aria-label': NAMES[k] })))),
-    out, h('p', { class: 'tiny muted' }, '1 pp = 10 po · 1 po = 2 pe = 10 pa · 1 pa = 10 pc'));
+    out, h('p', { class: 'tiny muted' }, '1 ppt = 10 po · 1 po = 2 pe = 10 pp · 1 pp = 10 pc (MdJ 2024)'));
 }
 
 function lootTile() {
@@ -257,17 +259,21 @@ function lootTile() {
 }
 
 function travelTile() {
-  const s = { miles: 24, pace: 24 };
+  const PACES = { 45: ['Rápido', 6, 'desventaja en Percepción, Supervivencia y Sigilo'], 36: ['Normal', 4.5, 'desventaja en Sigilo'], 27: ['Lento', 3, 'ventaja en Percepción y Supervivencia'] };
+  const s = { km: 36, pace: 36 };
   const out = h('div');
   const calc = () => {
-    const days = (Number(s.miles) || 0) / Number(s.pace);
-    clear(out, h('div', { class: 'coin-total' }, `${days.toFixed(1)} días`), h('div', { class: 'small muted' }, `${Math.ceil(days * 8)} horas de marcha`));
+    const [, kmh, effect] = PACES[s.pace];
+    const hours = (Number(s.km) || 0) / kmh;
+    const days = hours / 8;
+    clear(out, h('div', { class: 'coin-total' }, `${days.toFixed(1).replace('.', ',')} días`),
+      h('div', { class: 'small muted' }, `${Math.ceil(hours)} horas de marcha a ${String(kmh).replace('.', ',')} km/h · ${effect}`));
   };
   calc();
   return tile('Viajes', 'compass', '',
-    h('div', { class: 'row nowrap' }, field('Millas', bind(s, 'miles', { type: 'number', min: 0, onChange: calc })),
-      field('Ritmo', selectEl([[30, 'Rápido'], [24, 'Normal'], [18, 'Lento']], 24, (v) => { s.pace = Number(v); calc(); }))),
-    out, h('p', { class: 'tiny muted' }, 'Rápido (30 millas/día): −5 a Percepción pasiva. Lento (18): se puede avanzar con sigilo.'));
+    h('div', { class: 'row nowrap' }, field('Kilómetros', bind(s, 'km', { type: 'number', min: 0, onChange: calc })),
+      field('Ritmo', selectEl(Object.entries(PACES).map(([d, [l]]) => [d, `${l} (${d} km/día)`]), 36, (v) => { s.pace = Number(v); calc(); }))),
+    out, h('p', { class: 'tiny muted' }, 'Ritmos de viaje del Manual del Jugador 2024: 8 horas de marcha al día.'));
 }
 
 // ---------------------------------------------------------- dados en el móvil
