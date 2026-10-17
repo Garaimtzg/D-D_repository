@@ -190,6 +190,7 @@ body.player-mode .mesa-side { top: 14px; max-height: calc(100vh - 28px); }
 .board-weather { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 .weather-select { width: auto !important; padding: 5px 9px; font-size: .85rem; }
 .ping-hint { margin-left: 4px; }
+@media (max-width: 1500px) { .ping-hint { display: none; } .mesa-bar .map-select { width: 190px; } }
 /* onda de «mira aquí» */
 .ping { position: absolute; width: 0; height: 0; pointer-events: none; z-index: 7; }
 .ping i { position: absolute; left: calc(-30px / var(--zoom, 1)); top: calc(-30px / var(--zoom, 1)); width: calc(60px / var(--zoom, 1)); height: calc(60px / var(--zoom, 1)); border-radius: 50%; border: calc(3px / var(--zoom, 1)) solid #ffd96b; box-shadow: 0 0 calc(16px / var(--zoom, 1)) #ffd96b; animation: pingRing 1.3s ease-out forwards; }

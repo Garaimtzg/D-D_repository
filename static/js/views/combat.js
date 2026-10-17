@@ -25,7 +25,7 @@ async function mount(root, [selId]) {
 
   const side = h('aside', { class: 'panel sticky combat-side' });
   // huecos fijos: así el tablero no se vuelve a crear (ni sale de pantalla completa) al actualizar
-  const slot = () => h('div', { class: 'slot' });
+  const slot = () => h('div', { class: 'view-slot' });
   const slots = { head: slot(), add: slot(), tracker: slot(), log: slot() };
   const boardPanel = h('section', { class: 'panel board-card' });
   const main = h('section', { class: 'stack combat-main' }, slots.head, slots.add, boardPanel, slots.tracker, slots.log);

@@ -1,8 +1,9 @@
 # Mesa de D&D
 
-Una mesa de rol para jugar a Dungeons & Dragons (5e) **en un solo ordenador**, todos juntos:
-mapa con fichas que se arrastran, dados 3D que ruedan de verdad, combates con iniciativa,
-fichas de personaje, música, ambientes y efectos de sonido.
+Una mesa de rol para jugar a Dungeons & Dragons **en un solo ordenador**, todos juntos, con las reglas
+del **Manual del Jugador de 2024** (edición en español): combates sobre un tablero con cuadrícula y
+escenarios listos para usar, dados 3D que ruedan de verdad, iniciativa, fichas de personaje con creador
+paso a paso, música, ambientes y efectos de sonido.
 
 Servidor en Python (solo la librería estándar, no hay que instalar nada) e interfaz en HTML, CSS y JavaScript.
 Todo se guarda en local, en la carpeta `data/`.
@@ -18,10 +19,12 @@ Para cerrar la mesa, cierra la ventana negra de la consola.
 
 ## Cómo se juega
 
-- **Mesa** es la pantalla principal: el mapa sobre un tapete, las fichas de los personajes encima,
-  la iniciativa del combate en una cinta, el grupo con sus PG y la bandeja de dados.
+- **Mesa** es la pantalla principal: el mapa (o el tablero de combate con cuadrícula) sobre un tapete,
+  las fichas de los personajes encima, la iniciativa del combate en una cinta, el grupo con sus PG y la bandeja de dados.
+- En **Combate** prepara el encuentro y elige un **escenario**: las fichas se colocan solas en sus zonas
+  de inicio. Al empezar, la Mesa muestra ese tablero y se centra en quien tiene el turno.
 - Pulsa **Modo jugadores** para ponerla a pantalla completa sin secretos: se ocultan los PG exactos
-  de los enemigos, los enemigos ocultos y las tiradas secretas. Sal con `Esc`.
+  de los enemigos, los enemigos ocultos, las trampas del tablero y las tiradas secretas. Sal con `Esc`.
 - En la bandeja, elige **quién tira**: los dados toman el color de su ficha y aparecen sus ataques.
 - `Mayús + clic` sobre el mapa hace una onda para señalar un punto a toda la mesa.
 
@@ -35,20 +38,24 @@ Para cerrar la mesa, cierra la ventana negra de la consola.
 | `Intro` / `Mayús + Intro` en una casilla de PG | Daño / curación |
 | Doble clic en el mapa | Ajustar el mapa a la pantalla |
 | Clic derecho en una ficha del mapa | Quitarla |
+| `M` / `R` / `A` sobre el tablero | Mover fichas / regla / áreas de efecto |
+| `Esc` sobre el tablero | Quitar la regla, el área y la selección |
+| `Ctrl + Z` / `Ctrl + Y` en el editor de escenarios | Deshacer / rehacer |
 
 ## Qué incluye
 
 | Sección | Para qué sirve |
 | --- | --- |
 | **Mesa** | Mapa con zoom y fichas arrastrables, cinta de iniciativa con anuncio de turno, grupo, bandeja de dados, últimas tiradas, reloj del mundo, narración en pergamino y **clima** sobre el tablero (lluvia, tormenta con relámpagos, nieve, niebla, brasas) con su sonido. |
-| **Combate** | Encuentros con fichas, bestiario o participantes rápidos; medidor de dificultad, iniciativa, turnos y rondas, daño y curación con números flotantes, estados con duración, concentración, salvaciones de muerte, daño en área, enemigos ocultos y crónica. Al ganar, reparto de PX. |
-| **Personajes** | Jugadores, personajes de la historia y enemigos como cartas. La ficha imita una hoja en pergamino: características, salvaciones, habilidades, CA, PG, dados de golpe, ataques, conjuros con espacios, recursos, inventario con monedas, rasgos y notas. Todo se tira con un clic. |
+| **Combate** | Encuentros con fichas, bestiario o participantes rápidos; dificultad con el presupuesto de PX de 2024, iniciativa, turnos y rondas, daño y curación con números flotantes, estados con duración, concentración, salvaciones de muerte, daño en área, enemigos ocultos y crónica. Al ganar, reparto de PX. **Tablero con cuadrícula**: fichas por casillas (las criaturas grandes ocupan 2×2), alcance de movimiento con terreno difícil, metros movidos por turno, regla, áreas de efecto (esfera, cubo, cono, línea y emanación) que señalan a los afectados, y pantalla completa. |
+| **Escenarios** | 12 tableros prediseñados (taberna, bosque, cripta, cueva, puente, campamento, plaza, barco, templo, ciénaga, guarida del dragón y campo abierto), un editor para personalizarlos o crear los tuyos (terreno, 36 objetos, luz, zonas de inicio, imagen de fondo) y «usar en un combate». |
+| **Personajes** | Jugadores, personajes de la historia y enemigos como cartas. **Creador paso a paso** del Manual 2024 (clase, trasfondo, especie, características, detalles) y **subida de nivel guiada**. La ficha imita una hoja en pergamino: características, salvaciones, habilidades, CA automática con armadura y escudo, PG, dados de golpe, cansancio, inspiración heroica, ataques con armas del manual y sus maestrías, conjuros con espacios por clase, recursos, inventario con monedas (pc, pp, pe, po, ppt), rasgos y dotes. Todo se tira con un clic. |
 | **Mapas** | Galería de imágenes para poner sobre la mesa, con notas privadas. |
 | **Dados** | Bandeja con dados 3D, constructor de tiradas, favoritos, generador de características, historial y «la suerte del d20». |
 | **Notas** | Diario de campaña con aspecto de libro y tablón de misiones con notas que se arrastran entre columnas. |
 | **Herramientas** | Copia de la campaña (.zip), generadores (PNJ, tabernas, botín, ganchos, clima…), calculadora de encuentros, reloj, temporizadores, narración, tablas aleatorias propias, monedas, botín, viajes y dados para el móvil. |
 | **Música** | Tus canciones por escenas (taberna, combate, jefe…), disco que gira y visualizador; ambientes sintetizados sin ficheros: lluvia, viento, hoguera, cueva y taberna. |
-| **Reglas** | Estados, acciones, reglas rápidas, CD, agotamiento y tablas de PX con buscador. |
+| **Reglas** | Manual del Jugador 2024 con buscador: estados, acciones, cuadrícula y áreas, clases, especies, trasfondos, dotes, armas con maestrías, armaduras, monedas y tablas de PX. Resúmenes propios con la página del manual. |
 
 ### Sonido
 
@@ -82,6 +89,8 @@ Las fuentes decorativas se cargan de Google Fonts; sin internet se usan las del 
 app.py                     arranque
 Iniciar Mesa DnD.bat       arranque con doble clic en Windows (iniciar.sh en macOS / Linux)
 server/                    servidor HTTP, API JSON, almacén, copias .zip, dados, reglas, generadores, bestiario
+  phb2024.py               datos del Manual del Jugador 2024 (clases, especies, trasfondos, dotes, equipo…)
+  scenes.py                terrenos, objetos y escenarios prediseñados del tablero
 static/
   index.html               la aplicación
   dados-movil.html         página de dados para el móvil (generada, no editar)
@@ -90,6 +99,8 @@ static/
   js/lib/dice3d.js         motor de dados 3D (también va dentro de dados-movil.html)
   js/lib/dicenotation.js   intérprete de tiradas para el móvil
   js/core/                 api, dom, reglas, dados, combate, sonido, música, ambientes, clima, atmósfera
+  js/core/battlemap.js     tablero con cuadrícula: dibujo, fichas, regla, áreas, movimiento y edición
+  js/core/board.js         une un combate con su tablero (posiciones, colocación automática)
   js/views/                una sección por fichero
 movil/                     fuentes de la página del móvil
 tools/build_movil.py       genera static/dados-movil.html

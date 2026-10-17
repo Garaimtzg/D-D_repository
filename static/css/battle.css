@@ -145,7 +145,7 @@
 }
 
 /* huecos fijos de la vista de combate y detalles del tablero */
-.slot { display: contents; }
+.view-slot { display: contents; }
 .board-card[hidden] { display: none; }
 .board-turn { gap: 8px; padding: 4px 10px 4px 4px; border-radius: 999px; background: rgba(226, 180, 86, .08); border: 1px solid rgba(226, 180, 86, .3); }
 .board-turn .round-medal { width: 40px; height: 40px; }

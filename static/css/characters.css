@@ -2,6 +2,7 @@
    Personajes: galería de cartas y hoja de personaje en pergamino
    ===================================================================== */
 .gallery-head { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.gallery-head .grow { flex: 1 1 220px; min-width: 200px; }
 .party-actions { padding-top: 12px; border-top: 1px solid var(--line); }
 
 .char-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
@@ -301,7 +302,7 @@ input.mini { width: 54px; padding: 4px; }
 .insp-wrap .inspiration { flex: 1; padding: 6px; }
 .mini-link { all: unset; cursor: pointer; margin-left: 4px; color: #2f5d8a; font-size: .8rem; }
 .mini-link:hover { color: #8a1f14; }
-.bad-text { color: #a3442a; font-weight: 700; }
+.parchment .bad-text { color: #a3442a; font-weight: 700; }
 .mastery-box { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 250, 235, .3); border: 1px solid rgba(110, 75, 30, .25); }
 .parchment .chip { color: #4a2c14; border-color: rgba(110, 75, 30, .4); background: rgba(255, 250, 235, .5); }
 .chip.mastery b { color: #5a1e12; }
@@ -319,3 +320,5 @@ input.mini { width: 54px; padding: 4px; }
 .lu-to { color: #2a1906; background: radial-gradient(circle at 35% 30%, #fff3c9, #e2b456 55%, #8a5d1d); border-color: var(--gold); box-shadow: 0 0 24px rgba(226, 180, 86, .5); animation: pop .5s var(--ease); }
 .lu-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 @media (max-width: 1250px) { .sheet-row4 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .sheet-row4 > :first-child { grid-column: 1 / -1; } }
+.level-up .big-num { color: var(--gold-2); text-shadow: 0 0 14px rgba(226, 180, 86, .35); }
+.parchment input[type="checkbox"], .parchment input[type="radio"] { color-scheme: light; }

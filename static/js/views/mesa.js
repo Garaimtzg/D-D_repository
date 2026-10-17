@@ -203,18 +203,18 @@ async function mount(root) {
       oninput: (e) => { if (!state.map) return; state.map.tokenSize = Number(e.target.value); renderTokens(); saveMap(state.map); } });
     clear(barEl,
       h('div', { class: 'row dm-only' },
-        icon('mapas'), mapSel,
-        h('button', { class: 'btn sm', type: 'button', onclick: uploadMap, 'data-tip': 'Sube una imagen y ponla sobre la mesa' }, icon('upload'), 'Subir mapa'),
-        state.map && h('label', { class: 'row small muted size-ctl', 'data-tip': 'Tamaño de las fichas en este mapa' }, icon('target', 16), sizeInput),
+        !inBattle() && [icon('mapas'), mapSel,
+          h('button', { class: 'btn sm', type: 'button', onclick: uploadMap, 'data-tip': 'Sube una imagen y ponla sobre la mesa' }, icon('upload'), 'Subir mapa'),
+          state.map && h('label', { class: 'row small muted size-ctl', 'data-tip': 'Tamaño de las fichas en este mapa' }, icon('target', 16), sizeInput)],
         h('button', { class: 'btn sm', type: 'button', onclick: narrate, 'data-tip': 'Muestra un texto sobre la mesa' }, icon('feather'), 'Narrar'),
         selectEl(WEATHERS, state.settings.tableWeather || '', setWeather, { 'aria-label': 'Clima sobre la mesa', class: 'weather-select', 'data-tip': 'Clima sobre el tablero (con su sonido de ambiente)' })),
       battleScene() && h('div', { class: 'row nowrap mesa-mode dm-only', 'data-tip': 'El combate activo tiene tablero con cuadrícula' },
         segmented([['tablero', 'Tablero de combate'], ['mapa', 'Mapa']], state.view, (v) => { state.view = v; prefs.set('mesa.view', v); hidePopover(); renderAll(); if (v === 'tablero') setTimeout(() => bm?.fit(), 60); })),
       h('span', { class: 'tiny muted ping-hint', 'data-tip': 'Señala un punto a toda la mesa' }, h('kbd', {}, 'Mayús'), ' + clic: señalar'),
-      h('div', { class: 'row zoom' },
-        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Alejar', onclick: () => (inBattle() ? bm.zoom(1 / 1.25) : zoomCenter(1 / 1.25)) }, icon('zoomOut', 18)),
-        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Acercar', onclick: () => (inBattle() ? bm.zoom(1.25) : zoomCenter(1.25)) }, icon('zoomIn', 18)),
-        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Ajustar el mapa', 'data-tip': 'Ajustar (doble clic en el mapa)', onclick: () => (inBattle() ? bm.fit() : fit()) }, icon('fit', 18))),
+      h('div', { class: 'row zoom' }, !inBattle() && [ // el tablero de combate trae sus propios controles
+        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Alejar', onclick: () => zoomCenter(1 / 1.25) }, icon('zoomOut', 18)),
+        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Acercar', onclick: () => zoomCenter(1.25) }, icon('zoomIn', 18)),
+        h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Ajustar el mapa', 'data-tip': 'Ajustar (doble clic en el mapa)', onclick: fit }, icon('fit', 18))]),
       h('button', { class: `btn ${state.player ? '' : 'primary'} dm-only`, type: 'button', onclick: () => setPlayerMode(true),
         'data-tip': 'Pantalla completa sin secretos: oculta los PG de los enemigos, los ocultos y las tiradas secretas' }, icon('eye'), 'Modo jugadores'));
   }

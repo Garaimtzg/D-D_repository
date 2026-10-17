@@ -1,5 +1,5 @@
 // Punto de entrada: navegación, barra lateral, barra superior y atajos de teclado.
-import { h, clear, icon, dieIcon, promptDialog, fmtTime } from './core/dom.js';
+import { h, clear, icon, dieIcon, promptDialog, fmtTime, initTooltips } from './core/dom.js';
 import { api } from './core/api.js';
 import { roll, setSound, soundOn } from './core/dice.js';
 import { sfx } from './core/sfx.js';
@@ -134,6 +134,7 @@ async function route() {
 }
 
 startAtmosphere();
+initTooltips();
 window.addEventListener('hashchange', route);
 api.settings().then((s) => { settings = s; drawCampaign(); }).catch(() => {});
 route();

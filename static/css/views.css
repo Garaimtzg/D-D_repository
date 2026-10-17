@@ -283,9 +283,9 @@ dl.ref dd { margin: 0; color: var(--text-2); font-size: .9rem; }
 .xp-track { height: 7px; border-radius: 5px; background: rgba(255, 255, 255, .06); overflow: hidden; }
 .xp-track i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-3), var(--gold-2)); }
 .xp-row span { text-align: right; color: var(--text-2); }
-.cr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
-.cr-cell { display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 9px; background: rgba(0, 0, 0, .2); font-size: .78rem; color: var(--text-2); }
-.cr-cell b { font: 700 1rem var(--font-display); color: #ffb4ab; }
+.xpcr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
+.xpcr-cell { display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 9px; background: rgba(0, 0, 0, .2); font-size: .78rem; color: var(--text-2); }
+.xpcr-cell b { font: 700 1rem var(--font-display); color: #ffb4ab; }
 
 .xp-row { grid-template-columns: 26px 1fr 70px 36px; }
 .cond-grid.one { grid-template-columns: minmax(0, 1fr); }
@@ -317,7 +317,7 @@ dl.ref.compact dd { font-size: .85rem; }
 .feat-ref b { color: var(--gold-2); }
 .feat-ref p { margin: 4px 0 0; font-size: .84rem; color: var(--text-2); }
 .coin-ref { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.coin-ref .cr-cell b { text-transform: uppercase; color: var(--gold-2); }
+.coin-ref .xpcr-cell b { text-transform: uppercase; color: var(--gold-2); }
 
 @media (max-width: 1200px) {
   .dice-layout, .music-layout { grid-template-columns: minmax(0, 1fr); }

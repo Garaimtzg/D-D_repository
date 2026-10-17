@@ -123,6 +123,13 @@ export async function openCreator({ onCreate }) {
     clear(body, [stepClass, stepOrigin, stepAbilities, stepDetails, stepSummary][st.step]());
   }
   const refresh = () => { const y = body.scrollTop; render(); body.scrollTop = y; };
+  // Tras elegir una carta, muestra el detalle que aparece debajo de su rejilla.
+  const choose = (e) => {
+    const gi = [...body.querySelectorAll('.cr-grid')].indexOf(e.currentTarget.parentElement);
+    refresh();
+    const next = body.querySelectorAll('.cr-grid')[gi]?.nextElementSibling;
+    if (next?.classList.contains('cr-detail')) requestAnimationFrame(() => next.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+  };
 
   // Paso 1: clase
   function stepClass() {
@@ -131,7 +138,7 @@ export async function openCreator({ onCreate }) {
       h('p', { class: 'cr-intro' }, 'La clase es la decisión más importante: define la vocación, los talentos y las tácticas de tu personaje.'),
       h('div', { class: 'cr-grid' }, R.classes.map((k) => h('button', {
         class: `cr-card ${k.id === st.classId ? 'sel' : ''}`, type: 'button',
-        onclick: () => { if (st.classId !== k.id) { st.classId = k.id; st.classSkills = []; st.subclass = ''; sfx.click(); } refresh(); },
+        onclick: (e) => { if (st.classId !== k.id) { st.classId = k.id; st.classSkills = []; st.subclass = ''; sfx.click(); } choose(e); },
       }, h('span', { class: 'cr-emoji' }, CLASS_ICON[k.id]), h('b', {}, k.name),
       h('span', { class: 'small' }, k.summary),
       h('span', { class: 'cr-tags' }, h('span', { class: 'chip' }, `d${k.hit_die}`), h('span', { class: 'chip' }, k.primary.map((a) => ABILITY_SHORT[a]).join(' y ')),
@@ -177,7 +184,7 @@ export async function openCreator({ onCreate }) {
       h('h3', { class: 'cr-h' }, '1 · Trasfondo'),
       h('div', { class: 'cr-grid small-cards' }, R.backgrounds.map((k) => h('button', {
         class: `cr-card ${k.id === st.backgroundId ? 'sel' : ''}`, type: 'button',
-        onclick: () => { st.backgroundId = k.id; st.plus2 = ''; st.plus1 = ''; sfx.click(); refresh(); },
+        onclick: (e) => { st.backgroundId = k.id; st.plus2 = ''; st.plus1 = ''; sfx.click(); choose(e); },
       }, h('b', {}, k.name), h('span', { class: 'cr-tags' }, k.abilities.map((a) => h('span', { class: 'chip' }, ABILITY_SHORT[a]))),
       h('span', { class: 'tiny' }, `Dote: ${k.feat}`), h('span', { class: 'tiny muted' }, k.skills.map(skillName).join(' · '))))),
       b && h('div', { class: 'cr-note' }, `${b.name} (MdJ p. ${b.page}): competencias en ${b.skills.map(skillName).join(' y ')}, ${b.tool.toLowerCase()} y la dote ${b.feat}.`),
@@ -187,7 +194,7 @@ export async function openCreator({ onCreate }) {
       h('h3', { class: 'cr-h' }, '2 · Especie'),
       h('div', { class: 'cr-grid small-cards' }, R.species.map((k) => h('button', {
         class: `cr-card ${k.id === st.speciesId ? 'sel' : ''}`, type: 'button',
-        onclick: () => { if (st.speciesId !== k.id) { st.speciesId = k.id; st.lineage = ''; st.speciesSkill = ''; st.humanFeat = ''; sfx.click(); } refresh(); },
+        onclick: (e) => { if (st.speciesId !== k.id) { st.speciesId = k.id; st.lineage = ''; st.speciesSkill = ''; st.humanFeat = ''; sfx.click(); } choose(e); },
       }, h('span', { class: 'cr-emoji' }, SPECIES_ICON[k.id]), h('b', {}, k.name),
       h('span', { class: 'tiny muted' }, `${k.size} · ${fmtM(k.speed)}${k.darkvision ? ` · visión ${k.darkvision} m` : ''}`)))),
       s && h('section', { class: 'panel cr-detail' },

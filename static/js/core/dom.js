@@ -328,3 +328,55 @@ export function bigBanner(title, sub = '', kind = 'gold', iconName = 'crown') {
   document.body.append(el);
   setTimeout(() => el.remove(), 2600);
 }
+
+// Globos de ayuda para todo lo que tenga data-tip. Es un único elemento flotante encima de todo,
+// así ningún panel con desplazamiento o recorte (la barra lateral, el tablero…) lo corta.
+export function initTooltips() {
+  const tip = h('div', { class: 'tooltip', role: 'tooltip', hidden: true });
+  document.body.append(tip);
+  let cur = null;
+  let timer = null;
+  const hide = () => { cur = null; tip.hidden = true; clearInterval(timer); };
+  function place(el) {
+    const r = el.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    const m = 8; const vw = window.innerWidth; const vh = window.innerHeight;
+    let pos = el.dataset.tipPos || 'above';
+    if (pos === 'above' && r.top - t.height - m < 4) pos = 'below';
+    if (pos === 'below' && r.bottom + t.height + m > vh - 4) pos = 'above';
+    if (pos === 'right' && r.right + t.width + m > vw - 4) pos = 'above';
+    let x = pos === 'right' ? r.right + m + 2 : r.left + r.width / 2 - t.width / 2;
+    let y = pos === 'right' ? r.top + r.height / 2 - t.height / 2 : pos === 'below' ? r.bottom + m : r.top - t.height - m;
+    x = Math.max(6, Math.min(vw - t.width - 6, x));
+    y = Math.max(6, Math.min(vh - t.height - 6, y));
+    tip.style.left = `${Math.round(x)}px`;
+    tip.style.top = `${Math.round(y)}px`;
+    tip.dataset.pos = pos;
+  }
+  function show(el) {
+    const text = el.getAttribute('data-tip');
+    if (!text) return hide();
+    cur = el;
+    tip.textContent = text;
+    tip.hidden = false;
+    tip.classList.remove('in');
+    void tip.offsetWidth;
+    tip.classList.add('in');
+    place(el);
+    clearInterval(timer);
+    timer = setInterval(() => { if (!cur?.isConnected) hide(); }, 300); // la vista se volvió a pintar
+  }
+  const track = (e) => {
+    const el = e.target instanceof Element ? e.target.closest('[data-tip]') : null;
+    if (el === cur) return;
+    if (el) show(el); else hide();
+  };
+  document.addEventListener('pointerover', track);
+  document.addEventListener('pointermove', track, { passive: true });
+  document.addEventListener('pointerdown', hide, true);
+  document.addEventListener('wheel', hide, { passive: true, capture: true });
+  document.addEventListener('focusin', (e) => { if (e.target.matches?.(':focus-visible') && e.target.closest('[data-tip]')) show(e.target.closest('[data-tip]')); });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });
+  window.addEventListener('blur', hide);
+}

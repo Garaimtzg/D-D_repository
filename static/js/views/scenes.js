@@ -210,6 +210,7 @@ async function mount(root, [sceneId]) {
     const size = { cols: sc.cols, rows: sc.rows };
     function drawSide() {
       const showTerrain = ['paint', 'rect', 'fill'].includes(ed.tool);
+      const propsFirst = ed.tool === 'prop' || ed.tool === 'erase';
       clear(side,
         h('div', { class: 'panel stack' },
           h('div', { class: 'ed-tools' }, TOOLS.map(toolBtn)),
@@ -224,18 +225,18 @@ async function mount(root, [sceneId]) {
           h('div', { class: 'ed-row' },
             h('button', { class: 'btn sm', type: 'button', onclick: () => bm.undo() || toast('Nada que deshacer.') }, icon('undo', 14), 'Deshacer'),
             h('button', { class: 'btn sm', type: 'button', onclick: () => bm.redo() || toast('Nada que rehacer.') }, icon('redo', 14), 'Rehacer'))),
-        h('div', { class: `panel stack ${showTerrain ? '' : 'dim'}` },
+        h('div', { class: `panel stack ${showTerrain ? '' : 'dim'}`, style: { order: propsFirst ? 2 : 1 } },
           h('h3', { style: { margin: 0 } }, icon('brush', 16), ' Terreno'),
           KIND_GROUPS.map(([kind, label]) => {
             const list = cat.terrain.filter((t) => t.kind === kind || (kind === 'suelo' && t.code === '_' && sc.bg));
             const shown = list.filter((t) => t.code !== '_' || sc.bg);
             return shown.length > 0 && [h('div', { class: 'ed-group-title' }, label), h('div', { class: 'swatches' }, shown.map(terrainSw))];
           })),
-        h('div', { class: 'panel stack' },
+        h('div', { class: 'panel stack', style: { order: propsFirst ? 1 : 2 } },
           h('h3', { style: { margin: 0 } }, icon('gem', 16), ' Objetos'),
           PROP_GROUPS.map(([label, codes]) => [h('div', { class: 'ed-group-title' }, label),
             h('div', { class: 'swatches' }, [...codes].map((k) => cat.P[k]).filter(Boolean).map(propSw))])),
-        h('div', { class: 'panel stack' },
+        h('div', { class: 'panel stack', style: { order: 3 } },
           h('h3', { style: { margin: 0 } }, icon('grid', 16), ' Escenario'),
           field('Luz', selectEl(cat.lights.map((l) => [l.key, `${LIGHT_ICON[l.key]} ${l.name}`]), sc.light, (v) => { sc.light = v; bm.redraw(); save(); })),
           h('div', { class: 'ed-row size-inputs' },

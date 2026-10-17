@@ -122,7 +122,7 @@ async function mount(root) {
         h('thead', {}, h('tr', {}, ['Arma', 'Daño', 'Propiedades', 'Maestría'].map((t) => h('th', {}, t)))),
         ['sencilla', 'marcial'].map((cat) => {
           const list = weapons.filter((w) => w.category === cat);
-          return list.length > 0 && h('tbody', {}, h('tr', { class: 'group' }, h('td', { colspan: 4 }, `Armas ${cat}s · ${cat === 'sencilla' ? 'todas las clases marciales' : 'bárbaro, guerrero, paladín, explorador…'}`)),
+          return list.length > 0 && h('tbody', {}, h('tr', { class: 'group' }, h('td', { colspan: 4 }, `Armas ${cat}s · ${cat === 'sencilla' ? 'casi todas las clases saben usarlas' : 'bárbaro, guerrero, paladín y explorador'}`)),
             list.map((w) => h('tr', {}, h('td', {}, h('b', {}, w.name), h('span', { class: 'tiny muted' }, w.kind === 'dist' ? ' · a distancia' : '')),
               h('td', {}, `${w.damage} ${w.type}`), h('td', { class: 'small' }, w.properties.map((p) => ((p === 'Arrojadiza' || p === 'Munición') && w.range ? `${p} (${w.range} m)` : p)).join(', ') || '—'),
               h('td', {}, h('span', { class: 'chip' }, w.mastery)))));
@@ -149,7 +149,7 @@ async function mount(root) {
         h('tbody', {}, h('tr', {}, h('td', {}, h('b', {}, 'Escudo')), h('td', {}, '+2'), h('td', {}, '—'), h('td', {}, '—'))))));
     }
     if (show('equipo') && match('monedas cobre plata electro oro platino', ref.coins.map((c) => c.name))) {
-      blocks.push(panel('Monedas', 'coins', '', h('div', { class: 'coin-ref' }, ref.coins.map((c) => h('div', { class: 'cr-cell' },
+      blocks.push(panel('Monedas', 'coins', '', h('div', { class: 'coin-ref' }, ref.coins.map((c) => h('div', { class: 'xpcr-cell' },
         h('b', {}, c.key), h('span', {}, c.name.replace('Pieza de ', '')), h('span', { class: 'tiny muted tnum' }, `${c.value_cp >= 100 ? `${c.value_cp / 100} po` : `${c.value_cp} pc`}`)))),
       h('p', { class: 'tiny muted' }, '1 ppt = 10 po · 1 po = 2 pe = 10 pp · 1 pp = 10 pc.')));
     }
@@ -172,7 +172,7 @@ async function mount(root) {
     }
     if (show('tablas') && match('valor de desafío vd px')) {
       blocks.push(panel('PX por valor de desafío', 'skull', '',
-        h('div', { class: 'cr-grid' }, Object.entries(ref.cr_xp).map(([cr, xp]) => h('div', { class: 'cr-cell' }, h('b', {}, cr), h('span', { class: 'tnum' }, xp.toLocaleString('es-ES')))))));
+        h('div', { class: 'xpcr-grid' }, Object.entries(ref.cr_xp).map(([cr, xp]) => h('div', { class: 'xpcr-cell' }, h('b', {}, cr), h('span', { class: 'tnum' }, xp.toLocaleString('es-ES')))))));
     }
     if (show('tablas') && match('presupuesto encuentro dificultad bajo moderado alto')) {
       blocks.push(panel('Presupuesto de PX por personaje', 'combate', '',

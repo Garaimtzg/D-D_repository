@@ -97,7 +97,12 @@ input[type="checkbox"], input[type="radio"] { width: 17px; height: 17px; accent-
 input[type="number"] { text-align: center; }
 input[type="range"] { padding: 0; box-shadow: none; background: none; border: 0; accent-color: var(--gold); }
 input[type="color"] { padding: 2px; height: 36px; width: 44px; cursor: pointer; }
-select { cursor: pointer; }
+select { cursor: pointer; background-color: #17110c; }
+/* la lista desplegable la dibuja el navegador: fondo oscuro para que se lea */
+option, optgroup { background-color: #1d1610; color: var(--text); }
+optgroup { color: var(--gold-2); font-style: normal; font-weight: 800; }
+option:checked { background-color: #4a3622; color: var(--gold-2); }
+option:disabled { color: var(--muted); }
 textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
 input.inline { width: 66px; padding: 5px 6px; }
 .check { display: inline-flex; gap: 7px; align-items: center; cursor: pointer; font-weight: 600; color: var(--text-2); }
@@ -162,17 +167,15 @@ input.inline { width: 66px; padding: 5px 6px; }
 .empty p { margin: 0; max-width: 460px; }
 kbd { font: 700 .72rem var(--font); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--line-2); border-bottom-width: 2px; background: var(--sunken); color: var(--text-2); }
 
-/* tooltips: data-tip="…" */
+/* tooltips: data-tip="…" (un globo flotante que pinta initTooltips en dom.js) */
 [data-tip] { position: relative; }
-[data-tip]:hover::after, [data-tip]:focus-visible::after {
-  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
-  z-index: 80; width: max-content; max-width: 260px; padding: 6px 10px; border-radius: 8px;
-  background: #0b0806; border: 1px solid var(--line-2); color: var(--text); white-space: normal; text-align: left;
-  font: 600 .78rem/1.35 var(--font); letter-spacing: 0; text-transform: none; box-shadow: var(--shadow-2);
-  pointer-events: none; animation: tipIn .15s ease-out;
+.tooltip {
+  position: fixed; left: 0; top: 0; z-index: 2000; width: max-content; max-width: 280px; padding: 6px 10px; border-radius: 8px;
+  background: #0b0806; border: 1px solid var(--line-2); color: var(--text); text-align: left;
+  font: 600 .78rem/1.35 var(--font); letter-spacing: 0; text-transform: none; box-shadow: var(--shadow-2); pointer-events: none;
 }
-[data-tip-pos="below"]:hover::after { bottom: auto; top: calc(100% + 8px); }
-[data-tip-pos="right"]:hover::after { left: calc(100% + 10px); bottom: auto; top: 50%; transform: translateY(-50%); }
+.tooltip[hidden] { display: none; }
+.tooltip.in { animation: tipIn .15s ease-out; }
 @keyframes tipIn { from { opacity: 0; } }
 
 details.box { border: 1px solid var(--line); border-radius: var(--r); padding: 0 14px; background: rgba(0, 0, 0, .15); }
@@ -284,6 +287,8 @@ details.box[open] { padding-bottom: 14px; }
   background: rgba(255, 250, 235, .45); color: var(--ink); border: 1px solid rgba(110, 75, 30, .3);
   box-shadow: inset 0 1px 2px rgba(80, 50, 15, .15); font-family: var(--font-serif); font-weight: 600;
 }
+.parchment option, .parchment optgroup { background-color: #fbf3df; color: var(--ink); }
+.parchment optgroup { color: #8a1f14; }
 .parchment input:focus, .parchment select:focus, .parchment textarea:focus { border-color: #8a5a1c; box-shadow: 0 0 0 3px rgba(138, 90, 28, .2); }
 .parchment input::placeholder, .parchment textarea::placeholder { color: rgba(90, 60, 25, .45); }
 .parchment label.field { color: #8c6a43; }

@@ -272,7 +272,7 @@ function travelTile() {
   calc();
   return tile('Viajes', 'compass', '',
     h('div', { class: 'row nowrap' }, field('Kilómetros', bind(s, 'km', { type: 'number', min: 0, onChange: calc })),
-      field('Ritmo', selectEl(Object.entries(PACES).map(([d, [l]]) => [d, `${l} (${d} km/día)`]), 36, (v) => { s.pace = Number(v); calc(); }))),
+      field('Ritmo', selectEl(Object.entries(PACES).map(([d, [l]]) => [d, `${l} · ${d} km`]), 36, (v) => { s.pace = Number(v); calc(); }))),
     out, h('p', { class: 'tiny muted' }, 'Ritmos de viaje del Manual del Jugador 2024: 8 horas de marcha al día.'));
 }
 

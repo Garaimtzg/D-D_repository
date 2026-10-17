@@ -138,7 +138,7 @@ async function mount(root) {
     const verdict = !nats.length ? 'Sin datos' : avg >= 12 ? 'Los dados te sonríen' : avg >= 9.5 ? 'Suerte normal' : 'Dados malditos';
     clear(statsEl,
       h('div', { class: 'row between' },
-        h('div', {}, h('div', { class: 'luck-avg' }, nats.length ? avg.toFixed(1) : '—'), h('div', { class: 'tiny muted' }, `media de ${nats.length} d20 naturales`)),
+        h('div', {}, h('div', { class: 'luck-avg' }, nats.length ? avg.toFixed(1).replace('.', ',') : '—'), h('div', { class: 'tiny muted' }, `media de ${nats.length} d20 naturales`)),
         h('div', { class: 'luck-verdict' }, verdict),
         h('div', { class: 'row nowrap luck-counts' },
           h('span', { class: 'chip good' }, `20 × ${counts[19]}`), h('span', { class: 'chip bad' }, `1 × ${counts[0]}`))),
