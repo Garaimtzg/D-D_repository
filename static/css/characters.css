@@ -322,3 +322,32 @@ input.mini { width: 54px; padding: 4px; }
 @media (max-width: 1250px) { .sheet-row4 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .sheet-row4 > :first-child { grid-column: 1 / -1; } }
 .level-up .big-num { color: var(--gold-2); text-shadow: 0 0 14px rgba(226, 180, 86, .35); }
 .parchment input[type="checkbox"], .parchment input[type="radio"] { color-scheme: light; }
+
+/* aspecto: muñeco en cartas, ficha y editor */
+.cc-banner.dressed .avatar.xl { width: 84px; height: 84px; --s: 84px; font-size: 1.9rem; z-index: 1; margin-top: 24px; box-shadow: 0 0 0 3px rgba(255, 255, 255, .85), 0 8px 20px rgba(0, 0, 0, .45); }
+.portrait { overflow: visible; background: none; border: 0; box-shadow: none; }
+.portrait .avatar.xxl { width: 126px; height: 126px; --s: 126px; font-size: 2.6rem; box-shadow: 0 0 0 4px #fbf3df, 0 0 0 7px #8a6a3d, 0 8px 22px rgba(80, 50, 15, .45); }
+.portrait-edit { z-index: 4; }
+.look-editor { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; align-items: start; }
+.look-preview { position: sticky; top: 0; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 60px 10px 16px; border-radius: 16px; background: radial-gradient(circle at 50% 40%, rgba(226, 180, 86, .16), transparent 70%), rgba(0, 0, 0, .25); border: 1px solid var(--line); }
+.look-preview > b { font: 700 1.1rem var(--font-display); color: var(--gold-2); }
+.look-controls { display: flex; flex-direction: column; gap: 12px; max-height: 64vh; overflow: auto; padding-right: 4px; }
+.look-group { display: flex; flex-direction: column; gap: 6px; }
+.look-group .eyebrow { margin: 0; }
+.look-opts { display: flex; flex-wrap: wrap; gap: 5px; }
+.look-opt { all: unset; cursor: pointer; display: grid; place-items: center; min-width: 40px; height: 40px; padding: 0 8px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, .22); font: 700 .8rem var(--font); color: var(--text-2); font-size: 1.25rem; transition: transform .15s var(--ease), border-color .15s; }
+.look-opt.txt { font-size: .8rem; }
+.look-opt > .acc { position: static; transform: none; font-size: 1.4rem; filter: none; }
+.look-opt > svg.acc { width: 30px; height: 30px; }
+.look-opt .avatar.look-mini { width: 32px; height: 32px; --s: 32px; box-shadow: none; }
+.look-opt:hover { transform: translateY(-2px); border-color: var(--line-2); }
+.look-opt[aria-pressed="true"] { border-color: var(--gold); background: rgba(226, 180, 86, .18); color: var(--gold-2); box-shadow: 0 0 0 1px var(--gold); }
+.look-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.look-sw { all: unset; cursor: pointer; width: 26px; height: 26px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(0, 0, 0, .25), 0 2px 4px rgba(0, 0, 0, .4); transition: transform .15s; }
+.look-sw:hover { transform: scale(1.12); }
+.look-sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--gold); }
+@media (max-width: 760px) { .look-editor { grid-template-columns: minmax(0, 1fr); } .look-preview { position: static; } }
+.spellbook { display: flex; flex-direction: column; gap: 6px; }
+.spell-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.spell-list li { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 9px; background: rgba(255, 250, 235, .35); }
+.spell-list .tiny-chip { margin-left: 5px; }

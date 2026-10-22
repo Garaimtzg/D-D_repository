@@ -39,6 +39,7 @@ const ICONS = {
   personajes: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c3 0 5.5 2 5.5 5"/>',
   combate: '<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6M16 16l4 4M19 21l2-2"/><path d="M9.5 17.5 21 6V3h-3L6.5 14.5"/><path d="m11 19-6-6M8 16l-4 4M5 21l-2-2"/>',
   mapas: '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
+  juegos: '<path d="M6.5 8h11A4.5 4.5 0 0 1 22 12.5v1a3.5 3.5 0 0 1-6.3 2.1L14.5 14h-5l-1.2 1.6A3.5 3.5 0 0 1 2 13.5v-1A4.5 4.5 0 0 1 6.5 8z"/><path d="M7 10.5v3M5.5 12h3M15.5 11h.01M17.5 13h.01"/>',
   grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
   brush: '<path d="M18.4 2.6a2 2 0 0 1 2.9 2.9L11 15.8 8.2 13z"/><path d="M7.5 14c-2 0-3.5 1.6-3.5 3.5 0 1.3-.7 2.2-2 2.5 1 .9 2.4 1.5 4 1.5 2.5 0 4.5-2 4.5-4.5z"/>',
   bucket: '<path d="M19 11 11 3 3 11l8 8z"/><path d="M3 11h16M21 15s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z"/>',
@@ -235,10 +236,102 @@ export function hpBar(hp, max, temp = 0) {
 
 export const initials = (name) => (name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
+// -- Aspecto: una cara sencilla y complementos graciosos (sombreros, gafas, ropa, algo en la mano) --
+// ch.look = { base: 'cara' | 'iniciales', skin, hair, hairColor, expr, hat, face, outfit, item }.
+// Los complementos son emoji o, si el nombre está en HAT_SVG / FACE_SVG, un dibujo propio.
+export const SKINS = ['#ffdbb4', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#5c3a21', '#9ccf8a', '#93b4e8', '#c9a0dc', '#e8e8e8'];
+export const HAIR_COLORS = ['#2b1d14', '#6b3e1f', '#b5651d', '#e8c26e', '#d9d9d9', '#c0392b', '#3b6fd1', '#8e44ad', '#1f8a4c', '#ff7ab8'];
+export const HAIRS = [['', 'Calvo'], ['corto', 'Corto'], ['largo', 'Largo'], ['rizos', 'Rizos'], ['cresta', 'Cresta'], ['mono', 'Moño']];
+export const EXPRESSIONS = [['normal', '🙂'], ['feliz', '😄'], ['picaro', '😏'], ['enfadado', '😠'], ['sorpresa', '😮'], ['dormido', '😴'], ['loco', '🤪']];
+const HAT_SVG = {
+  mago: '<path d="M22,86 Q36,52 54,6 Q60,40 78,86Z" fill="#4b3aa8"/><path d="M8,86 Q50,72 92,86 Q50,98 8,86Z" fill="#33277a"/><path d="M30,75 Q50,69 70,75" stroke="#f2c14e" stroke-width="5" fill="none"/><circle cx="46" cy="46" r="3" fill="#f2c14e"/><circle cx="58" cy="60" r="2.4" fill="#f2c14e"/><circle cx="52" cy="27" r="2" fill="#f2c14e"/>',
+  fiesta: '<path d="M32,88 L52,10 L70,88Z" fill="#ff5fa2"/><path d="M39,66 L64,66 M45,42 L58,42" stroke="#ffe35a" stroke-width="6"/><circle cx="52" cy="9" r="7" fill="#5bd1ff"/>',
+  vikingo: '<path d="M26,66 Q4,58 6,24 Q16,52 32,58Z" fill="#f4ecd8"/><path d="M74,66 Q96,58 94,24 Q84,52 68,58Z" fill="#f4ecd8"/><path d="M24,86 Q24,46 50,44 Q76,46 76,86Z" fill="#a7b0ba"/><path d="M50,46 L50,80" stroke="#7d868f" stroke-width="3"/><rect x="22" y="78" width="56" height="9" rx="3" fill="#7b5a34"/>',
+  pirata: '<path d="M18,76 Q30,38 50,36 Q70,38 82,76 Q50,66 18,76Z" fill="#2a2424"/><path d="M4,84 Q20,62 50,60 Q80,62 96,84 Q74,76 50,78 Q26,76 4,84Z" fill="#1f1b1b"/><circle cx="50" cy="52" r="6" fill="#f4ecd8"/><path d="M45,61 L55,67 M55,61 L45,67" stroke="#f4ecd8" stroke-width="2.5"/>',
+  cocinero: '<path d="M30,68 Q12,64 16,44 Q20,28 36,34 Q38,14 56,18 Q72,12 78,32 Q94,40 84,60 Q78,68 70,68Z" fill="#fff" stroke="#cfcfcf" stroke-width="2"/><rect x="30" y="66" width="40" height="22" rx="3" fill="#fff" stroke="#cfcfcf" stroke-width="2"/>',
+  bufon: '<path d="M18,86 Q20,50 8,30 Q34,40 50,62 Q66,40 92,30 Q80,50 82,86Z" fill="#c0392b"/><path d="M50,62 Q44,30 50,8 Q58,32 50,62Z" fill="#2e7dd1"/><path d="M18,86 Q50,74 82,86 L82,91 Q50,80 18,91Z" fill="#f2c14e"/><circle cx="8" cy="30" r="5" fill="#f2c14e"/><circle cx="92" cy="30" r="5" fill="#f2c14e"/><circle cx="50" cy="8" r="5" fill="#f2c14e"/>',
+};
+const FACE_SVG = { // en coordenadas de la cara (0-100); bigote y barba toman el color del pelo
+  bigote: '<path d="M33,63 Q41,55 50,60 Q59,55 67,63 Q61,61 56,64 Q50,61 44,64 Q39,61 33,63Z" fill="currentColor" stroke="rgba(40,20,10,.55)" stroke-width="1.4"/>',
+  barba: '<path d="M21,56 Q23,90 50,92 Q77,90 79,56 Q70,75 50,75 Q30,75 21,56Z" fill="currentColor" stroke="rgba(40,20,10,.45)" stroke-width="1.4"/>',
+  monoculo: '<circle cx="60" cy="53" r="8.5" fill="rgba(200,230,255,.3)" stroke="#d4a63c" stroke-width="2.5"/><path d="M67,59 Q71,72 65,88" stroke="#d4a63c" stroke-width="1.3" fill="none"/>',
+  parche: '<path d="M22,41 L78,63" stroke="#111" stroke-width="2.5"/><ellipse cx="60" cy="53" rx="8.5" ry="7.5" fill="#111"/>',
+  payaso: '<circle cx="50" cy="60" r="6.5" fill="#e3262e"/><circle cx="48" cy="58" r="2" fill="#fff" opacity=".6"/>',
+  gafas: '<g fill="rgba(255,255,255,.18)" stroke="#2a2a2a" stroke-width="2.6"><circle cx="40" cy="53" r="8"/><circle cx="60" cy="53" r="8"/></g><path d="M48,53 Q50,50 52,53" stroke="#2a2a2a" stroke-width="2.6" fill="none"/>',
+};
+export const LOOK_SLOTS = {
+  hat: ['mago', 'fiesta', 'vikingo', 'pirata', 'cocinero', 'bufon', '🎩', '👑', '🎓', '🧢', '👒', '⛑️', '🪖', '🎀', '🍳', '🪣', '🦆', '🐸', '🍕', '🎃', '🌻', '🧁', '🍌', '🐙'],
+  face: ['bigote', 'barba', 'monoculo', 'parche', 'payaso', 'gafas', '🕶️', '🥽', '🎭'],
+  outfit: ['🎀', '👔', '🧣', '🦺', '👘', '👗', '🥻', '🧥', '🏅', '📿', '🩱', '🩲'],
+  item: ['🦆', '🍺', '🍗', '🐟', '🥖', '🌹', '🧀', '🍄', '🐔', '🎈', '🍭', '🧸', '🪄', '🗡️', '🥄', '🧹', '🐈', '🐉', '🥕', '🪕', '📜', '💩'],
+};
+export const LOOK_NAMES = {
+  mago: 'Sombrero de mago', fiesta: 'Gorro de fiesta', vikingo: 'Casco vikingo', pirata: 'Sombrero pirata', cocinero: 'Gorro de cocinero', bufon: 'Gorro de bufón',
+  bigote: 'Bigote', barba: 'Barba', monoculo: 'Monóculo', parche: 'Parche', payaso: 'Nariz de payaso', gafas: 'Gafas redondas',
+};
+const EYE = 'stroke="#3a2414" stroke-width="3.6" stroke-linecap="round" fill="none"';
+const dot = (x, y, r = 3.6) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#3a2414"/>`;
+const EXPR_SVG = {
+  normal: `${dot(40, 53)}${dot(60, 53)}<path d="M41,65 Q50,72 59,65" ${EYE}/>`,
+  feliz: `<path d="M35,55 Q40,48 45,55 M55,55 Q60,48 65,55" ${EYE}/><path d="M39,63 Q50,78 61,63Z" fill="#7a2a20"/>`,
+  picaro: `<path d="M35,53 L45,53" ${EYE}/>${dot(60, 53)}<path d="M42,67 Q53,71 61,62" ${EYE}/>`,
+  enfadado: `${dot(40, 54)}${dot(60, 54)}<path d="M33,45 L46,49 M67,45 L54,49 M42,69 Q50,63 58,69" ${EYE}/>`,
+  sorpresa: `${dot(40, 52, 4.6)}${dot(60, 52, 4.6)}<ellipse cx="50" cy="68" rx="4.5" ry="5.5" fill="#3a2414"/>`,
+  dormido: `<path d="M35,53 Q40,57 45,53 M55,53 Q60,57 65,53" ${EYE}/>${dot(50, 67, 2.6)}<text x="70" y="32" font-size="15" font-weight="700" fill="#fff">z</text>`,
+  loco: `<circle cx="40" cy="52" r="5.5" fill="#fff" stroke="#3a2414" stroke-width="2"/>${dot(41, 53, 2.2)}${dot(60, 53, 3)}<path d="M40,64 Q50,71 60,64" ${EYE}/><ellipse cx="54" cy="70" rx="4" ry="5" fill="#ff7a8a"/>`,
+};
+const HAIR_BACK = {
+  largo: (c) => `<path d="M17,52 Q15,20 50,18 Q85,20 83,52 L86,86 Q76,92 70,80 L30,80 Q24,92 14,86Z" fill="${c}"/>`,
+  rizos: (c) => Array.from({ length: 9 }, (_, i) => { const a = Math.PI * (1.05 + i * 0.1125); return `<circle cx="${(50 + Math.cos(a) * 31).toFixed(1)}" cy="${(52 + Math.sin(a) * 31).toFixed(1)}" r="11" fill="${c}"/>`; }).join(''),
+};
+const HAIR_TOP = {
+  corto: (c) => `<path d="M19,52 Q17,22 50,21 Q83,22 81,52 Q74,38 60,36 Q50,42 38,36 Q26,40 19,52Z" fill="${c}"/>`,
+  largo: (c) => HAIR_TOP.corto(c),
+  cresta: (c) => `<path d="M40,32 L44,6 L50,26 L55,3 L58,27 L65,9 L62,33 Q50,26 40,32Z" fill="${c}"/>`,
+  mono: (c) => `<circle cx="50" cy="15" r="10" fill="${c}"/><path d="M20,50 Q18,24 50,23 Q82,24 80,50 Q66,32 50,32 Q34,32 20,50Z" fill="${c}"/>`,
+};
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function svgEl(cls, inner, color) {
+  const s = document.createElementNS(SVG_NS, 'svg');
+  s.setAttribute('class', cls);
+  s.setAttribute('viewBox', '0 0 100 100');
+  s.setAttribute('aria-hidden', 'true');
+  if (color) s.style.color = color;
+  s.innerHTML = inner;
+  return s;
+}
+function faceSvg(look) {
+  const hc = look.hairColor || HAIR_COLORS[0];
+  const skin = look.skin || SKINS[1];
+  return svgEl('face-svg', (HAIR_BACK[look.hair]?.(hc) || '')
+    + `<circle cx="50" cy="55" r="31" fill="${skin}"/><ellipse cx="33" cy="63" rx="5" ry="3" fill="#ff6b6b" opacity=".3"/><ellipse cx="67" cy="63" rx="5" ry="3" fill="#ff6b6b" opacity=".3"/>`
+    + (HAIR_TOP[look.hair]?.(hc) || '') + (EXPR_SVG[look.expr] || EXPR_SVG.normal));
+}
+// Un complemento suelto (para el avatar o para los botones del editor).
+export function lookPiece(slot, key, look = {}) {
+  if (!key) return null;
+  if (slot === 'hat' && HAT_SVG[key]) return svgEl('acc hat svg', HAT_SVG[key]);
+  if (slot === 'face' && FACE_SVG[key]) return svgEl('acc face-svg', FACE_SVG[key], look.hairColor || HAIR_COLORS[0]);
+  return h('span', { class: `acc ${slot}` }, key);
+}
+export const hasExtras = (look) => !!(look && (look.hat || look.face || look.outfit || look.item));
+export function randomLook(extras = true) {
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const maybe = (a, p) => (extras && Math.random() < p ? pick(a) : '');
+  return {
+    base: 'cara', skin: pick(SKINS.slice(0, 6)), hair: pick(HAIRS)[0], hairColor: pick(HAIR_COLORS.slice(0, 6)), expr: pick(EXPRESSIONS)[0],
+    hat: maybe(LOOK_SLOTS.hat, 0.7), face: maybe(LOOK_SLOTS.face, 0.35), outfit: maybe(LOOK_SLOTS.outfit, 0.5), item: maybe(LOOK_SLOTS.item, 0.6),
+  };
+}
+
 export function avatar(ch, cls = '') {
-  const el = h('span', { class: `avatar ${cls}`, style: { '--c': ch.color || '#666' } });
+  const look = ch.look || {};
+  const face = look.base === 'cara' && !ch.portrait;
+  const el = h('span', { class: `avatar ${cls} ${face ? 'is-face' : ''}`, style: { '--c': ch.color || '#666' } });
   if (ch.portrait) el.style.backgroundImage = `url("${ch.portrait}")`;
+  else if (face) el.append(faceSvg(look));
   else el.textContent = initials(ch.name);
+  for (const slot of ['face', 'outfit', 'item', 'hat']) { const p = lookPiece(slot, look[slot], look); if (p) el.append(p); }
   return el;
 }
 
@@ -259,6 +352,7 @@ export function token(ch, { size = 52, hp = ch.hp, max = ch.maxHp, showHp = true
   const av = avatar(ch);
   const inner = size - stroke * 2 - 4;
   Object.assign(av.style, { width: `${inner}px`, height: `${inner}px`, fontSize: `${Math.max(10, inner * 0.36)}px` });
+  av.style.setProperty('--s', `${inner}px`);
   return h('span', { class: `token ${showHp && (hp ?? 1) <= 0 ? 'dead' : ''}`, style: { width: `${size}px`, height: `${size}px` } }, ring, av);
 }
 

@@ -159,3 +159,6 @@
 .pick-item[aria-pressed="true"] { border-color: var(--gold); background: rgba(226, 180, 86, .14); box-shadow: 0 0 0 1px rgba(226, 180, 86, .4); }
 .preview-stage { position: relative; height: 62vh; border-radius: 12px; overflow: hidden; border: 1px solid var(--line-2); }
 .panel.dim .swatches { opacity: .55; }
+.bm-fog { filter: blur(5px); transition: opacity .3s; }
+.bm-fog.dm { filter: blur(3px); }
+.bm-token[hidden] { display: none; }

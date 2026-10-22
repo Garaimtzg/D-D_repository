@@ -1,6 +1,7 @@
 // Reglas: referencia rápida del Manual del Jugador 2024 con buscador. Estados, acciones, clases,
 // especies, trasfondos, dotes, armas y armaduras, y las tablas de PX. Cada entrada remite a su página.
-import { h, clear, icon, searchBox, segmented } from '../core/dom.js';
+import { h, clear, icon, searchBox, segmented, selectEl } from '../core/dom.js';
+import { roll } from '../core/dice.js';
 import { reference, ABILITY_SHORT, CONDITION_ICON, fmtM } from '../core/dnd.js';
 
 export default { id: 'reglas', title: 'Reglas', icon: 'reglas', hint: 'Manual del Jugador 2024: estados, acciones, clases y tablas', mount };
@@ -12,11 +13,11 @@ const ACTION_ICON = {
 const CLASS_ICON = { barbaro: '🪓', bardo: '🪕', brujo: '👁️', clerigo: '☀️', druida: '🌿', explorador: '🏹', guerrero: '⚔️', hechicero: '🔥', mago: '📜', monje: '👊', paladin: '🛡️', picaro: '🗡️' };
 const DC = [[5, 'Muy fácil'], [10, 'Fácil'], [15, 'Media'], [20, 'Difícil'], [25, 'Muy difícil'], [30, 'Casi imposible']];
 const CASTER = { full: 'Lanzador completo', half: 'Medio lanzador', pact: 'Magia del pacto' };
-const SECTIONS = [['todo', 'Todo'], ['estados', 'Estados'], ['combate', 'Combate'], ['personajes', 'Personajes'], ['equipo', 'Equipo'], ['tablas', 'Tablas']];
+const SECTIONS = [['todo', 'Todo'], ['estados', 'Estados'], ['combate', 'Combate'], ['personajes', 'Personajes'], ['conjuros', 'Conjuros'], ['equipo', 'Equipo'], ['tablas', 'Tablas']];
 
 async function mount(root) {
   const ref = await reference();
-  const state = { q: '', section: 'todo' };
+  const state = { q: '', section: 'todo', level: '', cls: '', conc: false, ritual: false };
   const out = h('div', { class: 'ref-layout' });
   const skillName = (k) => ref.skills.find((s) => s.key === k)?.name || k;
 
@@ -113,6 +114,32 @@ async function mount(root) {
           list.map((f) => h('div', { class: 'feat-ref' }, h('div', { class: 'row between nowrap' }, h('b', {}, f.name), page(f.page)),
             f.prereq && h('div', { class: 'tiny gold' }, f.prereq), h('p', {}, f.summary))));
       }))));
+    }
+
+    // ---------------------------------------------------------------- conjuros
+    if (state.section === 'conjuros' || (state.section === 'todo' && state.q)) {
+      const list = ref.spells.filter((s) => match(s.name, s.school, s.classes, s.damage)
+        && (state.level === '' || s.level === Number(state.level)) && (!state.cls || s.classes.includes(state.cls))
+        && (!state.conc || s.concentration) && (!state.ritual || s.ritual));
+      const lvl = (n) => (n ? `Nivel ${n}` : 'Truco');
+      blocks.push(panel(`Conjuros (${list.length})`, 'wand', 'wide',
+        state.section === 'conjuros' && h('div', { class: 'row spell-filters' },
+          selectEl([['', 'Todos los niveles'], ...[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [n, lvl(n)])], state.level, (v) => { state.level = v; draw(); }, { class: 'mini-sel', 'aria-label': 'Nivel' }),
+          selectEl([['', 'Todas las clases'], ...ref.classes.filter((c) => c.caster).map((c) => [c.name, c.name])], state.cls, (v) => { state.cls = v; draw(); }, { class: 'mini-sel', 'aria-label': 'Clase' }),
+          h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: state.conc, onchange: (e) => { state.conc = e.target.checked; draw(); } }), 'Concentración'),
+          h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: state.ritual, onchange: (e) => { state.ritual = e.target.checked; draw(); } }), 'Ritual')),
+        h('div', { class: 'table-scroll' }, h('table', { class: 'ref-table spell-table' },
+          h('thead', {}, h('tr', {}, ['Conjuro', 'Nivel', 'Tiempo', 'Alcance', 'Duración', 'Efecto', ''].map((t) => h('th', {}, t)))),
+          h('tbody', {}, list.slice(0, state.section === 'conjuros' ? 400 : 30).map((s) => h('tr', {},
+            h('td', {}, h('b', {}, s.name), s.concentration && h('span', { class: 'chip tiny-chip', 'data-tip': 'Concentración' }, 'C'), s.ritual && h('span', { class: 'chip tiny-chip', 'data-tip': 'Ritual' }, 'R'),
+              h('div', { class: 'tiny muted' }, `${s.school} · ${s.classes.join(', ')}`)),
+            h('td', {}, lvl(s.level)), h('td', {}, s.time), h('td', {}, s.range), h('td', { class: 'small' }, s.duration),
+            h('td', { class: 'small' }, [s.save && `Salv. ${ABILITY_SHORT[{ Fuerza: 'fue', Destreza: 'des', 'Constitución': 'con', Inteligencia: 'int', 'Sabiduría': 'sab', Carisma: 'car' }[s.save]]}`,
+              s.attack && (s.attack === 'cac' ? 'Ataque c. a c.' : 'Ataque a distancia'), s.cost && `Material ${s.cost}`].filter(Boolean).join(' · '),
+              (s.damage || s.heal) && h('button', { class: 'btn xs', type: 'button', onclick: () => roll((s.damage || s.heal).split(' ')[0], { label: `${s.name}: ${s.damage ? 'daño' : 'curación'}` }) },
+                '🎲 ', s.damage || `${s.heal} curación`)),
+            h('td', {}, page(s.page))))))),
+        h('p', { class: 'tiny muted' }, 'Datos de cada conjuro del Manual del Jugador 2024; la descripción completa está en la página indicada.')));
     }
 
     // ------------------------------------------------------------------ equipo

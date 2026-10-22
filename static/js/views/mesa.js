@@ -13,6 +13,7 @@ import { ambience } from '../core/ambience.js';
 import { sfx } from '../core/sfx.js';
 import { roll, onRoll, describe } from '../core/dice.js';
 import { createBattleMap } from '../core/battlemap.js';
+import { groupCheck, partyScreen } from '../core/party.js';
 import { loadScenes, findScene, ensureBoard, boardTokens, autoPlace, placeNear } from '../core/board.js';
 
 export default { id: 'mesa', title: 'Mesa', icon: 'mesa', hint: 'Mapa o tablero de combate, iniciativa y dados · tecla 1', mount };
@@ -28,6 +29,7 @@ async function mount(root) {
     combat = await api.get(`/api/combats/${settings.activeCombat}`).catch(() => null);
     if (combat?.status !== 'active') combat = null;
   }
+  combat?.combatants.forEach((x) => { const ch = chars.find((c) => c.id === x.charId); if (ch) x.look = ch.look; }); // aspecto al día
   const state = {
     settings, maps, chars, combat, rolls,
     map: maps.find((m) => m.id === (settings.tableMap || settings.shownMap)) || null,
@@ -68,7 +70,7 @@ async function mount(root) {
   let bm = null;
   const battleScene = () => (state.combat ? findScene(state.combat.board?.scene, scenes) : null);
   const inBattle = () => !!battleScene() && state.view !== 'mapa';
-  const refreshBattle = () => { if (bm && inBattle()) bm.setTokens(boardTokens(state.combat, { player: state.player })); };
+  const refreshBattle = () => { if (bm && inBattle()) { bm.setTokens(boardTokens(state.combat, { player: state.player })); bm.setFog(state.combat.board?.fog); } };
   function ensureBm() {
     if (bm) return bm;
     bm = createBattleMap({
@@ -108,6 +110,7 @@ async function mount(root) {
         refreshBattle();
       },
       onBackgroundClick: () => hidePopover(),
+      onFog: (f) => { ensureBoard(state.combat).fog = f; saveCombat(state.combat); },
     });
     board.prepend(bm.el);
     return bm;
@@ -188,7 +191,7 @@ async function mount(root) {
     const ch = t.charId ? state.chars.find((c) => c.id === t.charId) : null;
     const src = cmb || ch || t;
     return {
-      name: src.name ?? t.name, color: src.color ?? t.color, portrait: src.portrait ?? t.portrait, type: src.type ?? t.type,
+      name: src.name ?? t.name, color: src.color ?? t.color, portrait: src.portrait ?? t.portrait, look: ch?.look ?? src.look, type: src.type ?? t.type,
       hp: src.hp, maxHp: src.maxHp, tempHp: src.tempHp || 0, ac: src.ac,
       conditions: cmb ? cmb.conditions.map((c) => c.name) : (ch?.conditions || []),
       hidden: !!cmb?.hidden, current: !!(cmb && state.combat && combatRules.current(state.combat) === cmb), cmb, ch,
@@ -602,7 +605,10 @@ async function mount(root) {
     const party = state.chars.filter((c) => c.type === 'jugador');
     clear(partyEl,
       h('div', { class: 'panel-head' }, h('h3', {}, icon('crown'), 'El grupo'),
-        h('div', { class: 'actions dm-only' }, state.map && party.length > 0 && h('button', { class: 'btn xs', type: 'button', 'data-tip': 'Pon a todo el grupo sobre el mapa',
+        h('div', { class: 'actions dm-only' },
+          party.length > 0 && h('button', { class: 'btn icon xs', type: 'button', 'aria-label': 'Prueba de grupo', 'data-tip': 'Prueba de grupo: todos tiran contra una CD', onclick: () => groupCheck(state.chars) }, icon('dados', 14)),
+          party.length > 0 && h('button', { class: 'btn icon xs', type: 'button', 'aria-label': 'Pantalla del máster', 'data-tip': 'Pantalla del máster: CA, pasivas, salvaciones…', onclick: () => partyScreen(state.chars) }, icon('shield', 14)),
+          state.map && party.length > 0 && h('button', { class: 'btn xs', type: 'button', 'data-tip': 'Pon a todo el grupo sobre el mapa',
           onclick: () => {
             if (inBattle()) {
               const n = autoPlace(state.combat, battleScene(), scenes.cat, state.combat.combatants.filter((x) => x.type === 'jugador').map((x) => x.cid));
@@ -658,8 +664,8 @@ async function mount(root) {
       ch && h('div', { class: 'dock-quick' },
         h('button', { class: 'btn xs', type: 'button', onclick: () => doRoll(`1d20${fmtMod(cmb?.initBonus ?? initBonus(ch))}`, 'Iniciativa', state.mode) }, icon('bolt', 13), 'Iniciativa'),
         (ch.attacks || []).slice(0, 4).map((a) => [
-          h('button', { class: 'btn xs', type: 'button', onclick: () => doRoll(`1d20${fmtMod(Number(a.bonus) || 0)}`, a.name, state.mode) }, icon('sword', 13), `${a.name} ${fmtMod(Number(a.bonus) || 0)}`),
-          a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => doRoll(a.damage, `Daño de ${a.name}`) }, a.damage),
+          !a.save && h('button', { class: 'btn xs', type: 'button', onclick: () => doRoll(`1d20${fmtMod(Number(a.bonus) || 0)}`, a.name, state.mode) }, icon('sword', 13), `${a.name} ${fmtMod(Number(a.bonus) || 0)}`),
+          a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => doRoll(a.damage, `Daño de ${a.name}`) }, a.save ? `${a.name} · ${a.save} · ${a.damage}` : a.damage),
         ])));
   }
 

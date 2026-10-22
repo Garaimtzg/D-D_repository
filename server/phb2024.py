@@ -4,6 +4,11 @@ Contiene los datos de juego (nombres oficiales, números y tablas) y resúmenes 
 para esta app. Para el texto completo de cada regla, la app remite a la página del manual (MdJ p. X).
 Las distancias van en metros y las monedas usan las abreviaturas de 2024 (pp = plata, ppt = platino).
 """
+import json
+from pathlib import Path
+
+# Datos de los conjuros (sin su texto) sacados del PDF con tools/extract_spells.py
+SPELLS = json.loads((Path(__file__).with_name("spells2024.json")).read_text(encoding="utf-8"))
 
 ABILITIES = [
     {"key": "fue", "name": "Fuerza", "short": "FUE"},
@@ -666,4 +671,5 @@ def data() -> dict:
         "languages": LANGUAGES,
         "slots": {"full": FULL_SLOTS, "half": HALF_SLOTS, "pact": PACT_SLOTS},
         "xp_budget": XP_BUDGET,
+        "spells": SPELLS,
     }

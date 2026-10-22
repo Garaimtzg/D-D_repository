@@ -109,6 +109,44 @@ class Phb2024Tests(unittest.TestCase):
         self.assertEqual([c["key"] for c in self.d["coins"]], ["pc", "pp", "pe", "po", "ppt"])
 
 
+class SpellTests(unittest.TestCase):
+    def test_spells_from_the_manual(self):
+        from server import phb2024
+        spells = {s["name"]: s for s in phb2024.SPELLS}
+        self.assertGreater(len(spells), 380)
+        self.assertEqual(len(spells), len(phb2024.SPELLS))  # sin duplicados
+        fb = spells["Bola de fuego"]
+        self.assertEqual((fb["level"], fb["save"], fb["damage"], fb["range"]), (3, "Destreza", "8d6 fuego", "45 m"))
+        self.assertTrue(spells["Bendición"]["concentration"])
+        classes = {c["name"] for c in phb2024.CLASSES}
+        for s in phb2024.SPELLS:
+            self.assertTrue(0 <= s["level"] <= 9 and s["time"] and s["range"] and s["duration"], s["name"])
+            self.assertLessEqual(set(s["classes"]), classes, s["name"])
+            self.assertTrue(239 <= s["page"] <= 343, s["name"])
+
+
+class BestiaryTests(unittest.TestCase):
+    def test_srd_bestiary_in_spanish(self):
+        from server.monsters import MONSTERS
+        self.assertGreater(len(MONSTERS), 300)
+        names = [m["name"] for m in MONSTERS]
+        self.assertEqual(len(names), len(set(names)))
+        red = next(m for m in MONSTERS if m["name"] == "Dragón rojo adulto")
+        self.assertEqual((red["ac"], red["hp"], red["cr"], red["size"]), (19, 256, "17", "Enorme"))
+        breath = next(a for a in red["attacks"] if a["name"].startswith("Aliento de fuego"))
+        self.assertEqual((breath["save"], breath["damage"]), ("DES CD 21", "17d6"))
+        english = ("Bite", "Claw", "Multiattack", "damage", "Saving Throw", " ft.")
+        for m in MONSTERS:
+            self.assertEqual(set(m["abilities"]), {"fue", "des", "con", "int", "sab", "car"}, m["name"])
+            self.assertIn(m["cr"], rules.CR_XP, m["name"])
+            self.assertLessEqual(set(m["saves"]), {"fue", "des", "con", "int", "sab", "car"}, m["name"])
+            for a in m["attacks"]:
+                self.assertTrue(isinstance(a["bonus"], int) or a.get("save"), (m["name"], a))
+            text = m["traits"] + " ".join(a["name"] + a["notes"] for a in m["attacks"])
+            for word in english:
+                self.assertNotIn(word, text, m["name"])
+
+
 class GeneratorTests(unittest.TestCase):
     def test_all_generators_return_text(self):
         for kind in generators.GENERATORS:

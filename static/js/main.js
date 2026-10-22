@@ -16,9 +16,10 @@ import tools from './views/tools.js';
 import notes from './views/notes.js';
 import music from './views/music.js';
 import reference from './views/reference.js';
+import games from './views/games.js';
 
 const MAIN = [mesa, combat, scenes, characters, maps, dice];
-const EXTRA = [notes, tools, music, reference];
+const EXTRA = [notes, tools, music, games, reference];
 const VIEWS = [...MAIN, ...EXTRA];
 
 const rail = document.getElementById('rail');

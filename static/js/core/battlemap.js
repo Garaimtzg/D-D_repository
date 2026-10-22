@@ -1109,7 +1109,8 @@ export function createBattleMap(opts = {}) {
   const glowCv = h('canvas', { class: 'bm-glow' });
   const overCv = h('canvas', { class: 'bm-over' });
   const tokensEl = h('div', { class: 'bm-tokens' });
-  const layer = h('div', { class: 'bm-layer' }, terrainCv, lightCv, glowCv, overCv, tokensEl);
+  const fogCv = h('canvas', { class: 'bm-fog' });
+  const layer = h('div', { class: 'bm-layer' }, terrainCv, lightCv, glowCv, fogCv, overCv, tokensEl);
   const vp = h('div', { class: 'bm-viewport', tabindex: 0, 'aria-label': 'Tablero de combate' }, layer);
   const hud = h('div', { class: 'bm-hud' });
   const bar = h('div', { class: 'bm-bar' });
@@ -1194,6 +1195,7 @@ export function createBattleMap(opts = {}) {
     sizeCanvas(overCv, 1);
     sizeCanvas(lightCv, 0.25);
     sizeCanvas(glowCv, 0.25);
+    sizeCanvas(fogCv, 0.5);
     bgImg = null;
     if (sc.bg) {
       const img = new Image();
@@ -1215,8 +1217,53 @@ export function createBattleMap(opts = {}) {
     lctx.setTransform(0.25, 0, 0, 0.25, 0, 0);
     gctx.setTransform(0.25, 0, 0, 0.25, 0, 0);
     drawLight(lctx, gctx, scene, cat, S);
+    drawFog();
     renderTokens();
     drawOverlay();
+  }
+
+  // ------------------------------------------------------------- niebla de guerra
+  // fog = { on, seen: Set de casillas reveladas }. El máster la ve translúcida; los jugadores, negra.
+  let fog = null;
+  let fogMode = 'revelar';
+  const fogged = (c, r) => fog?.on && !fog.seen.has(idx(c, r));
+  function drawFog() {
+    const ctx = fogCv.getContext('2d');
+    ctx.setTransform(0.5, 0, 0, 0.5, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    fogCv.classList.toggle('dm', !!o.dm);
+    if (!scene || !fog?.on) return;
+    ctx.fillStyle = o.dm ? 'rgba(8,10,22,.5)' : '#05060a';
+    for (let r = 0; r < scene.rows; r++) for (let c = 0; c < scene.cols; c++) if (fogged(c, r)) ctx.fillRect(c * S - 1, r * S - 1, S + 2, S + 2);
+  }
+  // Lo que ve una ficha: casillas a 12 m (8 casillas) sin un muro por medio.
+  function revealFrom(t, R = 8) {
+    const n = sizeCells(t.size);
+    const cx = t.c + (n - 1) / 2; const cy = t.r + (n - 1) / 2;
+    const wall = (c, r) => cat.T[scene.tiles[idx(c, r)]]?.kind === 'muro';
+    for (let r = Math.floor(cy - R); r <= cy + R; r++) {
+      for (let c = Math.floor(cx - R); c <= cx + R; c++) {
+        if (!inside(c, r) || Math.hypot(c - cx, r - cy) > R + 0.5) continue;
+        const steps = Math.ceil(Math.max(Math.abs(c - cx), Math.abs(r - cy)) * 2) || 1;
+        let open = true;
+        for (let k = 1; k < steps && open; k++) {
+          const x = Math.round(cx + ((c - cx) * k) / steps); const y = Math.round(cy + ((r - cy) * k) / steps);
+          if ((x !== c || y !== r) && wall(x, y)) open = false;
+        }
+        if (open) fog.seen.add(idx(c, r));
+      }
+    }
+  }
+  function revealParty() { if (fog?.on) tokens.filter((t) => t.type === 'jugador' && t.c != null).forEach((t) => revealFrom(t)); }
+  function commitFog() { drawFog(); renderTokens(); o.onFog?.({ on: !!fog?.on, seen: [...(fog?.seen || [])] }); }
+  function paintFog(c, r) {
+    let changed = false;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!inside(c + dc, r + dr)) continue;
+      const k = idx(c + dc, r + dr);
+      if (fogMode === 'revelar' ? !fog.seen.has(k) : fog.seen.has(k)) { changed = true; if (fogMode === 'revelar') fog.seen.add(k); else fog.seen.delete(k); }
+    }
+    if (changed) drawFog();
   }
 
   // ---------------------------------------------------------------------- fichas
@@ -1239,7 +1286,7 @@ export function createBattleMap(opts = {}) {
         tokensEl.append(tel);
         tokenEls.set(t.id, tel);
       }
-      const key = JSON.stringify([t.name, t.color, t.portrait, t.hp, t.maxHp, t.tempHp, t.showHp, n, t.conds, t.type, t.conc]);
+      const key = JSON.stringify([t.name, t.color, t.portrait, t.look, t.hp, t.maxHp, t.tempHp, t.showHp, n, t.conds, t.type, t.conc]);
       if (tel.dataset.key !== key) {
         tel.dataset.key = key;
         clear(tel, token(t, { size: Math.round(n * S * 0.84), hp: t.hp, max: t.maxHp, showHp: t.showHp !== false && t.maxHp != null }),
@@ -1247,6 +1294,8 @@ export function createBattleMap(opts = {}) {
           t.conds?.length > 0 && h('span', { class: 'bm-conds' }, t.conds.map((k) => condLabel(k).split(' ')[0]).join('')),
           t.conc && h('span', { class: 'bm-conc' }, '🔮'));
       }
+      const unseen = !o.dm && t.type !== 'jugador' && fog?.on && Array.from({ length: n * n }, (_, k) => [t.c + (k % n), t.r + Math.floor(k / n)]).every(([x, y]) => fogged(x, y));
+      tel.hidden = unseen;
       tel.className = `bm-token ${t.type || ''} ${t.current ? 'current' : ''} ${t.id === selected ? 'selected' : ''} ${t.hidden ? 'is-hidden' : ''} ${t.hp != null && t.hp <= 0 ? 'down' : ''} ${drag?.id === t.id ? 'dragging' : ''}`;
       tel.style.width = tel.style.height = `${n * S}px`;
       if (drag?.id !== t.id) {
@@ -1282,7 +1331,7 @@ export function createBattleMap(opts = {}) {
         const sp = speedCells(t) - (t.moved || 0) / METERS;
         for (let i = 0; i < dist.length; i++) {
           const d = dist[i];
-          if (!endable[i] || d === Infinity || d === 0) continue;
+          if (!endable[i] || d === Infinity || d === 0 || (!o.dm && fogged(i % cols, Math.floor(i / cols)))) continue;
           if (d <= sp) ctx.fillStyle = 'rgba(91,156,255,.2)';
           else if (d <= sp + speedCells(t)) ctx.fillStyle = 'rgba(91,156,255,.07)';
           else continue;
@@ -1446,7 +1495,7 @@ export function createBattleMap(opts = {}) {
         h('span', { class: hit.length ? 'warn' : '' }, hit.length ? `${hit.length} criatura${hit.length > 1 ? 's' : ''}: ${hit.map((t) => t.name).join(', ')}` : 'ninguna criatura'),
         !area.live && o.onArea && hit.length > 0 && h('button', { class: 'btn xs danger', type: 'button', onclick: () => o.onArea(hit.map((t) => t.id), { shape: area.shape, size: area.size }) }, icon('flame', 13), 'Daño en área'),
         !area.live && h('button', { class: 'btn xs ghost', type: 'button', onclick: clearArea }, icon('close', 13)));
-    } else if (hover && inside(hover.c, hover.r)) {
+    } else if (hover && inside(hover.c, hover.r) && (o.dm || !fogged(hover.c, hover.r))) {
       const code = scene.tiles[idx(hover.c, hover.r)];
       const T = cat.T[code];
       const prop = scene.props.find((p) => hover.c >= p.c && hover.c < p.c + (p.w || 1) && hover.r >= p.r && hover.r < p.r + (p.h || 1) && (o.dm || !p.hidden));
@@ -1485,12 +1534,23 @@ export function createBattleMap(opts = {}) {
       btn('ruler', 'ruler', 'Regla (R)', tool === 'ruler', () => setTool('ruler')),
       btn('area', 'flame', 'Área de efecto (A)', tool === 'area', () => setTool(tool === 'area' ? 'move' : 'area')),
       btn('range', 'compass', showRange ? 'Ocultar alcance de movimiento' : 'Mostrar alcance de movimiento', showRange, () => { showRange = !showRange; drawBar(); drawOverlay(); }),
+      o.dm && o.onFog && btn('fog', 'cloud', 'Niebla de guerra (N)', tool === 'fog', () => setTool(tool === 'fog' ? 'move' : 'fog')),
       h('span', { class: 'bm-sep' }), zoom);
     drawPop();
   }
   function drawPop() {
-    pop.hidden = tool !== 'area' || o.editable;
+    pop.hidden = !['area', 'fog'].includes(tool) || o.editable;
     if (pop.hidden) return;
+    if (tool === 'fog') {
+      clear(pop,
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!fog?.on, onchange: (e) => { fog ||= { on: false, seen: new Set() }; fog.on = e.target.checked; revealParty(); commitFog(); } }), h('b', {}, 'Niebla de guerra')),
+        h('div', { class: 'bm-shapes' }, [['revelar', 'Revelar'], ['ocultar', 'Ocultar']].map(([k, l]) => h('button', { class: `chip ${fogMode === k ? 'on' : ''}`, type: 'button', onclick: () => { fogMode = k; drawPop(); } }, l))),
+        h('div', { class: 'row nowrap' },
+          h('button', { class: 'btn xs', type: 'button', onclick: () => { if (!fog?.on) return; for (let i = 0; i < scene.cols * scene.rows; i++) fog.seen.add(i); commitFog(); } }, 'Revelar todo'),
+          h('button', { class: 'btn xs', type: 'button', onclick: () => { if (!fog?.on) return; fog.seen.clear(); revealParty(); commitFog(); } }, 'Cubrir todo')),
+        h('p', { class: 'tiny muted' }, 'Arrastra sobre el tablero para revelar u ocultar. Las fichas de los jugadores descubren solas lo que ven a 12 m (los muros tapan). En el modo jugadores la niebla es opaca y esconde a los enemigos.'));
+      return;
+    }
     clear(pop,
       h('div', { class: 'bm-shapes' }, AREA_SHAPES.map(([k, l]) => h('button', { class: `chip ${area.shape === k ? 'on' : ''}`, type: 'button', onclick: () => { area.shape = k; recomputeArea(); drawPop(); drawOverlay(); } }, l))),
       h('div', { class: 'row nowrap' }, h('span', { class: 'tiny muted' }, area.shape === 'esfera' || area.shape === 'emanacion' ? 'Radio' : area.shape === 'cubo' ? 'Lado' : 'Longitud'),
@@ -1632,6 +1692,7 @@ export function createBattleMap(opts = {}) {
         return;
       }
       if (tool === 'ruler') { ruler = { a: cell, b: cell, live: true }; sfx.tick(); drawOverlay(); return; }
+      if (tool === 'fog' && fog?.on && inside(cell.c, cell.r)) { edit.stroke = cell; paintFog(cell.c, cell.r); return; }
       if (tool === 'area') {
         if (area.shape === 'emanacion') {
           const t = tokenEl ? tokenById(tokenEl.dataset.id) : tokens.find((x) => x.c != null && covers({ c: x.c, r: x.r, w: sizeCells(x.size), h: sizeCells(x.size) }, cell.c, cell.r));
@@ -1710,6 +1771,10 @@ export function createBattleMap(opts = {}) {
       if (ruler.b.c !== cell.c || ruler.b.r !== cell.r) { ruler.b = cell; sfx.tick(); drawOverlay(); }
       return;
     }
+    if (!o.editable && tool === 'fog' && edit.stroke && pointers.has(e.pointerId)) {
+      if (edit.stroke.c !== cell.c || edit.stroke.r !== cell.r) { lineCells(edit.stroke, cell).forEach((q) => paintFog(q.c, q.r)); edit.stroke = cell; }
+      return;
+    }
     if (area.live && area.origin) {
       if (area.shape === 'esfera') area.origin = { x: Math.round(p.x), y: Math.round(p.y) }; else area.aim = p;
       recomputeArea();
@@ -1755,6 +1820,7 @@ export function createBattleMap(opts = {}) {
           t.c = d.to.c; t.r = d.to.r;
           rangeCache = null;
           sfx.step();
+          if (fog?.on && t.type === 'jugador') { revealFrom(t); commitFog(); }
           o.onMove?.(t.id, t.c, t.r, meters, d.cost == null);
         }
       }
@@ -1763,6 +1829,7 @@ export function createBattleMap(opts = {}) {
       return;
     }
     if (ruler?.live) { ruler.live = false; drawOverlay(); return; }
+    if (!o.editable && tool === 'fog' && edit.stroke) { edit.stroke = null; commitFog(); return; }
     if (area.live) {
       area.live = false;
       recomputeArea();
@@ -1814,6 +1881,7 @@ export function createBattleMap(opts = {}) {
     else if (e.key === 'r' || e.key === 'R') setTool(tool === 'ruler' ? 'move' : 'ruler');
     else if (e.key === 'a' || e.key === 'A') setTool(tool === 'area' ? 'move' : 'area');
     else if (e.key === 'm' || e.key === 'M') setTool('move');
+    else if ((e.key === 'n' || e.key === 'N') && o.dm && o.onFog) setTool(tool === 'fog' ? 'move' : 'fog');
   });
   vp.addEventListener('keyup', (e) => { if (e.key === ' ') spaceDown = false; });
 
@@ -1852,7 +1920,8 @@ export function createBattleMap(opts = {}) {
     get scene() { return scene; },
     redraw,
     setTokens,
-    setDm(v) { if (o.dm !== v) { o.dm = v; redraw(); } },
+    setDm(v) { if (o.dm !== v) { o.dm = v; redraw(); drawBar(); } },
+    setFog(f) { fog = f ? { on: !!f.on, seen: new Set(f.seen || []) } : null; drawFog(); renderTokens(); if (tool === 'fog') drawPop(); },
     setTool,
     get tool() { return tool; },
     setEdit(patch) { Object.assign(edit, patch); drawOverlay(); },

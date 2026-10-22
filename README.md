@@ -27,6 +27,11 @@ Para cerrar la mesa, cierra la ventana negra de la consola.
   de los enemigos, los enemigos ocultos, las trampas del tablero y las tiradas secretas. Sal con `Esc`.
 - En la bandeja, elige **quién tira**: los dados toman el color de su ficha y aparecen sus ataques.
 - `Mayús + clic` sobre el mapa hace una onda para señalar un punto a toda la mesa.
+- **Prueba de grupo** (en el panel del grupo de la Mesa o en Personajes): todos tiran la misma habilidad o salvación contra una CD;
+  si al menos la mitad la supera, el grupo tiene éxito. La **pantalla del máster** reúne CA, PG, pasivas, CD de conjuros y salvaciones.
+- **Niebla de guerra** en el tablero (botón de la nube o tecla `N`): las fichas de los jugadores descubren lo que ven a 12 m
+  (los muros tapan) y el máster revela u oculta zonas arrastrando. En el modo jugadores es opaca y esconde a los enemigos.
+- En la ficha, la lista de **conjuros** permite **lanzarlos**: gasta el espacio, marca la concentración y tira ataque y daño.
 
 ### Atajos
 
@@ -55,7 +60,8 @@ Para cerrar la mesa, cierra la ventana negra de la consola.
 | **Notas** | Diario de campaña con aspecto de libro y tablón de misiones con notas que se arrastran entre columnas. |
 | **Herramientas** | Copia de la campaña (.zip), generadores (PNJ, tabernas, botín, ganchos, clima…), calculadora de encuentros, reloj, temporizadores, narración, tablas aleatorias propias, monedas, botín, viajes y dados para el móvil. |
 | **Música** | Tus canciones por escenas (taberna, combate, jefe…), disco que gira y visualizador; ambientes sintetizados sin ficheros: lluvia, viento, hoguera, cueva y taberna. |
-| **Reglas** | Manual del Jugador 2024 con buscador: estados, acciones, cuadrícula y áreas, clases, especies, trasfondos, dotes, armas con maestrías, armaduras, monedas y tablas de PX. Resúmenes propios con la página del manual. |
+| **Minijuegos** | Para tabernas y descansos, con el muñeco de cada jugador: el cerdo (dados 3D), carrera de bichos con apuestas, ganzúa, pulso a dos teclas y acertijos. |
+| **Reglas** | Manual del Jugador 2024 con buscador: estados, acciones, cuadrícula y áreas, clases, especies, trasfondos, dotes, **los 388 conjuros** (nivel, tiempo, alcance, duración, concentración, salvación y daño, filtrables por clase y nivel), armas con maestrías, armaduras, monedas y tablas de PX. Resúmenes propios con la página del manual. |
 
 ### Sonido
 
@@ -104,6 +110,8 @@ static/
   js/views/                una sección por fichero
 movil/                     fuentes de la página del móvil
 tools/build_movil.py       genera static/dados-movil.html
+tools/extract_spells.py    saca los datos de los conjuros del PDF del Manual (server/spells2024.json)
+tools/build_bestiary.py    traduce el bestiario del SRD 5.2.1 (server/monsters2024.json)
 tests/                     pruebas
 ```
 
@@ -115,4 +123,11 @@ python tools/build_movil.py
 python -m unittest discover tests
 ```
 
-El bestiario usa contenido del SRD 5.1 (licencia CC-BY-4.0, Wizards of the Coast).
+## Licencias
+
+Este trabajo incluye material del System Reference Document 5.2.1 («SRD 5.2.1») de Wizards of the Coast LLC,
+disponible en https://www.dndbeyond.com/srd. El SRD 5.2.1 tiene licencia Creative Commons Reconocimiento 4.0
+Internacional, disponible en https://creativecommons.org/licenses/by/4.0/legalcode. El bestiario (323 monstruos y
+animales) está traducido al castellano y resumido a partir de ese documento con `tools/build_bestiary.py`.
+
+Las reglas, clases y conjuros del Manual del Jugador 2024 se resumen con palabras propias y remiten a la página del manual.

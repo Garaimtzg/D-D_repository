@@ -1,6 +1,7 @@
 // Reglas de D&D (Manual del Jugador 2024) en el cliente. Los datos del manual llegan del servidor
 // una sola vez (reference()) y estas funciones calculan la ficha: CA, PG, espacios, ataques…
 import { api } from './api.js';
+import { randomLook } from './dom.js';
 
 export const TYPES = [
   ['jugador', 'Jugador'],
@@ -175,17 +176,18 @@ export function newCharacter(type = 'jugador', extra = {}) {
     speed: 9, initBonus: '',
     abilities: { fue: 10, des: 10, con: 10, int: 10, sab: 10, car: 10 },
     saves: [], skills: {}, feats: [], masteries: [], weaponTraining: [], armorTraining: [], tools: '',
-    attacks: [], spellAbility: '', autoSlots: false, slots: Array.from({ length: 9 }, () => ({ max: 0, used: 0 })), spells: '',
+    attacks: [], spellList: [], spellAbility: '', autoSlots: false, slots: Array.from({ length: 9 }, () => ({ max: 0, used: 0 })), spells: '',
     resources: [], inventory: [], coins: { pc: 0, pp: 0, pe: 0, po: 0, ppt: 0 },
     features: '', notes: '', languages: '',
     conditions: [], exhaustion: 0, inspiration: false, deathSaves: { ok: 0, ko: 0 },
+    look: type === 'enemigo' ? null : randomLook(false), // cara sencilla; los complementos se eligen en la ficha
     ...extra,
   };
 }
 
 // Ficha guardada con una versión anterior de la app: se completa y se pasa a las unidades de 2024.
 export function migrateCharacter(c) {
-  const out = { ...newCharacter(c.type), ...c };
+  const out = { ...newCharacter(c.type), look: null, ...c }; // sin cara al azar: las fichas antiguas siguen con sus iniciales
   if (c.coins && 'pa' in c.coins) { // antes: pa = plata, pp = platino
     out.coins = { pc: c.coins.pc || 0, pp: c.coins.pa || 0, pe: c.coins.pe || 0, po: c.coins.po || 0, ppt: c.coins.pp || 0 };
   }
@@ -198,8 +200,9 @@ export function migrateCharacter(c) {
 export function fromMonster(m) {
   return newCharacter('enemigo', {
     name: m.name, cr: m.cr, creature: m.creature, ac: m.ac, hp: m.hp, maxHp: m.hp, hpDice: m.hpDice,
-    speed: m.speed, size: m.size || 'Mediano', abilities: { ...m.abilities }, attacks: m.attacks.map((a) => ({ ...a, notes: '' })),
-    features: m.traits,
+    speed: m.speed, size: m.size || 'Mediano', abilities: { ...m.abilities }, attacks: m.attacks.map((a) => ({ notes: '', ...a })),
+    saves: [...(m.saves || [])], initBonus: m.init ?? '', alignment: m.alignment || '',
+    features: m.traits, notes: m.en ? `${m.en} · SRD 5.2.1 (CC-BY-4.0)` : '',
   });
 }
 
@@ -213,7 +216,7 @@ export function combatantFrom(ch, suffix = '') {
     init: null, initBonus: initBonus(ch), hp: ch.hp ?? ch.maxHp ?? 1, maxHp: ch.maxHp ?? ch.hp ?? 1,
     tempHp: ch.tempHp || 0, ac: ch.ac ?? 10, cr: ch.cr ?? '', attacks: (ch.attacks || []).map((a) => ({ ...a })),
     saves: Object.fromEntries(ABILITY_KEYS.map((k) => [k, ch.abilities ? saveBonus(ch, k) : 0])),
-    exhaustion: ch.exhaustion || 0, size: ch.size || 'Mediano', speed: Number(ch.speed) || 9,
+    exhaustion: ch.exhaustion || 0, size: ch.size || 'Mediano', speed: Number(ch.speed) || 9, look: ch.look || null,
     conditions: (ch.conditions || []).map((name) => ({ name, rounds: null })),
     concentration: false, deathSaves: { ok: 0, ko: 0 }, hidden: false, notes: '',
   };

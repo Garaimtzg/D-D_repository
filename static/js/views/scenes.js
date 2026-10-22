@@ -64,7 +64,7 @@ async function mount(root, [sceneId]) {
       let combat = choice === 'new' ? await api.create('combats', { ...newCombat(state.combats.length + 1), name: `Combate en ${sc.name}` }) : state.combats.find((c) => c.id === choice);
       if (!combat) return;
       const board = ensureBoard(combat);
-      if (board.scene !== sc.id) { board.pos = {}; board.moved = {}; }
+      if (board.scene !== sc.id) { board.pos = {}; board.moved = {}; board.fog = null; }
       board.scene = sc.id;
       autoPlace(combat, sc, cat);
       combat = await api.update('combats', combat);

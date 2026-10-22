@@ -2,8 +2,9 @@
 // La galería muestra cartas con retrato; la ficha imita una hoja de personaje en pergamino.
 import { api, debounced } from '../core/api.js';
 import {
-  h, clear, icon, bind, field, selectEl, segmented, searchBox, hpBar, shield, initials, modal, confirmDialog,
-  toast, toastError, pickFiles, floatNum, prefs, bigBanner,
+  h, clear, icon, bind, field, selectEl, segmented, searchBox, hpBar, shield, modal, confirmDialog,
+  toast, toastError, pickFiles, floatNum, prefs, bigBanner, avatar, token,
+  SKINS, HAIR_COLORS, HAIRS, EXPRESSIONS, LOOK_SLOTS, LOOK_NAMES, lookPiece, randomLook, hasExtras,
 } from '../core/dom.js';
 import {
   TYPES, TYPE_LABEL, TYPE_COLOR, TYPE_ICON, CONDITION_ICON, condLabel, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, CRS, COINS, reference, monsters,
@@ -15,6 +16,7 @@ import { openCreator, SPECIES_RESOURCES } from './creator.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
 import { sortInitiative } from '../core/combat.js';
+import { groupCheck, partyScreen } from '../core/party.js';
 
 export default { id: 'personajes', title: 'Personajes', icon: 'personajes', hint: 'Jugadores, personajes de la historia y enemigos · tecla 4', mount };
 
@@ -77,14 +79,17 @@ async function mount(root, [selId]) {
         h('div', { class: 'row party-actions' }, h('span', { class: 'eyebrow', style: { margin: 0 } }, 'Grupo'),
           h('button', { class: 'btn sm', type: 'button', onclick: () => partyRest('corto'), 'data-tip': 'Recupera los recursos de descanso corto' }, icon('hourglass', 15), 'Descanso corto'),
           h('button', { class: 'btn sm', type: 'button', onclick: () => partyRest('largo'), 'data-tip': 'PG al máximo, espacios de conjuro y recursos' }, icon('moon', 15), 'Descanso largo'),
-          h('button', { class: 'btn sm', type: 'button', onclick: awardXp }, icon('star', 15), 'Dar experiencia'))),
+          h('button', { class: 'btn sm', type: 'button', onclick: awardXp }, icon('star', 15), 'Dar experiencia'),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => groupCheck(state.chars), 'data-tip': 'Todos tiran la misma habilidad o salvación contra una CD' }, icon('dados', 15), 'Prueba de grupo'),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => partyScreen(state.chars), 'data-tip': 'CA, PG, pasivas, CD de conjuros y salvaciones de todos' }, icon('shield', 15), 'Pantalla del máster'))),
       grid);
     drawGrid();
   }
 
   function card(c) {
-    const banner = h('div', { class: 'cc-banner', style: { '--c': c.color, backgroundImage: c.portrait ? `url("${c.portrait}")` : null } },
-      !c.portrait && h('span', { class: 'cc-initials' }, initials(c.name)));
+    const dressed = !c.portrait || hasExtras(c.look); // con complementos se ve el muñeco; si no, el retrato a todo lo ancho
+    const banner = h('div', { class: `cc-banner ${dressed ? 'dressed' : ''}`, style: { '--c': c.color, backgroundImage: dressed ? null : `url("${c.portrait}")` } },
+      dressed && avatar(c, 'xl'));
     const el = h('article', { class: `char-card ${c.type} ${c.hp <= 0 ? 'down' : ''}`, tabindex: 0, style: { '--c': c.color },
       onclick: () => open(c), onkeydown: (e) => { if (e.key === 'Enter') open(c); } },
     banner,
@@ -127,14 +132,14 @@ async function mount(root, [selId]) {
     const all = await monsters();
     const grid = h('div', { class: 'bestiary' });
     let q = '';
-    const draw = () => clear(grid, all.filter((m) => m.name.toLowerCase().includes(q)).map((m) => h('button', {
+    const draw = () => clear(grid, all.filter((m) => `${m.name} ${m.en || ''} ${m.creature}`.toLowerCase().includes(q)).map((m) => h('button', {
       class: 'beast', type: 'button', onclick: () => { grid.closest('.modal-back').remove(); create(fromMonster(m)); },
     }, h('span', { class: 'beast-cr' }, `VD ${m.cr}`), h('b', {}, m.name), h('span', { class: 'tiny muted' }, m.creature),
     h('span', { class: 'beast-stats' }, h('span', {}, icon('shield', 13), m.ac), h('span', {}, icon('heart', 13), m.hp), h('span', {}, icon('sword', 13), m.attacks.length)))));
     draw();
     modal('Bestiario', h('div', { class: 'stack' },
-      searchBox('Buscar monstruo…', (v) => { q = v.toLowerCase(); draw(); }),
-      grid, h('p', { class: 'tiny muted' }, 'Contenido del SRD 5.1 (CC-BY-4.0). Al elegir uno se crea una ficha de enemigo que puedes editar.')),
+      searchBox('Buscar por nombre o tipo (dragón, no muerto, bestia…)', (v) => { q = v.toLowerCase(); draw(); }),
+      grid, h('p', { class: 'tiny muted' }, `${all.length} criaturas del SRD 5.2.1 de Wizards of the Coast (CC-BY-4.0), traducidas al castellano. Al elegir una se crea una ficha de enemigo que puedes editar.`)),
     [], { wide: true, iconName: 'book' });
   }
 
@@ -215,19 +220,8 @@ async function mount(root, [selId]) {
   const sbox = (label, content, tip) => h('div', { class: 'sbox', 'data-tip': tip }, content, h('span', { class: 'sbox-label' }, label));
 
   function headerSection(c) {
-    const portrait = h('button', { class: 'portrait', type: 'button', style: { '--c': c.color, backgroundImage: c.portrait ? `url("${c.portrait}")` : null }, 'data-tip': 'Cambiar el retrato' },
-      !c.portrait && h('span', {}, initials(c.name)), h('span', { class: 'portrait-edit' }, icon('image', 16)));
-    portrait.addEventListener('click', async () => {
-      const [file] = await pickFiles('image/*');
-      if (!file) return;
-      try {
-        const up = await api.upload(file);
-        await api.removeUpload(c.portrait);
-        c.portrait = up.url;
-        save(c);
-        refresh();
-      } catch (e) { toastError(e); }
-    });
+    const portrait = h('button', { class: 'portrait', type: 'button', 'data-tip': 'Cambiar el aspecto: cara, sombrero, ropa graciosa…', onclick: () => lookDialog(c) },
+      avatar(c, 'xxl'), h('span', { class: 'portrait-edit' }, icon('sparkle', 16)));
 
     const sp = speciesOf(c);
     const spSel = selectEl([['', '— Especie —'], ...ref.species.map((s) => [s.id, s.name])], sp?.id || '', (v) => setSpecies(c, v), { 'aria-label': 'Especie' });
@@ -435,6 +429,60 @@ async function mount(root, [selId]) {
     bigBanner(`¡Nivel ${to}!`, c.name, 'gold', 'sparkle');
   }
 
+  // ------------------------------------------------------------- aspecto (muñeco)
+  async function uploadPortrait(c) {
+    const [file] = await pickFiles('image/*');
+    if (!file) return;
+    try {
+      const up = await api.upload(file);
+      await api.removeUpload(c.portrait);
+      c.portrait = up.url;
+      save(c);
+    } catch (e) { toastError(e); }
+  }
+
+  // Vestir al personaje: cara sencilla (piel, pelo, expresión) y complementos graciosos.
+  async function lookDialog(c) {
+    c.look ||= randomLook(false);
+    const L = c.look;
+    L.base ||= 'cara';
+    const preview = h('div', { class: 'look-preview' });
+    const panel = h('div', { class: 'look-controls' });
+    const set = (key, val) => { L[key] = val; sfx.click(); save(c); draw(); };
+    const group = (title, ...content) => h('div', { class: 'look-group' }, h('div', { class: 'eyebrow' }, title), ...content);
+    const swatches = (list, key) => h('div', { class: 'look-swatches' }, list.map((col) => h('button', {
+      type: 'button', class: 'look-sw', style: { background: col }, 'aria-label': col, 'aria-pressed': String(L[key] === col), onclick: () => set(key, col),
+    })));
+    const choice = (key, k, content, tip) => h('button', { type: 'button', class: `look-opt ${typeof content === 'string' && /[a-z]/i.test(content) ? 'txt' : ''}`, 'aria-pressed': String((L[key] || '') === k), 'data-tip': tip || null, onclick: () => set(key, k) }, content);
+    const icon4 = (slot, k) => (slot === 'face' && LOOK_NAMES[k]
+      ? avatar({ color: c.color, look: { ...L, base: 'cara', hat: '', outfit: '', item: '', face: k } }, 'look-mini')
+      : lookPiece(slot, k, L));
+    const slotRow = (title, slot) => group(title, h('div', { class: 'look-opts' },
+      choice(slot, '', '∅', 'Nada'), LOOK_SLOTS[slot].map((k) => choice(slot, k, icon4(slot, k), LOOK_NAMES[k]))));
+    function draw() {
+      clear(preview, token(c, { size: 170, showHp: false }), h('b', {}, c.name),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn sm primary', type: 'button', onclick: () => { Object.assign(L, randomLook(), { base: L.base }); sfx.magic(); save(c); draw(); } }, '🎲 Al azar'),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => { Object.assign(L, { hat: '', face: '', outfit: '', item: '' }); save(c); draw(); } }, icon('close', 14), 'Sin complementos')));
+      const face = L.base === 'cara' && !c.portrait;
+      clear(panel,
+        group('Estilo', h('div', { class: 'row' },
+          segmented([['cara', '🙂 Cara'], ['iniciales', 'Aa Iniciales']], L.base, (v) => set('base', v)),
+          h('button', { class: 'btn sm', type: 'button', onclick: async () => { await uploadPortrait(c); draw(); } }, icon('image', 14), c.portrait ? 'Cambiar retrato' : 'Usar una imagen'),
+          c.portrait && h('button', { class: 'btn sm ghost', type: 'button', onclick: async () => { await api.removeUpload(c.portrait).catch(() => {}); c.portrait = ''; save(c); draw(); } }, icon('trash', 14), 'Quitar imagen'))),
+        face && group('Piel', swatches(SKINS, 'skin')),
+        face && group('Pelo', h('div', { class: 'look-opts' }, HAIRS.map(([k, l]) => choice('hair', k, l))), swatches(HAIR_COLORS, 'hairColor')),
+        face && group('Expresión', h('div', { class: 'look-opts' }, EXPRESSIONS.map(([k, e]) => choice('expr', k, e)))),
+        slotRow('En la cabeza', 'hat'),
+        slotRow('En la cara', 'face'),
+        slotRow('Ropa', 'outfit'),
+        slotRow('En la mano', 'item'));
+    }
+    draw();
+    await modal(`Aspecto de ${c.name}`, h('div', { class: 'look-editor' }, preview, panel), [{ label: 'Listo', value: true, class: 'primary', icon: 'check' }], { wide: true, iconName: 'sparkle' });
+    refresh();
+  }
+
   function attitudeSel(c) {
     return selectEl([['amistoso', '😊 Amistoso'], ['neutral', '😐 Neutral'], ['hostil', '😠 Hostil']], c.attitude, (v) => { c.attitude = v; save(c); });
   }
@@ -604,7 +652,8 @@ async function mount(root, [selId]) {
       h('div', { class: 'row nowrap' },
         a.weapon && ref.weapons.find((w) => w.name === a.weapon) && h('button', { class: 'btn sm icon ghost', type: 'button', 'data-tip': 'Recalcular con las características actuales',
           onclick: () => { Object.assign(a, weaponAttack(c, ref.weapons.find((w) => w.name === a.weapon))); save(c); refresh(); } }, icon('refresh', 14)),
-        h('button', { class: 'btn sm primary', type: 'button', onclick: () => test(c, Number(a.bonus) || 0, `Ataque con ${a.name}`, state.attackMode) }, icon('dados', 15), 'Atacar'),
+        a.save ? h('span', { class: 'chip', 'data-tip': 'Acción con salvación: tira solo el daño' }, a.save)
+          : h('button', { class: 'btn sm primary', type: 'button', onclick: () => test(c, Number(a.bonus) || 0, `Ataque con ${a.name}`, state.attackMode) }, icon('dados', 15), 'Atacar'),
         h('button', { class: 'btn sm', type: 'button', disabled: !a.damage || a.damage === '0', onclick: () => rollAs(c, a.damage, `Daño de ${a.name}`) }, icon('drop', 15), 'Daño'),
         h('button', { class: 'btn sm', type: 'button', 'data-tip': 'Crítico: dados de daño dobles', disabled: !a.damage || a.damage === '0', onclick: () => rollAs(c, critExpr(a.damage), `Crítico con ${a.name}`) }, '×2'),
         h('button', { class: 'btn sm icon ghost', type: 'button', 'aria-label': 'Quitar ataque', onclick: () => { c.attacks.splice(i, 1); save(c); refresh(); } }, icon('trash', 15)))));
@@ -682,7 +731,54 @@ async function mount(root, [selId]) {
           type: 'button', class: `gem ${j < s.used ? 'used' : ''}`, 'aria-label': `Espacio ${j + 1} de nivel ${i + 1}`,
           onclick: () => { s.used = j < s.used ? j : j + 1; save(c); refresh(); },
         })))))),
-      field('Conjuros conocidos / preparados', bind(c, 'spells', { type: 'textarea', rows: 5, onChange: () => save(c), placeholder: 'Trucos: Luz, Mano de mago…' })));
+      spellBook(c),
+      field('Notas de conjuros', bind(c, 'spells', { type: 'textarea', rows: 3, onChange: () => save(c), placeholder: 'Conjuros de objetos, preparados para hoy…' })));
+  }
+
+  // Conjuros del manual en la ficha. «Lanzar» gasta el espacio (o uno mayor), marca la concentración
+  // y tira el ataque y el daño o la curación. Los trucos suben de dados en los niveles 5, 11 y 17.
+  function spellBook(c) {
+    c.spellList ||= [];
+    const cls = classOf(c);
+    const byName = new Map(ref.spells.map((s) => [s.name, s]));
+    const mine = c.spellList.map((n) => byName.get(n)).filter(Boolean).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+    const pool = ref.spells.filter((s) => !c.spellList.includes(s.name) && (!cls?.caster || s.classes.includes(cls.name)));
+    const dc = c.spellAbility ? 8 + profBonus(c) + mod(c.abilities[c.spellAbility]) : null;
+    const tier = 1 + [5, 11, 17].filter((l) => (c.level || 1) >= l).length;
+    const dice = (s) => {
+      const [expr] = (s.damage || s.heal).split(' ');
+      return s.level || s.name === 'Descarga sobrenatural' ? expr : expr.replace(/^(\d+)d/, (_, n) => `${Number(n) * tier}d`);
+    };
+    async function cast(s) {
+      if (s.level) {
+        const i = c.slots.findIndex((x, j) => j >= s.level - 1 && (x.used || 0) < (x.max || 0));
+        if (i < 0) return toast(`No te quedan espacios de nivel ${s.level} o superior.`, { iconName: 'wand' });
+        c.slots[i].used = (c.slots[i].used || 0) + 1;
+        if (i + 1 > s.level) toast(`${s.name} con un espacio de nivel ${i + 1}: mira en el manual qué mejora.`, { iconName: 'wand' });
+      }
+      if (s.concentration && !c.conditions.includes('Concentrado')) c.conditions.push('Concentrado');
+      sfx.magic();
+      save(c);
+      refresh();
+      if (s.attack && dc != null) await test(c, dc - 8, `Ataque de ${s.name}`, state.attackMode);
+      if (s.damage || s.heal) await rollAs(c, dice(s), `${s.name}: ${s.damage ? `daño de ${s.damage.split(' ')[1]}` : 'curación'}${s.name === 'Descarga sobrenatural' ? ' (por rayo)' : ''}`);
+      if (s.save) toast(`${s.name}: salvación de ${s.save}${dc != null ? ` CD ${dc}` : ''}.`, { iconName: 'wand', ms: 6000 });
+    }
+    const levelName = (n) => (n ? `Nivel ${n}` : 'Trucos');
+    return h('div', { class: 'spellbook' },
+      mine.length ? h('ul', { class: 'spell-list' }, mine.map((s) => h('li', {},
+        h('span', { class: 'slot-lvl', 'data-tip': levelName(s.level) }, s.level || '·'),
+        h('div', { class: 'grow' }, h('b', {}, s.name), s.concentration && h('span', { class: 'tiny-chip chip', 'data-tip': 'Concentración' }, 'C'),
+          h('div', { class: 'tiny muted' }, [s.time, s.range, s.duration, s.save && `salv. ${s.save}`, s.damage || (s.heal && `${s.heal} curación`), `MdJ p. ${s.page}`].filter(Boolean).join(' · '))),
+        h('button', { class: 'btn xs primary', type: 'button', onclick: () => cast(s) }, icon('wand', 13), 'Lanzar'),
+        h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Quitar ${s.name}`, onclick: () => { c.spellList = c.spellList.filter((n) => n !== s.name); save(c); refresh(); } }, icon('close', 13)))))
+        : h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Añade los conjuros que conoce o tiene preparados.'),
+      h('select', { class: 'mini-sel', 'aria-label': 'Añadir conjuro', onchange: (e) => { if (!e.target.value) return; c.spellList.push(e.target.value); sfx.page(); save(c); refresh(); } },
+        h('option', { value: '' }, `+ Añadir conjuro${cls?.caster ? ` de ${cls.name.toLowerCase()}` : ''}…`),
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
+          const list = pool.filter((s) => s.level === n);
+          return list.length > 0 && h('optgroup', { label: levelName(n) }, list.map((s) => h('option', { value: s.name }, `${s.name}${s.concentration ? ' (C)' : ''}${s.ritual ? ' (R)' : ''}`)));
+        })));
   }
 
   function resourcesSection(c) {

@@ -19,6 +19,7 @@ async function mount(root, [selId]) {
   const [ref, combats, chars, bestiary, settings, scenes] = await Promise.all([
     reference(), api.list('combats'), api.list('characters'), monsters(), api.settings(), loadScenes(),
   ]);
+  combats.forEach((c) => c.combatants.forEach((x) => { const ch = chars.find((y) => y.id === x.charId); if (ch) x.look = ch.look; })); // aspecto al día
   const state = { combats, chars, settings, sel: combats.find((c) => c.id === (selId || settings.activeCombat)) || null, mode: '' };
   if (!state.sel && combats.length) state.sel = combats.find((c) => c.status === 'active') || combats.find((c) => c.status === 'planned') || null;
   const allConds = [...ref.conditions, ...ref.trackers];
@@ -157,7 +158,11 @@ async function mount(root, [selId]) {
     const charSel = h('select', { 'aria-label': 'Personaje' }, groups.filter(([, l]) => l.length).map(([t, l]) =>
       h('optgroup', { label: TYPE_LABEL[t] }, l.map((ch) => h('option', { value: ch.id }, ch.name)))));
     const qty = h('input', { type: 'number', min: 1, max: 20, value: 1, class: 'inline mini', 'aria-label': 'Cantidad' });
-    const monSel = selectEl(bestiary.map((m, i) => [i, `${m.name} · VD ${m.cr}${m.size && m.size !== 'Mediano' ? ` · ${m.size}` : ''}`]), 0, () => {}, { 'aria-label': 'Monstruo' });
+    const crNum = (cr) => { const [a, b] = String(cr).split('/'); return b ? Number(a) / Number(b) : Number(a); };
+    const tiers = [['VD 0 – 1', 0, 1], ['VD 2 – 4', 2, 4], ['VD 5 – 10', 5, 10], ['VD 11 – 16', 11, 16], ['VD 17 o más', 17, 99]];
+    const monSel = h('select', { 'aria-label': 'Monstruo' }, tiers.map(([label, lo, hi]) => h('optgroup', { label },
+      bestiary.map((m, i) => [m, i]).filter(([m]) => crNum(m.cr) >= lo && crNum(m.cr) <= hi)
+        .map(([m, i]) => h('option', { value: i }, `${m.name} · VD ${m.cr}${m.size && !m.size.startsWith('Mediano') ? ` · ${m.size}` : ''}`)))));
     const monQty = h('input', { type: 'number', min: 1, max: 20, value: 1, class: 'inline mini', 'aria-label': 'Cantidad' });
     const quick = { name: '', hp: 10, ac: 12, initBonus: 0, size: 'Mediano' };
     const missingPlayers = state.chars.filter((x) => x.type === 'jugador' && !c.combatants.some((y) => y.charId === x.id));
@@ -267,11 +272,12 @@ async function mount(root, [selId]) {
         drawBench(c);
       },
       onBackgroundClick: hideTokenPop,
+      onFog: (f) => { const c = state.sel; ensureBoard(c).fog = f; save(c); },
     });
     stage.append(bm.el);
     return bm;
   }
-  const refreshBoard = () => { if (bm && state.sel && sceneOf(state.sel)) bm.setTokens(boardTokens(state.sel)); };
+  const refreshBoard = () => { if (bm && state.sel && sceneOf(state.sel)) { bm.setTokens(boardTokens(state.sel)); bm.setFog(state.sel.board?.fog); } };
 
   function takeOffBoard(cid) {
     const c = state.sel;
@@ -287,7 +293,7 @@ async function mount(root, [selId]) {
     ensureBoard(c);
     const changed = c.board.scene !== id;
     c.board.scene = id || null;
-    if (changed) { c.board.pos = {}; c.board.moved = {}; }
+    if (changed) { c.board.pos = {}; c.board.moved = {}; c.board.fog = null; }
     const scene = sceneOf(c);
     if (scene) {
       autoPlace(c, scene, scenes.cat);
@@ -411,7 +417,9 @@ async function mount(root, [selId]) {
         h('button', { class: 'btn xs', type: 'button', onclick: apply('temp'), 'data-tip': 'PG temporales' }, icon('shield', 13))),
       x.conditions.length > 0 && h('div', { class: 'row' }, x.conditions.map((k) => h('span', { class: 'chip cond' }, condLabel(k.name), k.rounds ? ` (${k.rounds})` : ''))),
       h('div', { class: 'row' },
-        x.attacks?.slice(0, 3).map((a) => h('button', { class: 'btn xs', type: 'button', onclick: () => roll(`1d20${fmtMod((Number(a.bonus) || 0) - 2 * (x.exhaustion || 0))}`, { label: `${x.name}: ${a.name}`, who: x.name, mode: state.mode, secret: x.hidden, color: x.color }) }, icon('dados', 12), a.name)),
+        x.attacks?.slice(0, 3).map((a) => h('button', { class: 'btn xs', type: 'button', onclick: () => (a.save
+          ? roll(a.damage, { label: `${x.name}: ${a.name} (${a.save})`, who: x.name, secret: x.hidden, color: x.color })
+          : roll(`1d20${fmtMod((Number(a.bonus) || 0) - 2 * (x.exhaustion || 0))}`, { label: `${x.name}: ${a.name}`, who: x.name, mode: state.mode, secret: x.hidden, color: x.color })) }, icon(a.save ? 'flame' : 'dados', 12), a.name)),
         h('button', { class: 'btn xs ghost', type: 'button', onclick: () => { hideTokenPop(); flashRow(cid); } }, icon('list', 13), 'En la lista'),
         h('button', { class: 'btn xs ghost', type: 'button', onclick: () => takeOffBoard(cid) }, icon('close', 13), 'Retirar')));
     popEl.hidden = false;
@@ -555,11 +563,13 @@ async function mount(root, [selId]) {
             h('button', { class: 'btn xs success', type: 'button', onclick: apply('heal'), 'data-tip': 'Curar (Mayús + Intro)' }, icon('heart', 13)),
             h('button', { class: 'btn xs', type: 'button', onclick: apply('temp'), 'data-tip': 'PG temporales' }, icon('shield', 13)))),
         x.type === 'jugador' && down && deathSaveRow(c, x),
-        x.attacks?.length > 0 && h('div', { class: 'row cbt-attacks' }, x.attacks.map((a) => h('span', { class: 'attack' },
-          h('button', { class: 'btn xs', type: 'button', onclick: () => roll(`1d20${fmtMod((Number(a.bonus) || 0) - 2 * (x.exhaustion || 0))}`, { label: `${x.name}: ${a.name}`, who: x.name, mode: state.mode, secret: x.hidden, color: x.color }) },
-            icon('dados', 12), `${a.name} ${fmtMod(Number(a.bonus) || 0)}`),
-          a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => roll(a.damage, { label: `${x.name}: daño de ${a.name}`, who: x.name, secret: x.hidden, color: x.color }) }, a.damage),
-          a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', 'data-tip': 'Crítico', onclick: () => roll(critExpr(a.damage), { label: `${x.name}: crítico con ${a.name}`, who: x.name, secret: x.hidden, color: x.color }) }, '×2'))))),
+        x.attacks?.length > 0 && h('div', { class: 'row cbt-attacks' }, x.attacks.map((a) => h('span', { class: 'attack', 'data-tip': a.notes || null },
+          a.save
+            ? h('button', { class: 'btn xs', type: 'button', onclick: () => roll(a.damage, { label: `${x.name}: ${a.name} (${a.save})`, who: x.name, secret: x.hidden, color: x.color }) }, icon('flame', 12), `${a.name} · ${a.save} · ${a.damage}`)
+            : [h('button', { class: 'btn xs', type: 'button', onclick: () => roll(`1d20${fmtMod((Number(a.bonus) || 0) - 2 * (x.exhaustion || 0))}`, { label: `${x.name}: ${a.name}`, who: x.name, mode: state.mode, secret: x.hidden, color: x.color }) },
+              icon('dados', 12), `${a.name} ${fmtMod(Number(a.bonus) || 0)}`),
+            a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => roll(a.damage, { label: `${x.name}: daño de ${a.name}`, who: x.name, secret: x.hidden, color: x.color }) }, a.damage),
+            a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', 'data-tip': 'Crítico', onclick: () => roll(critExpr(a.damage), { label: `${x.name}: crítico con ${a.name}`, who: x.name, secret: x.hidden, color: x.color }) }, '×2')])))),
       h('div', { class: 'cbt-side' },
         shield(x.ac),
         h('div', { class: 'cbt-tools' },

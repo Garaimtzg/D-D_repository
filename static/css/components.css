@@ -133,7 +133,17 @@ input.inline { width: 66px; padding: 5px 6px; }
   box-shadow: 0 0 0 2px #1a130e, 0 0 0 3.5px var(--c, #555), 0 3px 8px rgba(0, 0, 0, .5);
   text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
 }
-.avatar.lg { width: 56px; height: 56px; font-size: 1.1rem; }
+.avatar.lg { width: 56px; height: 56px; font-size: 1.1rem; --s: 56px; }
+.avatar { --s: 38px; }
+.avatar > svg.face-svg { position: absolute; inset: 0; width: 100%; height: 100%; clip-path: circle(50%); }
+/* complementos: se salen del círculo a propósito (el sombrero por arriba, el objeto por un lado) */
+.avatar .acc { position: absolute; pointer-events: none; line-height: 1; font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; text-shadow: none; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .45)); }
+.avatar .acc.hat { z-index: 3; left: 50%; top: calc(var(--s) * -.4); font-size: calc(var(--s) * .6); transform: translateX(-50%) rotate(-6deg); }
+.avatar svg.acc.hat { width: calc(var(--s) * .95); height: calc(var(--s) * .95); top: calc(var(--s) * -.62); transform: translateX(-50%); }
+.avatar svg.acc.face-svg { z-index: 1; inset: 0; width: 100%; height: 100%; filter: none; }
+.avatar .acc.face { z-index: 1; left: 50%; top: 53%; font-size: calc(var(--s) * .5); transform: translate(-50%, -50%); }
+.avatar .acc.outfit { z-index: 2; left: 50%; bottom: calc(var(--s) * -.16); font-size: calc(var(--s) * .4); transform: translateX(-50%); }
+.avatar .acc.item { z-index: 2; right: calc(var(--s) * -.24); bottom: calc(var(--s) * -.06); font-size: calc(var(--s) * .44); transform: rotate(14deg); }
 .token { position: relative; display: inline-grid; place-items: center; flex: none; }
 .token .avatar { position: absolute; }
 .token svg.ring { transform: rotate(-90deg); overflow: visible; }

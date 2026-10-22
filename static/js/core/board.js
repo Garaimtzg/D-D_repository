@@ -42,7 +42,7 @@ export function boardTokens(c, { player = false } = {}) {
       hp = x.maxHp * (r >= 1 ? 1 : r > 0.5 ? 0.7 : r > 0.25 ? 0.4 : r > 0 ? 0.15 : 0);
     }
     return {
-      id: x.cid, name: x.name, color: x.color, portrait: x.portrait, type: x.type, size: x.size || 'Mediano',
+      id: x.cid, name: x.name, color: x.color, portrait: x.portrait, look: x.look, type: x.type, size: x.size || 'Mediano',
       c: pos[x.cid][0], r: pos[x.cid][1], hp, maxHp: x.maxHp, tempHp: masked ? 0 : x.tempHp,
       current: x === cur, hidden: !!x.hidden, conds: (x.conditions || []).map((k) => k.name), conc: !!x.concentration,
       speed: speedOf(x), moved: c.board?.moved?.[x.cid] || 0,
