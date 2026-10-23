@@ -4,10 +4,16 @@ import { api } from '../core/api.js';
 import { h, clear, icon, segmented, confirmDialog, toast, toastError, pickFiles, dropZone } from '../core/dom.js';
 import { player } from '../core/audio.js';
 import { ambience, AMBIENCES } from '../core/ambience.js';
+import { sfx } from '../core/sfx.js';
 
 export default { id: 'musica', title: 'Música', icon: 'musica', hint: 'Música y ambientes · tecla 9', mount };
 
 const MOODS = [['Taberna', '🍺'], ['Exploración', '🧭'], ['Combate', '⚔️'], ['Jefe', '🐉'], ['Misterio', '🕯️'], ['Mazmorra', '💀'], ['Calma', '🌙'], ['Otra', '🎵']];
+// Efectos sueltos para la mesa, como los botones de un «soundboard» (Syrinscape): suenan al pulsar.
+const EFFECTS = [['sword', '⚔️', 'Espadas'], ['hit', '💥', 'Golpe'], ['blast', '🔥', 'Explosión'], ['thunder', '⛈️', 'Trueno'], ['magic', '✨', 'Magia'],
+  ['heal', '💚', 'Curación'], ['shield', '🛡️', 'Escudo'], ['coins', '🪙', 'Monedas'], ['gong', '🔔', 'Gong'], ['drum', '🥁', 'Redoble'],
+  ['victory', '🏆', 'Victoria'], ['levelup', '⭐', 'Fanfarria'], ['fail', '📉', 'Fracaso'], ['death', '💀', 'Muerte'], ['whoosh', '💨', 'Silbido'],
+  ['unroll', '📜', 'Pergamino'], ['page', '📖', 'Página'], ['ping', '🔊', 'Aviso']];
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 async function mount(root) {
@@ -160,6 +166,9 @@ async function mount(root) {
     h('aside', { class: 'stack' },
       h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h3', {}, icon('cloud'), 'Ambientes')),
         h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Sonidos generados al momento, sin ficheros ni internet. Mézclalos con la música.'), ambEl),
+      h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h3', {}, icon('bolt'), 'Efectos')),
+        h('p', { class: 'small muted', style: { marginTop: 0 } }, 'Un clic y suena en la mesa (con el sonido activado).'),
+        h('div', { class: 'fx-board' }, EFFECTS.map(([key, emoji, label]) => h('button', { class: 'fx-btn', type: 'button', onclick: () => sfx[key]() }, h('span', {}, emoji), label)))),
       h('section', { class: 'panel small muted' }, h('div', { class: 'panel-head' }, h('h3', {}, icon('compass'), 'Más música')),
         'Música gratuita para rol: ',
         h('a', { href: 'https://tabletopaudio.com', target: '_blank', rel: 'noopener' }, 'Tabletop Audio'), ' · ',

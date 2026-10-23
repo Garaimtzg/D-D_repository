@@ -160,9 +160,11 @@ async function mount(root, [selId]) {
     const qty = h('input', { type: 'number', min: 1, max: 20, value: 1, class: 'inline mini', 'aria-label': 'Cantidad' });
     const crNum = (cr) => { const [a, b] = String(cr).split('/'); return b ? Number(a) / Number(b) : Number(a); };
     const tiers = [['VD 0 – 1', 0, 1], ['VD 2 – 4', 2, 4], ['VD 5 – 10', 5, 10], ['VD 11 – 16', 11, 16], ['VD 17 o más', 17, 99]];
-    const monSel = h('select', { 'aria-label': 'Monstruo' }, tiers.map(([label, lo, hi]) => h('optgroup', { label },
-      bestiary.map((m, i) => [m, i]).filter(([m]) => crNum(m.cr) >= lo && crNum(m.cr) <= hi)
-        .map(([m, i]) => h('option', { value: i }, `${m.name} · VD ${m.cr}${m.size && !m.size.startsWith('Mediano') ? ` · ${m.size}` : ''}`)))));
+    const opt = ([m, i]) => h('option', { value: i }, `${m.name} · VD ${m.cr}${m.size && !m.size.startsWith('Mediano') ? ` · ${m.size}` : ''}`);
+    const indexed = bestiary.map((m, i) => [m, i]);
+    const monSel = h('select', { 'aria-label': 'Monstruo' },
+      tiers.map(([label, lo, hi]) => h('optgroup', { label }, indexed.filter(([m]) => !m.source && crNum(m.cr) >= lo && crNum(m.cr) <= hi).map(opt))),
+      h('optgroup', { label: 'Mitología de Euskal Herria' }, indexed.filter(([m]) => m.source).sort(([a], [b]) => crNum(a.cr) - crNum(b.cr)).map(opt)));
     const monQty = h('input', { type: 'number', min: 1, max: 20, value: 1, class: 'inline mini', 'aria-label': 'Cantidad' });
     const quick = { name: '', hp: 10, ac: 12, initBonus: 0, size: 'Mediano' };
     const missingPlayers = state.chars.filter((x) => x.type === 'jugador' && !c.combatants.some((y) => y.charId === x.id));
@@ -273,11 +275,12 @@ async function mount(root, [selId]) {
       },
       onBackgroundClick: hideTokenPop,
       onFog: (f) => { const c = state.sel; ensureBoard(c).fog = f; save(c); },
+      onDoor: (open) => { const c = state.sel; ensureBoard(c).doors = open; save(c); },
     });
     stage.append(bm.el);
     return bm;
   }
-  const refreshBoard = () => { if (bm && state.sel && sceneOf(state.sel)) { bm.setTokens(boardTokens(state.sel)); bm.setFog(state.sel.board?.fog); } };
+  const refreshBoard = () => { if (bm && state.sel && sceneOf(state.sel)) { bm.setTokens(boardTokens(state.sel)); bm.setFog(state.sel.board?.fog); bm.setDoors(state.sel.board?.doors); } };
 
   function takeOffBoard(cid) {
     const c = state.sel;
@@ -293,7 +296,7 @@ async function mount(root, [selId]) {
     ensureBoard(c);
     const changed = c.board.scene !== id;
     c.board.scene = id || null;
-    if (changed) { c.board.pos = {}; c.board.moved = {}; c.board.fog = null; }
+    if (changed) { c.board.pos = {}; c.board.moved = {}; c.board.fog = null; c.board.doors = []; }
     const scene = sceneOf(c);
     if (scene) {
       autoPlace(c, scene, scenes.cat);
@@ -385,7 +388,7 @@ async function mount(root, [selId]) {
           item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('application/x-dnd-token', JSON.stringify({ cid: x.cid })); e.dataTransfer.effectAllowed = 'move'; });
           return item;
         })]
-      : h('span', { class: 'tiny muted' }, icon('check', 13), ' Todos en el tablero. Arrastra las fichas; clic derecho para retirarlas · Mayús + clic para señalar · R regla · A áreas.'));
+      : h('span', { class: 'tiny muted' }, icon('check', 13), ' Todos en el tablero. Arrastra las fichas; clic derecho para retirarlas · Mayús + clic para señalar · clic en una puerta para abrirla o cerrarla · R regla · A áreas.'));
   }
 
   // Tarjeta rápida al pulsar una ficha del tablero (funciona también a pantalla completa).

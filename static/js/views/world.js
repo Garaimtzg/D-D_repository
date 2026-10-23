@@ -6,8 +6,10 @@ import { api, debounced } from '../core/api.js';
 import { h, clear, icon, bind, field, selectEl, segmented, searchBox, modal, confirmDialog, toast, toastError, pickFiles } from '../core/dom.js';
 import { calendarOf, dateOf, dayOf, moonOf, worldDate, eventsOn, PRESETS, SEASONS } from '../core/calendar.js';
 import { linkTargets, mentionsIn, renderMentions, mentionBox } from '../core/mentions.js';
+import { renderRelations, relationsOf } from './world-relations.js';
+import { renderBastions } from './world-bastions.js';
 
-export default { id: 'mundo', title: 'Mundo', icon: 'globe', hint: 'Compendio enlazado, calendario y cronología de tu mundo', mount };
+export default { id: 'mundo', title: 'Mundo', icon: 'globe', hint: 'Compendio enlazado, calendario, cronología, relaciones y bastiones de tu mundo', mount };
 
 export const WIKI_TYPES = [['lugar', 'Lugares', '🏰'], ['faccion', 'Facciones', '⚜️'], ['objeto', 'Objetos', '💎'],
   ['deidad', 'Deidades', '✨'], ['historia', 'Historia y leyendas', '📜'], ['otro', 'Otros', '📌']];
@@ -15,11 +17,11 @@ const TYPE_ICON = Object.fromEntries(WIKI_TYPES.map(([k, , e]) => [k, e]));
 const EVENT_KINDS = [['evento', 'Suceso'], ['festivo', 'Festivo'], ['historia', 'Hecho histórico']];
 
 async function mount(root, [tab, id]) {
-  const [wiki, chars, maps, quests, notes, sessions, settings] = await Promise.all(
-    ['wiki', 'characters', 'maps', 'quests', 'notes', 'sessions'].map((c) => api.list(c)).concat(api.settings()));
+  const [wiki, chars, maps, quests, notes, sessions, relations, bastions, settings] = await Promise.all(
+    ['wiki', 'characters', 'maps', 'quests', 'notes', 'sessions', 'relations', 'bastions'].map((c) => api.list(c)).concat(api.settings()));
   const state = {
-    tab: ['compendio', 'calendario', 'cronologia'].includes(tab) ? tab : 'compendio',
-    wiki, chars, maps, quests, notes, sessions, settings, search: '', type: 'todos',
+    tab: ['compendio', 'calendario', 'cronologia', 'relaciones', 'bastiones'].includes(tab) ? tab : 'compendio',
+    wiki, chars, maps, quests, notes, sessions, relations, bastions, settings, search: '', type: 'todos',
     sel: wiki.find((e) => e.id === id) || null, reading: true, day: null, view: null,
   };
   const savers = new Map();
@@ -34,7 +36,7 @@ async function mount(root, [tab, id]) {
 
   const body = h('div');
   root.append(h('div', { class: 'stack' },
-    segmented([['compendio', 'Compendio', wiki.length], ['calendario', 'Calendario'], ['cronologia', 'Cronología']], state.tab,
+    segmented([['compendio', 'Compendio'], ['calendario', 'Calendario'], ['cronologia', 'Cronología'], ['relaciones', 'Relaciones'], ['bastiones', 'Bastiones']], state.tab,
       (v) => { state.tab = v; go(v); render(); }),
     body));
   // los enlaces a otras entradas del compendio se abren aquí mismo, sin recargar la sección
@@ -45,7 +47,15 @@ async function mount(root, [tab, id]) {
     open(state.wiki.find((x) => x.id === a.dataset.id));
   });
 
-  const render = () => ({ compendio: renderWiki, calendario: renderCalendar, cronologia: renderTimeline })[state.tab]();
+  const openRef = (ref) => {
+    const [kind, id] = ref.split(':');
+    if (kind === 'wiki') open(state.wiki.find((x) => x.id === id));
+    else location.hash = `#/personajes/${id}`;
+  };
+  const render = () => ({
+    compendio: renderWiki, calendario: renderCalendar, cronologia: renderTimeline,
+    relaciones: () => renderRelations(body, state, { openRef }), bastiones: () => renderBastions(body, state),
+  })[state.tab]();
   function open(entry) {
     if (!entry) return;
     savers.forEach((s) => s.pending && s.flush());
@@ -118,6 +128,7 @@ async function mount(root, [tab, id]) {
     ];
     const pins = state.maps.flatMap((m) => (m.pins || []).filter((p) => p.link === `wiki:${e.id}`).map((p) => [m, p]));
     const children = state.wiki.filter((x) => x.parent === e.id);
+    const rels = relationsOf(state, `wiki:${e.id}`);
     const parents = state.wiki.filter((x) => x !== e && !isInside(x, e));
 
     const text = bind(e, 'body', { type: 'textarea', rows: 12, class: 'book-text wiki-body', placeholder: 'Descripción, historia, quién manda aquí… Escribe @ para enlazar.', onChange: changed });
@@ -159,7 +170,9 @@ async function mount(root, [tab, id]) {
           e.body ? renderMentions(e.body, targets()) : h('p', { class: 'muted' }, 'Sin descripción. Pulsa «Editar».'))
         : mentionBox(text, targets),
       h('div', { class: 'wiki-secret' }, h('b', { class: 'eyebrow' }, '🔒 Secretos del máster'), mentionBox(secret, targets)),
-      (children.length || backlinks.length || pins.length) > 0 && h('div', { class: 'wiki-links' },
+      (children.length || backlinks.length || pins.length || rels.length) > 0 && h('div', { class: 'wiki-links' },
+        rels.length > 0 && h('div', {}, h('b', { class: 'eyebrow' }, 'Relaciones'), h('div', { class: 'row' }, rels.map(({ r, other, text }) =>
+          h('a', { class: `chip ${r.secret ? 'secret' : ''}`, href: '#', onclick: (ev) => { ev.preventDefault(); if (other) openRef(other.ref); } }, text)))),
         children.length > 0 && h('div', {}, h('b', { class: 'eyebrow' }, 'Contiene'), h('div', { class: 'row' }, children.map((x) => h('a', { class: 'chip wiki-link', href: `#/mundo/compendio/${x.id}`, dataset: { id: x.id } }, TYPE_ICON[x.type], ' ', x.name)))),
         backlinks.length > 0 && h('div', {}, h('b', { class: 'eyebrow' }, 'Mencionado en'), h('div', { class: 'row' }, backlinks.map(([em, name, href, id]) =>
           h('a', { class: `chip ${id ? 'wiki-link' : ''}`, href: href || `#/mundo/compendio/${id}`, dataset: { id: id || '' } }, em, ' ', name)))),
@@ -221,7 +234,7 @@ async function mount(root, [tab, id]) {
           h('button', { class: 'btn icon', type: 'button', 'aria-label': 'Mes anterior', onclick: () => shift(-1) }, icon('prev', 16)),
           h('div', { class: 'center' }, h('h2', { style: { margin: 0 } }, c.months[month][0]), h('div', { class: 'small muted' }, `Año ${year} · ${SEASONS[dateOf(c, first).season].join(' ')}`)),
           h('button', { class: 'btn icon', type: 'button', 'aria-label': 'Mes siguiente', onclick: () => shift(1) }, icon('next', 16))),
-        h('div', { class: 'cal-grid' }, c.weekdays.map((w) => h('div', { class: 'cal-wd' }, w.slice(0, 3))), cells),
+        h('div', { class: 'cal-grid' }, c.weekdays.map((w, i) => h('div', { class: 'cal-wd', 'data-tip': w }, c.short[i])), cells),
         h('div', { class: 'row between' },
           h('span', { class: 'small' }, h('b', {}, 'Hoy: '), `${worldDate(c, today(), { weekday: true })} · ${moonOf(c, today()).emoji} ${moonOf(c, today()).name}`),
           h('div', { class: 'row' },

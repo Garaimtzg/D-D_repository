@@ -7,8 +7,13 @@ Las distancias van en metros y las monedas usan las abreviaturas de 2024 (pp = p
 import json
 from pathlib import Path
 
+from . import euskal
+from .features2024 import CHOICES, COMMON, EXPERTISE, FEATURES, STYLE_LEVEL, SUBCLASS_PICK, SUBCLASSES, UNARMORED
+
 # Datos de los conjuros (sin su texto) sacados del PDF con tools/extract_spells.py
 SPELLS = json.loads((Path(__file__).with_name("spells2024.json")).read_text(encoding="utf-8"))
+# Objetos mágicos del SRD 5.2.1 (CC-BY-4.0) en castellano, generados con tools/build_magic_items.py
+MAGIC_ITEMS = json.loads((Path(__file__).with_name("magicitems2024.json")).read_text(encoding="utf-8"))
 
 ABILITIES = [
     {"key": "fue", "name": "Fuerza", "short": "FUE"},
@@ -126,7 +131,8 @@ CLASSES = [
         "cantrips": _steps((1, 2), (4, 3), (10, 4)),
         "prepared": [2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15],
         "columns": {"Invocaciones": [1, 3, 3, 3, 5, 5, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10]},
-        "resources": [],
+        "resources": [{"name": "Astucia mágica", "uses": 1, "reset": "largo", "from": 2},
+                      {"name": "Contactar patrón", "uses": 1, "reset": "largo", "from": 9}],
         "subclasses": ["Patrón celestial", "Patrón feérico", "Patrón infernal", "Patrón primigenio"],
         "features": {1: ["Invocaciones sobrenaturales", "Magia del pacto"], 2: ["Astucia mágica"], 3: ["Subclase de brujo"], 4: [ASI],
                      6: [SUB], 8: [ASI], 9: ["Contactar patrón"], 10: [SUB], 11: ["Arcanum místico (conjuro de nivel 6)"], 12: [ASI],
@@ -143,7 +149,8 @@ CLASSES = [
         "standard": {"fue": 14, "des": 8, "con": 13, "int": 10, "sab": 15, "car": 12},
         "cantrips": _steps((1, 3), (4, 4), (10, 5)), "prepared": PREP_FULL,
         "columns": {"Canalizar divinidad": _steps((1, None), (2, 2), (6, 3), (18, 4))},
-        "resources": [{"name": "Canalizar divinidad", "column": "Canalizar divinidad", "reset": "corto1"}],
+        "resources": [{"name": "Canalizar divinidad", "column": "Canalizar divinidad", "reset": "corto1"},
+                      {"name": "Intercesión divina", "uses": 1, "reset": "largo", "from": 10}],
         "subclasses": ["Dominio de la guerra", "Dominio de la luz", "Dominio de la vida", "Dominio del engaño"],
         "features": {1: ["Lanzamiento de conjuros", "Orden divina"], 2: ["Canalizar divinidad"], 3: ["Subclase de clérigo"], 4: [ASI],
                      5: ["Abrasar muertos vivientes"], 6: [SUB], 7: ["Golpes benditos"], 8: [ASI], 10: ["Intercesión divina"], 12: [ASI],
@@ -159,7 +166,8 @@ CLASSES = [
         "standard": {"fue": 8, "des": 12, "con": 14, "int": 13, "sab": 15, "car": 10},
         "cantrips": _steps((1, 2), (4, 3), (10, 4)), "prepared": PREP_FULL,
         "columns": {"Forma salvaje": _steps((1, None), (2, 2), (6, 3), (17, 4))},
-        "resources": [{"name": "Forma salvaje", "column": "Forma salvaje", "reset": "corto1"}],
+        "resources": [{"name": "Forma salvaje", "column": "Forma salvaje", "reset": "corto1"},
+                      {"name": "Resurgimiento salvaje (espacio de nivel 1)", "uses": 1, "reset": "largo", "from": 5}],
         "subclasses": ["Círculo de la luna", "Círculo de la tierra", "Círculo de las estrellas", "Círculo del mar"],
         "features": {1: ["Druídico", "Lanzamiento de conjuros", "Orden primigenia"], 2: ["Compañero salvaje", "Forma salvaje"],
                      3: ["Subclase de druida"], 4: [ASI], 5: ["Resurgimiento salvaje"], 6: [SUB], 7: ["Furia elemental"], 8: [ASI],
@@ -176,7 +184,9 @@ CLASSES = [
         "standard": {"fue": 12, "des": 15, "con": 13, "int": 8, "sab": 14, "car": 10},
         "prepared": PREP_HALF, "masteries": _steps((1, 2)),
         "columns": {"Enemigo predilecto": _steps((1, 2), (5, 3), (9, 4), (13, 5), (17, 6))},
-        "resources": [{"name": "Enemigo predilecto (marca del cazador gratis)", "column": "Enemigo predilecto", "reset": "largo"}],
+        "resources": [{"name": "Enemigo predilecto (marca del cazador gratis)", "column": "Enemigo predilecto", "reset": "largo"},
+                      {"name": "Infatigable (PG temporales)", "uses": "mod:sab", "reset": "largo", "from": 10},
+                      {"name": "Velo de la naturaleza", "uses": "mod:sab", "reset": "largo", "from": 14}],
         "subclasses": ["Acechador en la penumbra", "Cazador", "Errante feérico", "Señor de las bestias"],
         "features": {1: ["Enemigo predilecto", "Lanzamiento de conjuros", "Maestría con armas"], 2: ["Estilo de combate", "Explorador hábil"],
                      3: ["Subclase de explorador"], 4: [ASI], 5: ["Ataque adicional"], 6: ["Errante"], 7: [SUB], 8: [ASI], 9: ["Pericia"],
@@ -215,7 +225,9 @@ CLASSES = [
         "cantrips": _steps((1, 4), (4, 5), (10, 6)),
         "prepared": [2, 4, 6, 7, 9, 10, 11, 12, 14, 15, 16, 16, 17, 17, 18, 18, 19, 20, 21, 22],
         "columns": {"Puntos de hechicería": [None] + list(range(2, 21))},
-        "resources": [{"name": "Puntos de hechicería", "column": "Puntos de hechicería", "reset": "largo"}],
+        "resources": [{"name": "Hechicería innata", "uses": 2, "reset": "largo"},
+                      {"name": "Puntos de hechicería", "column": "Puntos de hechicería", "reset": "largo"},
+                      {"name": "Recuperación mágica", "uses": 1, "reset": "largo", "from": 5}],
         "subclasses": ["Hechicería aberrante", "Hechicería de magia salvaje", "Hechicería dracónica", "Hechicería mecánica"],
         "features": {1: ["Hechicería innata", "Lanzamiento de conjuros"], 2: ["Fuente de magia", "Metamagia"], 3: ["Subclase de hechicero"],
                      4: [ASI], 5: ["Recuperación mágica"], 6: [SUB], 7: ["Encarnación mágica"], 8: [ASI], 10: ["Metamagia"], 12: [ASI],
@@ -248,7 +260,8 @@ CLASSES = [
         "columns": {"Artes marciales": _steps((1, "1d6"), (5, "1d8"), (11, "1d10"), (17, "1d12")),
                     "Puntos de concentración": [None] + list(range(2, 21)),
                     "Movimiento sin armadura": _steps((1, None), (2, "+3 m"), (6, "+4,5 m"), (10, "+6 m"), (14, "+7,5 m"), (18, "+9 m"))},
-        "resources": [{"name": "Puntos de concentración", "column": "Puntos de concentración", "reset": "corto"}],
+        "resources": [{"name": "Puntos de concentración", "column": "Puntos de concentración", "reset": "corto"},
+                      {"name": "Metabolismo asombroso", "uses": 1, "reset": "largo", "from": 2}],
         "subclasses": ["Guerrero de la mano abierta", "Guerrero de la misericordia", "Guerrero de la sombra", "Guerrero de los elementos"],
         "features": {1: ["Artes marciales", "Defensa sin armadura"], 2: ["Concentración de monje", "Metabolismo asombroso", "Movimiento sin armadura"],
                      3: ["Desviar ataques", "Subclase de monje"], 4: ["Caída lenta", ASI], 5: ["Ataque adicional", "Golpe aturdidor"],
@@ -268,7 +281,9 @@ CLASSES = [
         "prepared": PREP_HALF, "masteries": _steps((1, 2)),
         "columns": {"Canalizar divinidad": _steps((1, None), (3, 2), (11, 3))},
         "resources": [{"name": "Imponer las manos (PG)", "uses": "level*5", "reset": "largo"},
-                      {"name": "Canalizar divinidad", "column": "Canalizar divinidad", "reset": "corto1"}],
+                      {"name": "Canalizar divinidad", "column": "Canalizar divinidad", "reset": "corto1"},
+                      {"name": "Castigo divino (gratis)", "uses": 1, "reset": "largo", "from": 2},
+                      {"name": "Hallar corcel (gratis)", "uses": 1, "reset": "largo", "from": 5}],
         "subclasses": ["Juramento de entrega", "Juramento de gloria", "Juramento de los antiguos", "Juramento de venganza"],
         "features": {1: ["Imponer las manos", "Lanzamiento de conjuros", "Maestría con armas"], 2: ["Castigo de paladín", "Estilo de combate"],
                      3: ["Canalizar divinidad", "Subclase de paladín"], 4: [ASI], 5: ["Ataque adicional", "Corcel fiel"], 6: ["Aura de protección"],
@@ -285,11 +300,11 @@ CLASSES = [
         "standard": {"fue": 12, "des": 15, "con": 13, "int": 14, "sab": 10, "car": 8},
         "masteries": _steps((1, 2)),
         "columns": {"Ataque furtivo": [f"{(lvl + 1) // 2}d6" for lvl in range(1, 21)]},
-        "resources": [],
+        "resources": [{"name": "Golpe de suerte", "uses": 1, "reset": "corto", "from": 20}],
         "subclasses": ["Asesino", "Embaucador arcano", "Ladrón", "Rebanaalmas"],
         "features": {1: ["Ataque furtivo", "Jerga de ladrones", "Maestría con armas", "Pericia"], 2: ["Acción astuta"],
                      3: ["Puntería certera", "Subclase de pícaro"], 4: [ASI], 5: ["Esquiva asombrosa", "Golpe astuto"], 6: ["Pericia"],
-                     7: ["Evasión", "Talento fiable"], 8: [ASI], 9: [SUB], 10: [ASI], 11: ["Golpe astuto mejorado"], 12: [ASI], 13: [SUB],
+                     7: ["Evasión", "Talentos fiables"], 8: [ASI], 9: [SUB], 10: [ASI], 11: ["Golpe astuto mejorado"], 12: [ASI], 13: [SUB],
                      14: ["Golpes taimados"], 15: ["Mente escurridiza"], 16: [ASI], 17: [SUB], 18: ["Elusivo"], 19: ["Don épico"],
                      20: ["Golpe de suerte"]},
     },
@@ -304,7 +319,8 @@ SPECIES = [
                 ["Visión en la oscuridad", "18 m."],
                 ["Manos curativas", "Con la acción de magia, tocas a una criatura y le devuelves tantos d4 de PG como tu bonificador por competencia (1 vez por descanso largo)."],
                 ["Portador de luz", "Conoces el truco luz (Carisma)."],
-                ["Revelación celestial", "Desde el nivel 3: te transformas 1 minuto como acción adicional (alas celestiales, fulgor interior o mortaja necrótica) y añades daño extra igual a tu bonificador por competencia una vez por turno (1 vez por descanso largo)."]]},
+                ["Revelación celestial", "Desde el nivel 3: te transformas 1 minuto como acción adicional (alas celestiales, fulgor interior o mortaja necrótica) y añades daño extra igual a tu bonificador por competencia una vez por turno (1 vez por descanso largo)."]],
+     "spells": [[1, "Luz"]], "resources": [["Manos curativas", 1, "largo", 1], ["Revelación celestial", 1, "largo", 3]]},
     {"id": "draconido", "name": "Dracónido", "page": 187, "size": "Mediano", "speed": 9, "darkvision": 18,
      "options_label": "Linaje dracónico",
      "options": [["Azul", "relámpago"], ["Blanco", "frío"], ["Bronce", "relámpago"], ["Cobre", "ácido"], ["Negro", "ácido"],
@@ -313,7 +329,10 @@ SPECIES = [
                 ["Ataque de aliento", "Sustituye un ataque de la acción de atacar: cono de 4,5 m o línea de 9 m; salvación de DES (CD 8 + CON + competencia), 1d10 de daño (sube a 2d10, 3d10 y 4d10 en los niveles 5, 11 y 17). Usos: tu bonificador por competencia por descanso largo."],
                 ["Resistencia al daño", "Resistencia al tipo de daño de tu linaje."],
                 ["Visión en la oscuridad", "18 m."],
-                ["Vuelo dracónico", "Desde el nivel 5: alas espectrales durante 10 minutos con velocidad volando igual a tu velocidad (1 vez por descanso largo)."]]},
+                ["Vuelo dracónico", "Desde el nivel 5: alas espectrales durante 10 minutos con velocidad volando igual a tu velocidad (1 vez por descanso largo)."]],
+     "resources": [["Ataque de aliento", "pb", "largo", 1], ["Vuelo dracónico", 1, "largo", 5]],
+     "attacks": [{"name": "Ataque de aliento", "save": "DES", "dc": "con", "damage": "1d10", "scale": [5, 11, 17], "lineage_type": True,
+                  "notes": "cono de 4,5 m o línea de 9 m · sustituye un ataque · mitad si salva"}]},
     {"id": "elfo", "name": "Elfo", "page": 188, "size": "Mediano", "speed": 9, "darkvision": 18,
      "options_label": "Linaje élfico",
      "options": [["Alto elfo", "Truco prestidigitación (cambiable); detectar magia a nivel 3 y paso brumoso a nivel 5."],
@@ -323,19 +342,25 @@ SPECIES = [
      "traits": [["Linaje feérico", "Ventaja en las salvaciones para evitar o terminar el estado de hechizado."],
                 ["Sentidos agudos", "Competencia en Percepción, Perspicacia o Supervivencia."],
                 ["Trance", "No duermes; terminas un descanso largo en 4 horas de meditación."],
-                ["Visión en la oscuridad", "18 m (36 m si eres drow)."]]},
+                ["Visión en la oscuridad", "18 m (36 m si eres drow)."]],
+     "lineage_spells": {"Alto elfo": [[1, "Prestidigitación"], [3, "Detectar magia", 1], [5, "Paso brumoso", 1]],
+                        "Drow": [[1, "Luces danzantes"], [3, "Fuego feérico", 1], [5, "Oscuridad", 1]],
+                        "Elfo de los bosques": [[1, "Saber druídico"], [3, "Zancada prodigiosa", 1], [5, "Pasar sin rastro", 1]]}},
     {"id": "enano", "name": "Enano", "page": 190, "size": "Mediano", "speed": 9, "darkvision": 36, "hp_per_level": 1,
      "traits": [["Afinidad con la piedra", "Acción adicional: sientes vibraciones a 18 m durante 10 minutos si tocas piedra (usos: tu bonificador por competencia por descanso largo)."],
                 ["Aguante enano", "+1 PG máximo por nivel."],
                 ["Resistencia enana", "Resistencia al veneno y ventaja contra el estado de envenenado."],
-                ["Visión en la oscuridad", "36 m."]]},
+                ["Visión en la oscuridad", "36 m."]],
+     "resources": [["Afinidad con la piedra", "pb", "largo", 1]]},
     {"id": "gnomo", "name": "Gnomo", "page": 191, "size": "Pequeño", "speed": 9, "darkvision": 18,
      "options_label": "Linaje gnomo",
      "options": [["Gnomo de las rocas", "Trucos prestidigitación y reparar; puedes construir pequeños mecanismos."],
                  ["Gnomo de los bosques", "Truco ilusión menor y hablar con los animales siempre preparado."]],
      "traits": [["Astucia gnoma", "Ventaja en las salvaciones de Inteligencia, Sabiduría y Carisma."],
                 ["Linaje gnomo", "Magia según tu linaje (INT, SAB o CAR como aptitud mágica)."],
-                ["Visión en la oscuridad", "18 m."]]},
+                ["Visión en la oscuridad", "18 m."]],
+     "lineage_spells": {"Gnomo de las rocas": [[1, "Prestidigitación"], [1, "Reparar"]],
+                        "Gnomo de los bosques": [[1, "Ilusión menor"], [1, "Hablar con los animales", "pb"]]}},
     {"id": "goliat", "name": "Goliat", "page": 192, "size": "Mediano", "speed": 10.5, "darkvision": 0,
      "options_label": "Linaje gigante",
      "options": [["Abrasión del fuego (gigante de fuego)", "Al acertar, 1d10 de daño de fuego extra."],
@@ -346,7 +371,8 @@ SPECIES = [
                  ["Trueno de la tormenta (gigante de las tormentas)", "Reacción: 1d8 de trueno a quien te dañe a 18 m o menos."]],
      "traits": [["Linaje gigante", "Un beneficio sobrenatural de tu linaje; usos: tu bonificador por competencia por descanso largo."],
                 ["Forma grande", "Desde el nivel 5: te vuelves Grande 10 minutos (ventaja en FUE y +3 m de velocidad), 1 vez por descanso largo."],
-                ["Constitución poderosa", "Ventaja para liberarte del estado de agarrado; cuentas como una categoría mayor para la carga."]]},
+                ["Constitución poderosa", "Ventaja para liberarte del estado de agarrado; cuentas como una categoría mayor para la carga."]],
+     "resources": [["Linaje gigante", "pb", "largo", 1], ["Forma grande", 1, "largo", 5]]},
     {"id": "humano", "name": "Humano", "page": 193, "size": "Mediano o Pequeño", "speed": 9, "darkvision": 0,
      "skill_choice": "any", "origin_feat_choice": True,
      "traits": [["Ingenioso", "Obtienes inspiración heroica tras cada descanso largo."],
@@ -360,7 +386,8 @@ SPECIES = [
     {"id": "orco", "name": "Orco", "page": 195, "size": "Mediano", "speed": 9, "darkvision": 36,
      "traits": [["Descarga de adrenalina", "Correr como acción adicional y ganas PG temporales iguales a tu bonificador por competencia (usos: ese bonificador por descanso corto o largo)."],
                 ["Aguante incansable", "Si caes a 0 PG sin morir, te quedas a 1 PG (1 vez por descanso largo)."],
-                ["Visión en la oscuridad", "36 m."]]},
+                ["Visión en la oscuridad", "36 m."]],
+     "resources": [["Descarga de adrenalina", "pb", "corto", 1], ["Aguante incansable", 1, "largo", 1]]},
     {"id": "tiefling", "name": "Tiefling", "page": 196, "size": "Mediano o Pequeño", "speed": 9, "darkvision": 18,
      "options_label": "Legado infernal",
      "options": [["Abisal", "Resistencia al veneno; truco rociada venenosa; rayo nauseabundo (nv 3) e inmovilizar persona (nv 5)."],
@@ -368,7 +395,11 @@ SPECIES = [
                  ["Infernal", "Resistencia al fuego; truco descarga de fuego; reprensión infernal (nv 3) y oscuridad (nv 5)."]],
      "traits": [["Legado infernal", "Resistencia y magia según tu legado (INT, SAB o CAR como aptitud mágica)."],
                 ["Presencia sobrenatural", "Conoces el truco taumaturgia."],
-                ["Visión en la oscuridad", "18 m."]]},
+                ["Visión en la oscuridad", "18 m."]],
+     "spells": [[1, "Taumaturgia"]],
+     "lineage_spells": {"Abisal": [[1, "Rociada venenosa"], [3, "Rayo nauseabundo", 1], [5, "Inmovilizar persona", 1]],
+                        "Ctónico": [[1, "Toque helado"], [3, "Falsa vida", 1], [5, "Rayo debilitador", 1]],
+                        "Infernal": [[1, "Descarga de fuego"], [3, "Reprensión infernal", 1], [5, "Oscuridad", 1]]}},
 ]
 
 # ------------------------------------------------------------------ trasfondos
@@ -390,6 +421,45 @@ BACKGROUNDS = [
     {"id": "soldado", "name": "Soldado", "page": 185, "abilities": ["fue", "des", "con"], "feat": "Atacante salvaje", "skills": ["atletismo", "intimidacion"], "tool": "Un tipo de juego"},
     {"id": "vagabundo", "name": "Vagabundo", "page": 185, "abilities": ["des", "sab", "car"], "feat": "Afortunado", "skills": ["perspicacia", "sigilo"], "tool": "Herramientas de ladrón"},
 ]
+
+# ------------------------------------------------------------------ equipo inicial (opción A; la otra es solo oro)
+# (cantidad, objeto): las armas y armaduras usan los nombres de WEAPONS y ARMOR para pasar directas a la ficha.
+CLASS_KITS = {
+    "barbaro": [([(1, "Hacha a dos manos"), (4, "Hacha de mano"), (1, "Paquete de explorador")], 15)],
+    "bardo": [([(1, "Armadura de cuero"), (2, "Daga"), (1, "Instrumento musical (a elegir)"), (1, "Paquete de artista")], 19)],
+    "brujo": [([(1, "Armadura de cuero"), (1, "Hoz"), (2, "Daga"), (1, "Canalizador arcano (orbe)"), (1, "Libro (de conocimiento oculto)"), (1, "Paquete de erudito")], 15)],
+    "clerigo": [([(1, "Camisa de malla"), (1, "Escudo"), (1, "Maza"), (1, "Símbolo sagrado"), (1, "Paquete de sacerdote")], 7)],
+    "druida": [([(1, "Armadura de cuero"), (1, "Escudo"), (1, "Hoz"), (1, "Bastón"), (1, "Canalizador druídico (el bastón)"), (1, "Paquete de explorador"), (1, "Útiles de herborista")], 9)],
+    "explorador": [([(1, "Armadura de cuero tachonado"), (1, "Cimitarra"), (1, "Espada corta"), (1, "Arco largo"), (20, "Flechas"), (1, "Aljaba"),
+                     (1, "Canalizador druídico (ramita de muérdago)"), (1, "Paquete de explorador")], 7)],
+    "guerrero": [([(1, "Cota de malla"), (1, "Espadón"), (1, "Mangual"), (8, "Jabalina"), (1, "Paquete de explorador de mazmorras")], 4),
+                 ([(1, "Armadura de cuero tachonado"), (1, "Cimitarra"), (1, "Espada corta"), (1, "Arco largo"), (20, "Flechas"), (1, "Aljaba"),
+                   (1, "Paquete de explorador de mazmorras")], 11)],
+    "hechicero": [([(1, "Lanza"), (2, "Daga"), (1, "Canalizador arcano (cristal)"), (1, "Paquete de explorador de mazmorras")], 28)],
+    "mago": [([(2, "Daga"), (1, "Bastón"), (1, "Canalizador arcano (el bastón)"), (1, "Túnica"), (1, "Libro de conjuros"), (1, "Paquete de erudito")], 5)],
+    "monje": [([(1, "Lanza"), (5, "Daga"), (1, "Herramientas de artesano o instrumento musical (el de tu competencia)"), (1, "Paquete de explorador")], 11)],
+    "paladin": [([(1, "Cota de malla"), (1, "Escudo"), (1, "Espada larga"), (6, "Jabalina"), (1, "Símbolo sagrado"), (1, "Paquete de sacerdote")], 9)],
+    "picaro": [([(1, "Armadura de cuero"), (2, "Daga"), (1, "Espada corta"), (1, "Arco corto"), (20, "Flechas"), (1, "Aljaba"),
+                 (1, "Herramientas de ladrón"), (1, "Paquete de ladrón")], 8)],
+}
+BACKGROUND_KITS = {
+    "acolito": ([(1, "Suministros de calígrafo"), (1, "Libro (de oraciones)"), (1, "Símbolo sagrado"), (10, "Hojas de pergamino"), (1, "Túnica")], 8),
+    "animador": ([(1, "Instrumento musical (el de tu competencia)"), (2, "Disfraz"), (1, "Espejo"), (1, "Perfume"), (1, "Ropas de viaje")], 11),
+    "artesano": ([(1, "Herramientas de artesano (las de tu competencia)"), (2, "Bolsa"), (1, "Ropas de viaje")], 32),
+    "campesino": ([(1, "Hoz"), (1, "Herramientas de carpintero"), (1, "Útiles de sanador"), (1, "Olla de hierro"), (1, "Pala"), (1, "Ropas de viaje")], 30),
+    "charlatan": ([(1, "Útiles para falsificar"), (1, "Disfraz"), (1, "Ropas de calidad")], 15),
+    "comerciante": ([(1, "Herramientas de navegante"), (2, "Bolsa"), (1, "Ropas de viaje")], 22),
+    "criminal": ([(2, "Daga"), (1, "Herramientas de ladrón"), (2, "Bolsa"), (1, "Palanqueta"), (1, "Ropas de viaje")], 16),
+    "ermitano": ([(1, "Bastón"), (1, "Útiles de herborista"), (3, "Frascos de aceite"), (1, "Lámpara"), (1, "Libro (de filosofía)"), (1, "Petate"), (1, "Ropas de viaje")], 16),
+    "erudito": ([(1, "Bastón"), (1, "Suministros de calígrafo"), (1, "Libro (de historia)"), (8, "Hojas de pergamino"), (1, "Túnica")], 8),
+    "escriba": ([(1, "Suministros de calígrafo"), (3, "Frascos de aceite"), (1, "Lámpara"), (12, "Hojas de pergamino"), (1, "Ropas de calidad")], 23),
+    "guardia": ([(1, "Lanza"), (1, "Ballesta ligera"), (20, "Virotes"), (1, "Aljaba"), (1, "Juego (el de tu competencia)"), (1, "Esposas"), (1, "Linterna sorda"), (1, "Ropas de viaje")], 12),
+    "guia": ([(1, "Arco corto"), (20, "Flechas"), (1, "Aljaba"), (1, "Herramientas de cartógrafo"), (1, "Petate"), (1, "Tienda"), (1, "Ropas de viaje")], 3),
+    "marinero": ([(1, "Daga"), (1, "Herramientas de navegante"), (1, "Cuerda"), (1, "Ropas de viaje")], 20),
+    "noble": ([(1, "Juego (el de tu competencia)"), (1, "Perfume"), (1, "Ropas de calidad")], 29),
+    "soldado": ([(1, "Lanza"), (1, "Arco corto"), (20, "Flechas"), (1, "Aljaba"), (1, "Juego (el de tu competencia)"), (1, "Útiles de sanador"), (1, "Ropas de viaje")], 14),
+    "vagabundo": ([(2, "Daga"), (1, "Herramientas de ladrón"), (1, "Juego (a elegir)"), (2, "Bolsa"), (1, "Petate"), (1, "Ropas de viaje")], 16),
+}
 
 # ------------------------------------------------------------------ dotes
 _O, _G, _E, _B = "origen", "general", "estilo de combate", "don épico"
@@ -644,15 +714,29 @@ XP_BUDGET = {
 }
 
 
+def _kit(kit):
+    items, gold = kit
+    return {"items": [[n, name] for n, name in items], "gold": gold}
+
+
+def _class_data(c):
+    """La clase con lo que la ficha necesita para jugar: qué hace cada rasgo, rasgos de subclase y equipo."""
+    feats = {f for fs in c["features"].values() for f in fs}
+    text = {**COMMON, **FEATURES[c["id"]], f"Subclase de {c['name'].lower()}": SUBCLASS_PICK}
+    return {**c, "feature_text": {f: t for f, t in text.items() if f in feats}, "subclass_features": SUBCLASSES[c["id"]],
+            "choice": CHOICES.get(c["id"]), "style_level": STYLE_LEVEL.get(c["id"]), "expertise": EXPERTISE.get(c["id"], []),
+            "kits": [_kit(k) for k in CLASS_KITS[c["id"]]], "subclass_unarmored": {s: UNARMORED[s] for s in c["subclasses"] if s in UNARMORED}}
+
+
 def data() -> dict:
     """Todo lo que la interfaz necesita para basarse en el Manual del Jugador 2024."""
     return {
         "edition": "Manual del Jugador (2024)",
         "abilities": ABILITIES,
         "skills": [{"key": k, "name": n, "ability": a} for k, n, a in SKILLS],
-        "classes": CLASSES,
-        "species": SPECIES,
-        "backgrounds": BACKGROUNDS,
+        "classes": [_class_data(c) for c in CLASSES],
+        "species": SPECIES + euskal.SPECIES,
+        "backgrounds": [{**b, "kit": _kit(BACKGROUND_KITS[b["id"]]), "kit_gold": 50} for b in BACKGROUNDS],
         "feats": FEATS,
         "weapons": WEAPONS,
         "armor": ARMOR,
@@ -672,4 +756,5 @@ def data() -> dict:
         "slots": {"full": FULL_SLOTS, "half": HALF_SLOTS, "pact": PACT_SLOTS},
         "xp_budget": XP_BUDGET,
         "spells": SPELLS,
+        "magic_items": MAGIC_ITEMS,
     }

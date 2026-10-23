@@ -17,9 +17,10 @@ import notes from './views/notes.js';
 import music from './views/music.js';
 import reference from './views/reference.js';
 import games from './views/games.js';
+import world from './views/world.js';
 
 const MAIN = [mesa, combat, scenes, characters, maps, dice];
-const EXTRA = [notes, tools, music, games, reference];
+const EXTRA = [notes, tools, music, world, games, reference]; // las teclas 1-9 siguen igual
 const VIEWS = [...MAIN, ...EXTRA];
 
 const rail = document.getElementById('rail');

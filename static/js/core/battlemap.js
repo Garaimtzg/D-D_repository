@@ -226,6 +226,14 @@ function door(d) {
   ctx.save();
   ctx.translate(x + s / 2, y + s / 2);
   if (!horizontal) ctx.rotate(Math.PI / 2);
+  if (d.open) { // abierta: la hoja girada junto al marco
+    ctx.fillStyle = '#2b2118';
+    ctx.fillRect(-s / 2, -t / 2 - s * 0.03, s * 0.12, t + s * 0.06);
+    ctx.fillRect(s / 2 - s * 0.12, -t / 2 - s * 0.03, s * 0.12, t + s * 0.06);
+    withShadow(ctx, s, () => { ctx.fillStyle = '#7a4a22'; ctx.fillRect(-s / 2 + s * 0.1, -t / 2, s * 0.12, s * 0.62); }, 0.4);
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = '#2b2118';
   ctx.fillRect(-s / 2, -t / 2 - s * 0.03, s * 0.12, t + s * 0.06);
   ctx.fillRect(s / 2 - s * 0.12, -t / 2 - s * 0.03, s * 0.12, t + s * 0.06);
@@ -784,7 +792,7 @@ function tree(ctx, x, y, w, hh, s, rand, [dark, mid, light, top]) {
 }
 
 // Dibuja un escenario completo (o solo una región) en un contexto con casillas de `s` píxeles.
-export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg = null } = {}) {
+export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg = null, open = null } = {}) {
   const { cols, rows } = sc;
   const t = sc.tiles;
   const at = (c, r) => (c < 0 || r < 0 || c >= cols || r >= rows ? null : t[r * cols + c]);
@@ -804,7 +812,7 @@ export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg
   }
   const each = (fn) => { for (let r = f0; r <= f1; r++) for (let c = e0; c <= e1; c++) fn(c, r, at(c, r)); };
   const env = (c, r, k) => ({
-    ctx, s, c, r, x: c * s, y: r * s, code: at(c, r), rand: cellRand(c, r, k),
+    ctx, s, c, r, x: c * s, y: r * s, code: at(c, r), rand: cellRand(c, r, k), open: !!open && open.has(r * cols + c),
     at: (dc, dr) => at(c + dc, r + dr), isWall: (dc, dr) => wallAt(c + dc, r + dr),
   });
   // 1. color de base
@@ -984,11 +992,12 @@ export function sceneThumb(sc, cat, maxW = 320, maxH = 200) {
 
 // ================================================================ reglas del tablero
 // Coste de entrar en cada casilla: 1, 2 (terreno difícil) o Infinity (muro, abismo, lava, objeto que bloquea).
-export function costGrid(sc, cat) {
+// Con «open» (las puertas abiertas), las puertas cerradas tampoco se pueden cruzar.
+export function costGrid(sc, cat, open = null) {
   const out = new Float32Array(sc.cols * sc.rows);
   for (let i = 0; i < out.length; i++) {
     const info = cat.T[sc.tiles[i]];
-    out[i] = !info || info.cost == null || info.hazard ? Infinity : info.cost;
+    out[i] = !info || info.cost == null || info.hazard || (open && sc.tiles[i] === 'D' && !open.has(i)) ? Infinity : info.cost;
   }
   for (const p of sc.props || []) {
     const eff = cat.P[p.k]?.effect;
@@ -1119,6 +1128,9 @@ export function createBattleMap(opts = {}) {
   const el = h('div', { class: `bm ${o.editable ? 'editing' : ''}` }, vp, emptyEl, hud, bar, pop);
 
   let scene = null; let W = 0; let H = 0; let ratio = 1;
+  // Puertas que se abren y cierran (solo en combate): cerradas tapan el paso y la vista.
+  const doorsOn = !!o.onDoor;
+  let openDoors = new Set();
   let costs = null; let bgImg = null; let fitted = false;
   const view = { scale: 1, x: 0, y: 0 };
   let tokens = []; const tokenEls = new Map();
@@ -1207,11 +1219,11 @@ export function createBattleMap(opts = {}) {
   }
   function redraw(region = null) {
     if (!scene) return;
-    costs = costGrid(scene, cat);
+    costs = costGrid(scene, cat, doorsOn ? openDoors : null);
     rangeCache = null;
     const ctx = terrainCv.getContext('2d');
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    drawScene(ctx, scene, cat, { s: S, dm: o.dm, region, bg: bgImg });
+    drawScene(ctx, scene, cat, { s: S, dm: o.dm, region, bg: bgImg, open: doorsOn ? openDoors : null });
     const lctx = lightCv.getContext('2d');
     const gctx = glowCv.getContext('2d');
     lctx.setTransform(0.25, 0, 0, 0.25, 0, 0);
@@ -1240,7 +1252,7 @@ export function createBattleMap(opts = {}) {
   function revealFrom(t, R = 8) {
     const n = sizeCells(t.size);
     const cx = t.c + (n - 1) / 2; const cy = t.r + (n - 1) / 2;
-    const wall = (c, r) => cat.T[scene.tiles[idx(c, r)]]?.kind === 'muro';
+    const wall = (c, r) => cat.T[scene.tiles[idx(c, r)]]?.kind === 'muro' || (doorsOn && scene.tiles[idx(c, r)] === 'D' && !openDoors.has(idx(c, r)));
     for (let r = Math.floor(cy - R); r <= cy + R; r++) {
       for (let c = Math.floor(cx - R); c <= cx + R; c++) {
         if (!inside(c, r) || Math.hypot(c - cx, r - cy) > R + 0.5) continue;
@@ -1253,6 +1265,14 @@ export function createBattleMap(opts = {}) {
         if (open) fog.seen.add(idx(c, r));
       }
     }
+  }
+  function toggleDoor(c, r) {
+    const k = idx(c, r);
+    if (openDoors.has(k)) openDoors.delete(k); else openDoors.add(k);
+    sfx[openDoors.has(k) ? 'whoosh' : 'step']?.();
+    redraw({ c0: c - 1, c1: c + 1, r0: r - 1, r1: r + 1 });
+    if (fog?.on) { revealParty(); commitFog(); }
+    o.onDoor([...openDoors]);
   }
   function revealParty() { if (fog?.on) tokens.filter((t) => t.type === 'jugador' && t.c != null).forEach((t) => revealFrom(t)); }
   function commitFog() { drawFog(); renderTokens(); o.onFog?.({ on: !!fog?.on, seen: [...(fog?.seen || [])] }); }
@@ -1804,7 +1824,12 @@ export function createBattleMap(opts = {}) {
       vp.classList.remove('panning');
       const wasClick = !pan.moved;
       pan = null;
-      if (wasClick && !o.editable && e.type === 'pointerup') { selected = null; renderTokens(); drawOverlay(); o.onBackgroundClick?.(); }
+      if (wasClick && !o.editable && e.type === 'pointerup') {
+        const cl = toCells(e);
+        const c = Math.floor(cl.x); const r = Math.floor(cl.y);
+        if (doorsOn && inside(c, r) && scene.tiles[idx(c, r)] === 'D') { toggleDoor(c, r); return; }
+        selected = null; renderTokens(); drawOverlay(); o.onBackgroundClick?.();
+      }
       return;
     }
     if (drag) {
@@ -1921,6 +1946,7 @@ export function createBattleMap(opts = {}) {
     redraw,
     setTokens,
     setDm(v) { if (o.dm !== v) { o.dm = v; redraw(); drawBar(); } },
+    setDoors(list) { openDoors = new Set(list || []); if (scene && doorsOn) redraw(); },
     setFog(f) { fog = f ? { on: !!f.on, seen: new Set(f.seen || []) } : null; drawFog(); renderTokens(); if (tool === 'fog') drawPop(); },
     setTool,
     get tool() { return tool; },

@@ -51,17 +51,32 @@ Para cerrar la mesa, cierra la ventana negra de la consola.
 
 | Sección | Para qué sirve |
 | --- | --- |
-| **Mesa** | Mapa con zoom y fichas arrastrables, cinta de iniciativa con anuncio de turno, grupo, bandeja de dados, últimas tiradas, reloj del mundo, narración en pergamino y **clima** sobre el tablero (lluvia, tormenta con relámpagos, nieve, niebla, brasas) con su sonido. |
-| **Combate** | Encuentros con fichas, bestiario o participantes rápidos; dificultad con el presupuesto de PX de 2024, iniciativa, turnos y rondas, daño y curación con números flotantes, estados con duración, concentración, salvaciones de muerte, daño en área, enemigos ocultos y crónica. Al ganar, reparto de PX. **Tablero con cuadrícula**: fichas por casillas (las criaturas grandes ocupan 2×2), alcance de movimiento con terreno difícil, metros movidos por turno, regla, áreas de efecto (esfera, cubo, cono, línea y emanación) que señalan a los afectados, y pantalla completa. |
-| **Escenarios** | 12 tableros prediseñados (taberna, bosque, cripta, cueva, puente, campamento, plaza, barco, templo, ciénaga, guarida del dragón y campo abierto), un editor para personalizarlos o crear los tuyos (terreno, 36 objetos, luz, zonas de inicio, imagen de fondo) y «usar en un combate». |
-| **Personajes** | Jugadores, personajes de la historia y enemigos como cartas. **Creador paso a paso** del Manual 2024 (clase, trasfondo, especie, características, detalles) y **subida de nivel guiada**. La ficha imita una hoja en pergamino: características, salvaciones, habilidades, CA automática con armadura y escudo, PG, dados de golpe, cansancio, inspiración heroica, ataques con armas del manual y sus maestrías, conjuros con espacios por clase, recursos, inventario con monedas (pc, pp, pe, po, ppt), rasgos y dotes. Todo se tira con un clic. |
-| **Mapas** | Galería de imágenes para poner sobre la mesa, con notas privadas. |
+| **Mesa** | Mapa con zoom y fichas arrastrables, cinta de iniciativa con anuncio de turno, grupo, bandeja de dados, últimas tiradas, reloj del mundo, narración en pergamino y **clima** sobre el tablero (lluvia, tormenta con relámpagos, nieve, niebla, brasas) con su sonido. **Dibujo a mano alzada** sobre el mapa (colores, goma, borrar todo) y las **chinchetas** del mapa, visibles solo para el máster, para todos u ocultas. |
+| **Combate** | Encuentros con fichas, bestiario o participantes rápidos; dificultad con el presupuesto de PX de 2024, iniciativa, turnos y rondas, daño y curación con números flotantes, estados con duración, concentración, salvaciones de muerte, daño en área, enemigos ocultos y crónica. Al ganar, reparto de PX. **Tablero con cuadrícula**: fichas por casillas (las criaturas grandes ocupan 2×2), alcance de movimiento con terreno difícil, metros movidos por turno, regla, áreas de efecto (esfera, cubo, cono, línea y emanación) que señalan a los afectados, **puertas** que se abren y cierran con un clic (bloquean el paso y la vista mientras están cerradas), y pantalla completa. |
+| **Escenarios** | 12 tableros prediseñados (taberna, bosque, cripta, cueva, puente, campamento, plaza, barco, templo, ciénaga, guarida del dragón y campo abierto), un editor para personalizarlos o crear los tuyos (terreno, 36 objetos, luz, zonas de inicio, imagen de fondo) y «usar en un combate». **Mazmorra o cueva al azar** en tres tamaños: salas unidas por pasillos, puertas, trampas, tesoro, guardianes y jefe, con la clave de cada sala para el máster; la misma semilla da la misma mazmorra. |
+| **Personajes** | Jugadores, personajes de la historia y enemigos como cartas. **Creador paso a paso** del Manual 2024: clase (con Orden divina u Orden primigenia), trasfondo, especie (tamaño y linaje), idiomas, características, estilo de combate, mejoras de característica o dotes de los niveles 4, 8…, subclase y **equipo inicial** (opción A con sus objetos o el oro). Las armas pasan a la lista de ataques y la armadura a la CA. **Subida de nivel guiada**. La ficha imita una hoja en pergamino: características, salvaciones, habilidades, CA automática (armadura, escudo, Defensa sin armadura de clase o subclase, armadura natural), PG, dados de golpe, cansancio, inspiración heroica, ataques con armas del manual y sus maestrías, aliento dracónico y golpe sin armas del monje calculados solos, conjuros con espacios por clase y la magia de la especie, recursos por nivel, inventario con monedas (pc, pp, pe, po, ppt) y **objetos mágicos** del SRD con su sintonía (máximo 3), **todos los rasgos de clase y de subclase con lo que hacen**, y un aviso de **lo que falta por elegir** (maestrías, pericia, trucos, conjuros preparados, estilo de combate…). Todo se tira con un clic. **Aspecto** (pulsa el retrato): cara dibujada con piel, ojos, 11 peinados, 11 expresiones, orejas (elfo, gato…), marcas (pecas, cicatriz, pintura de guerra…), cuernos, barba y bigote, ropa con su color, sombreros con su color (también txapela), gafas, objetos en la mano, cualquier emoji y fondo; todos los colores con selector libre. O una imagen propia. |
+| **Mapas** | Galería de imágenes para poner sobre la mesa, con notas privadas y **chinchetas** que enlazan con el compendio, con fichas o con otro mapa (de la región entras en la ciudad). |
 | **Dados** | Bandeja con dados 3D, constructor de tiradas, favoritos, generador de características, historial y «la suerte del d20». |
-| **Notas** | Diario de campaña con aspecto de libro y tablón de misiones con notas que se arrastran entre columnas. |
+| **Notas** | Diario de campaña con aspecto de libro (con la fecha del mundo), **preparación de sesiones** con los ocho pasos del «máster perezoso» de Sly Flourish (los secretos que no salen pasan solos a la sesión siguiente; el comienzo y el «Anteriormente…» se leen en la mesa) y tablón de misiones con notas que se arrastran entre columnas. |
+| **Mundo** | **Compendio** de lugares, facciones, objetos, deidades e historia: escribe @ para enlazar entradas, fichas, mapas o misiones; cada entrada muestra quién la menciona, en qué mapas está, lo que contiene y unos secretos solo para el máster, y se puede **mostrar en la mesa** con su imagen. **Calendario** del mundo (Euskal Herria, gregoriano, fantasía o el tuyo) con lunas, estaciones, festivos y sucesos, unido al reloj del mundo, y **cronología**. **Relaciones** entre fichas y entradas (familia, pareja, aliados, enemigos, rivales, a quién sirven, a qué pertenecen; también secretas) vistas como una **red** y como **árbol familiar**. **Bastiones** de las reglas de 2024: instalaciones especiales según el nivel, órdenes, defensores, oro y un turno de bastión cada 7 días con la tabla de sucesos (resumen orientativo: los detalles, en la Guía del DM 2024). |
 | **Herramientas** | Copia de la campaña (.zip), generadores (PNJ, tabernas, botín, ganchos, clima…), calculadora de encuentros, reloj, temporizadores, narración, tablas aleatorias propias, monedas, botín, viajes y dados para el móvil. |
-| **Música** | Tus canciones por escenas (taberna, combate, jefe…), disco que gira y visualizador; ambientes sintetizados sin ficheros: lluvia, viento, hoguera, cueva y taberna. |
+| **Música** | Tus canciones por escenas (taberna, combate, jefe…), disco que gira y visualizador; ambientes sintetizados sin ficheros: lluvia, viento, hoguera, cueva y taberna; y un panel de **efectos** de un clic (espadas, trueno, explosión, fanfarria…). |
 | **Minijuegos** | Para tabernas y descansos, con el muñeco de cada jugador: el cerdo (dados 3D), carrera de bichos con apuestas, ganzúa, pulso a dos teclas y acertijos. |
-| **Reglas** | Manual del Jugador 2024 con buscador: estados, acciones, cuadrícula y áreas, clases, especies, trasfondos, dotes, **los 388 conjuros** (nivel, tiempo, alcance, duración, concentración, salvación y daño, filtrables por clase y nivel), armas con maestrías, armaduras, monedas y tablas de PX. Resúmenes propios con la página del manual. |
+| **Reglas** | Manual del Jugador 2024 con buscador: estados, acciones, cuadrícula y áreas, clases y subclases (pasa el ratón por un rasgo para ver qué hace), especies, trasfondos, dotes, **los 389 conjuros** (nivel, tiempo, alcance, duración, concentración, salvación y daño, filtrables por clase y nivel), armas con maestrías, armaduras, monedas y tablas de PX. **258 objetos mágicos** del SRD 5.2.1 en castellano, filtrables por tipo, rareza y sintonía, con uno al azar para el botín. Resúmenes propios con la página del manual. |
+
+### Mitología de Euskal Herria
+
+Material propio de esta app, inspirado en las leyendas que recogió José Miguel de Barandiaran:
+
+- **Bestiario**: 18 criaturas para usar como enemigos, de VD 1/4 a 18: iratxo, txakur beltza, lamiña,
+  akerbeltz, enjambre de galtzagorris, gizotso, sorgina, inguma, jentil, aatxe, basajaun, Tartalo,
+  Ehiztari beltza (el Cazador Negro), Gaueko, Odei, Mikelats, Sugaar y el herensuge de siete cabezas.
+  Cada una trae su leyenda, rasgos, acciones listas para tirar y detalles para la partida (el anillo
+  parlante de Tartalo, la fórmula contra Inguma, las campanas que espantan a Odei…). Sus cifras siguen
+  la tabla de VD de la Guía del Dungeon Master y las pruebas comprueban que cada VD cuadra.
+  En el bestiario busca «vasca»; en Combate tienen su propio grupo.
+- **Especies jugables**: jentil, lamiña, basajaun e iratxo, con el mismo «presupuesto» que las especies
+  del manual (un rasgo fuerte, otros menores y magia en los niveles 3 y 5).
 
 ### Sonido
 
@@ -95,8 +110,12 @@ Las fuentes decorativas se cargan de Google Fonts; sin internet se usan las del 
 app.py                     arranque
 Iniciar Mesa DnD.bat       arranque con doble clic en Windows (iniciar.sh en macOS / Linux)
 server/                    servidor HTTP, API JSON, almacén, copias .zip, dados, reglas, generadores, bestiario
-  phb2024.py               datos del Manual del Jugador 2024 (clases, especies, trasfondos, dotes, equipo…)
+  phb2024.py               datos del Manual del Jugador 2024 (clases, especies, trasfondos, dotes, equipo inicial…)
+  features2024.py          qué hace cada rasgo de clase y de subclase (resúmenes propios)
+  euskal.py                criaturas y especies de la mitología de Euskal Herria
   scenes.py                terrenos, objetos y escenarios prediseñados del tablero
+  dungeon.py               mazmorras y cuevas al azar con su clave
+  magicitems2024.json      objetos mágicos del SRD 5.2.1 en castellano (generado)
 static/
   index.html               la aplicación
   dados-movil.html         página de dados para el móvil (generada, no editar)
@@ -107,11 +126,14 @@ static/
   js/core/                 api, dom, reglas, dados, combate, sonido, música, ambientes, clima, atmósfera
   js/core/battlemap.js     tablero con cuadrícula: dibujo, fichas, regla, áreas, movimiento y edición
   js/core/board.js         une un combate con su tablero (posiciones, colocación automática)
+  js/core/calendar.js      calendario del mundo: fechas, semanas, estaciones, lunas y festivos
+  js/core/mentions.js      enlaces @[Nombre] entre notas, compendio, fichas y mapas
   js/views/                una sección por fichero
 movil/                     fuentes de la página del móvil
 tools/build_movil.py       genera static/dados-movil.html
 tools/extract_spells.py    saca los datos de los conjuros del PDF del Manual (server/spells2024.json)
 tools/build_bestiary.py    traduce el bestiario del SRD 5.2.1 (server/monsters2024.json)
+tools/build_magic_items.py traduce los objetos mágicos del SRD 5.2.1 (server/magicitems2024.json)
 tests/                     pruebas
 ```
 
@@ -128,6 +150,9 @@ python -m unittest discover tests
 Este trabajo incluye material del System Reference Document 5.2.1 («SRD 5.2.1») de Wizards of the Coast LLC,
 disponible en https://www.dndbeyond.com/srd. El SRD 5.2.1 tiene licencia Creative Commons Reconocimiento 4.0
 Internacional, disponible en https://creativecommons.org/licenses/by/4.0/legalcode. El bestiario (323 monstruos y
-animales) está traducido al castellano y resumido a partir de ese documento con `tools/build_bestiary.py`.
+animales) está traducido al castellano y resumido a partir de ese documento con `tools/build_bestiary.py`, y los
+258 objetos mágicos, con `tools/build_magic_items.py`.
 
-Las reglas, clases y conjuros del Manual del Jugador 2024 se resumen con palabras propias y remiten a la página del manual.
+Las reglas, clases y conjuros del Manual del Jugador 2024 se resumen con palabras propias y remiten a la página del manual;
+los bastiones, con palabras propias a partir de la Guía del Dungeon Master 2024.
+Las criaturas y especies de Euskal Herria son creación de esta app a partir de la mitología vasca tradicional.

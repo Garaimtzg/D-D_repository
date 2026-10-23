@@ -1,9 +1,11 @@
 // Asistente para crear un aventurero siguiendo los cinco pasos del Manual del Jugador 2024
 // (MdJ p. 33-41): clase, origen (trasfondo, especie e idiomas), características, detalles y resumen.
+// Las especies de Euskal Herria (material propio) aparecen junto a las del manual.
 import { h, clear, icon, toast } from '../core/dom.js';
 import {
   reference, newCharacter, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, mod, fmtMod, fmtM, maxHpFor, computeAC,
-  slotsFor, classResources, featuresUpTo, profBonus, columnAt,
+  slotsFor, classResources, featuresUpTo, profBonus, columnAt, source, speciesResources, speciesSpells, derivedAttacks,
+  pendingChoices, weaponAttack, featAbilities, initBonus,
 } from '../core/dnd.js';
 import { roll } from '../core/dice.js';
 import { sfx } from '../core/sfx.js';
@@ -13,30 +15,28 @@ const CLASS_ICON = {
   barbaro: '🪓', bardo: '🎻', brujo: '👁️', clerigo: '✨', druida: '🌿', explorador: '🏹',
   guerrero: '⚔️', hechicero: '🔥', mago: '📖', monje: '👊', paladin: '🛡️', picaro: '🗡️',
 };
-const SPECIES_ICON = { aasimar: '😇', draconido: '🐉', elfo: '🧝', enano: '⛏️', gnomo: '⚙️', goliat: '🏔️', humano: '🧑', mediano: '🍀', orco: '💪', tiefling: '😈' };
-const COLORS = ['#5b9cff', '#4cc38a', '#e2b456', '#a77bff', '#e0524a', '#ff8a3d', '#2bb3b3', '#e0527f', '#c9d1d9', '#8b5e3c'];
-
-// Recursos que dan algunas especies (usos = bonificador por competencia salvo que se indique otra cosa).
-export const SPECIES_RESOURCES = {
-  aasimar: [['Manos curativas', 1, 'largo']],
-  draconido: [['Ataque de aliento', 'pb', 'largo']],
-  enano: [['Afinidad con la piedra', 'pb', 'largo']],
-  goliat: [['Linaje gigante', 'pb', 'largo']],
-  orco: [['Descarga de adrenalina', 'pb', 'corto'], ['Aguante incansable', 1, 'largo']],
+export const SPECIES_ICON = {
+  aasimar: '😇', draconido: '🐉', elfo: '🧝', enano: '⛏️', gnomo: '⚙️', goliat: '🏔️', humano: '🧑', mediano: '🍀', orco: '💪', tiefling: '😈',
+  jentil: '🪨', lamina: '🦆', basajaun: '🌲', iratxo: '🧚',
 };
+const COLORS = ['#5b9cff', '#4cc38a', '#e2b456', '#a77bff', '#e0524a', '#ff8a3d', '#2bb3b3', '#e0527f', '#c9d1d9', '#8b5e3c'];
+// Alternativas al estilo de combate que dan el paladín y el explorador
+const STYLE_EXTRA = { paladin: ['Guerrero bendito', 'Dos trucos de clérigo (por ejemplo guía y llama sagrada).'], explorador: ['Guerrero druídico', 'Dos trucos de druida (por ejemplo guía y voluta estelar).'] };
 
 export async function openCreator({ onCreate }) {
   const R = await reference();
   const st = {
-    step: 0, classId: '', classSkills: [], backgroundId: '', speciesId: '', lineage: '', speciesSkill: '', humanFeat: '',
+    step: 0, classId: '', classSkills: [], classChoice: '', backgroundId: '', speciesId: '', lineage: '', size: '', speciesSkill: '', humanFeat: '',
     languages: ['Común'], method: 'estandar', assign: blank(''), points: blank(8), rolled: [], rolledAssign: blank(''),
-    bgMode: '2-1', plus2: '', plus1: '', name: '', player: '', alignment: 'Neutral bueno', level: 1, subclass: '',
-    color: COLORS[Math.floor(Math.random() * COLORS.length)], gold: true,
+    bgMode: '2-1', plus2: '', plus1: '', name: '', player: '', alignment: 'Neutral bueno', level: 1, subclass: '', style: '', asi: {},
+    kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)],
   };
   const cls = () => R.classes.find((c) => c.id === st.classId);
   const bg = () => R.backgrounds.find((b) => b.id === st.backgroundId);
   const sp = () => R.species.find((s) => s.id === st.speciesId);
   const skillName = (k) => R.skills.find((s) => s.key === k)?.name || k;
+  // Niveles en los que la clase da Mejora de característica o Don épico hasta el nivel elegido
+  const asiLevels = () => Object.entries(cls()?.features || {}).filter(([l, fs]) => Number(l) <= st.level && fs.some((f) => f === 'Mejora de característica' || f === 'Don épico')).map(([l]) => Number(l));
 
   const body = h('div', { class: 'cr-body' });
   const steps = h('ol', { class: 'cr-steps' });
@@ -74,6 +74,7 @@ export async function openCreator({ onCreate }) {
     if (step === 0) {
       if (!c) return 'Elige una clase.';
       if (st.classSkills.length !== c.skills.choose) return `Elige ${c.skills.choose} habilidades de clase.`;
+      if (c.choice && !st.classChoice) return `Elige tu ${c.choice.name.toLowerCase()}.`;
     }
     if (step === 1) {
       if (!bg()) return 'Elige un trasfondo.';
@@ -90,7 +91,11 @@ export async function openCreator({ onCreate }) {
       if (st.method === 'puntos' && spent() > R.point_buy.budget) return 'Te has pasado de los 27 puntos.';
       if (st.bgMode === '2-1' && (!st.plus2 || !st.plus1 || st.plus2 === st.plus1)) return 'Elige dónde van el +2 y el +1 de tu trasfondo.';
     }
-    if (step === 3 && !st.name.trim()) return 'Ponle un nombre.';
+    if (step === 3) {
+      if (!st.name.trim()) return 'Ponle un nombre.';
+      if (c?.style_level && st.level >= c.style_level && !st.style) return 'Elige tu estilo de combate.';
+      if (asiLevels().some((l) => !st.asi[l]?.pick)) return 'Elige qué mejoras en cada nivel con Mejora de característica.';
+    }
     return '';
   }
 
@@ -111,6 +116,23 @@ export async function openCreator({ onCreate }) {
     ABILITY_KEYS.forEach((k) => { s[k] = Math.min(20, s[k]); });
     return s;
   }
+  // Puntuaciones con las mejoras de los niveles 4, 8… (las dotes generales y los dones épicos suben +1)
+  function withImprovements(s) {
+    const out = { ...s };
+    const feats = [];
+    for (const l of asiLevels()) {
+      const { pick = '', boost = '' } = st.asi[l] || {};
+      const [kind, val] = pick.split(':');
+      if (kind === '2') out[val] = Math.min(20, out[val] + 2);
+      if (kind === '1') val.split(',').forEach((k) => { out[k] = Math.min(20, out[k] + 1); });
+      if (kind === 'feat') {
+        const f = R.feats.find((x) => x.name === val);
+        feats.push(val);
+        if (boost) out[boost] = Math.min(f?.category === 'don épico' ? 30 : 20, out[boost] + 1);
+      }
+    }
+    return { scores: out, feats };
+  }
 
   // ------------------------------------------------------------------ pintado
   function render() {
@@ -130,6 +152,8 @@ export async function openCreator({ onCreate }) {
     const next = body.querySelectorAll('.cr-grid')[gi]?.nextElementSibling;
     if (next?.classList.contains('cr-detail')) requestAnimationFrame(() => next.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
   };
+  const option = (on, onclick, title, text) => h('button', { class: `cr-option ${on ? 'sel' : ''}`, type: 'button', onclick: () => { onclick(); refresh(); } },
+    h('b', {}, title), text && h('span', { class: 'tiny' }, text));
 
   // Paso 1: clase
   function stepClass() {
@@ -138,20 +162,22 @@ export async function openCreator({ onCreate }) {
       h('p', { class: 'cr-intro' }, 'La clase es la decisión más importante: define la vocación, los talentos y las tácticas de tu personaje.'),
       h('div', { class: 'cr-grid' }, R.classes.map((k) => h('button', {
         class: `cr-card ${k.id === st.classId ? 'sel' : ''}`, type: 'button',
-        onclick: (e) => { if (st.classId !== k.id) { st.classId = k.id; st.classSkills = []; st.subclass = ''; sfx.click(); } choose(e); },
+        onclick: (e) => { if (st.classId !== k.id) { Object.assign(st, { classId: k.id, classSkills: [], subclass: '', classChoice: '', style: '', asi: {}, kit: 0 }); sfx.click(); } choose(e); },
       }, h('span', { class: 'cr-emoji' }, CLASS_ICON[k.id]), h('b', {}, k.name),
       h('span', { class: 'small' }, k.summary),
       h('span', { class: 'cr-tags' }, h('span', { class: 'chip' }, `d${k.hit_die}`), h('span', { class: 'chip' }, k.primary.map((a) => ABILITY_SHORT[a]).join(' y ')),
         h('span', { class: `chip cx-${k.complexity.toLowerCase()}` }, k.complexity))))),
       c && h('section', { class: 'panel cr-detail' },
-        h('div', { class: 'panel-head' }, h('h3', {}, CLASS_ICON[c.id], ' ', c.name), h('span', { class: 'chip' }, `MdJ p. ${c.page}`)),
+        h('div', { class: 'panel-head' }, h('h3', {}, CLASS_ICON[c.id], ' ', c.name), h('span', { class: 'chip' }, source(c))),
         h('dl', { class: 'cr-dl' },
           h('dt', {}, 'Dado de golpe'), h('dd', {}, `d${c.hit_die} por nivel · ${c.hit_die} + CON en el nivel 1`),
           h('dt', {}, 'Salvaciones'), h('dd', {}, c.saves.map((k) => ABILITY_NAME[k]).join(' y ')),
           h('dt', {}, 'Armas'), h('dd', {}, c.weapons), h('dt', {}, 'Armaduras'), h('dd', {}, c.armor),
           c.tools && [h('dt', {}, 'Herramientas'), h('dd', {}, c.tools)],
-          c.caster && [h('dt', {}, 'Magia'), h('dd', {}, `${c.caster === 'pact' ? 'Magia del pacto' : 'Lanzamiento de conjuros'} con ${ABILITY_NAME[c.spell_ability]}`)],
-          h('dt', {}, 'Rasgos de nivel 1'), h('dd', {}, c.features[1].join(', '))),
+          c.caster && [h('dt', {}, 'Magia'), h('dd', {}, `${c.caster === 'pact' ? 'Magia del pacto' : 'Lanzamiento de conjuros'} con ${ABILITY_NAME[c.spell_ability]}`)]),
+        h('ul', { class: 'cr-traits small' }, featuresUpTo(c, 1).map(([, f, t]) => h('li', {}, h('b', {}, f), t && ` — ${t}`))),
+        c.choice && [h('div', { class: 'eyebrow' }, c.choice.name),
+          h('div', { class: 'cr-options' }, c.choice.options.map(([n, t]) => option(st.classChoice === n, () => { st.classChoice = n; }, n, t)))],
         h('div', { class: 'eyebrow' }, `Elige ${c.skills.choose} habilidades (${st.classSkills.length}/${c.skills.choose})`),
         skillPicker(c.skills.from, st.classSkills, c.skills.choose, bg()?.skills || [])));
   }
@@ -179,6 +205,13 @@ export async function openCreator({ onCreate }) {
     // si el trasfondo da una habilidad ya elegida por la clase, hay que elegir otra
     if (b) st.classSkills = st.classSkills.filter((k) => !b.skills.includes(k));
     const originFeats = R.feats.filter((f) => f.category === 'origen');
+    const speciesCard = (k) => h('button', {
+      class: `cr-card ${k.id === st.speciesId ? 'sel' : ''} ${k.page ? '' : 'homebrew'}`, type: 'button',
+      onclick: (e) => { if (st.speciesId !== k.id) { Object.assign(st, { speciesId: k.id, lineage: '', speciesSkill: '', humanFeat: '', size: k.size.split(' o ')[0] }); sfx.click(); } choose(e); },
+    }, h('span', { class: 'cr-emoji' }, SPECIES_ICON[k.id] || '🧬'), h('b', {}, k.name),
+    h('span', { class: 'tiny muted' }, `${k.size} · ${fmtM(k.speed)}${k.darkvision ? ` · visión ${k.darkvision} m` : ''}`));
+    const official = R.species.filter((k) => k.page);
+    const basque = R.species.filter((k) => !k.page);
     return h('div', { class: 'stack' },
       h('p', { class: 'cr-intro' }, 'Tu origen es lo que eras antes de la aventura: un trasfondo, una especie y los idiomas que hablas.'),
       h('h3', { class: 'cr-h' }, '1 · Trasfondo'),
@@ -187,22 +220,21 @@ export async function openCreator({ onCreate }) {
         onclick: (e) => { st.backgroundId = k.id; st.plus2 = ''; st.plus1 = ''; sfx.click(); choose(e); },
       }, h('b', {}, k.name), h('span', { class: 'cr-tags' }, k.abilities.map((a) => h('span', { class: 'chip' }, ABILITY_SHORT[a]))),
       h('span', { class: 'tiny' }, `Dote: ${k.feat}`), h('span', { class: 'tiny muted' }, k.skills.map(skillName).join(' · '))))),
-      b && h('div', { class: 'cr-note' }, `${b.name} (MdJ p. ${b.page}): competencias en ${b.skills.map(skillName).join(' y ')}, ${b.tool.toLowerCase()} y la dote ${b.feat}.`),
+      b && h('div', { class: 'cr-note' }, `${b.name} (${source(b)}): competencias en ${b.skills.map(skillName).join(' y ')}, ${b.tool.toLowerCase()} y la dote ${b.feat}.`),
       c && st.classSkills.length < c.skills.choose && h('div', { class: 'panel cr-detail' },
         h('div', { class: 'eyebrow', style: { marginTop: 0 } }, `Tu trasfondo ya te da alguna habilidad de clase: elige ${c.skills.choose - st.classSkills.length} más`),
         skillPicker(c.skills.from, st.classSkills, c.skills.choose, b?.skills || [])),
       h('h3', { class: 'cr-h' }, '2 · Especie'),
-      h('div', { class: 'cr-grid small-cards' }, R.species.map((k) => h('button', {
-        class: `cr-card ${k.id === st.speciesId ? 'sel' : ''}`, type: 'button',
-        onclick: (e) => { if (st.speciesId !== k.id) { st.speciesId = k.id; st.lineage = ''; st.speciesSkill = ''; st.humanFeat = ''; sfx.click(); } choose(e); },
-      }, h('span', { class: 'cr-emoji' }, SPECIES_ICON[k.id]), h('b', {}, k.name),
-      h('span', { class: 'tiny muted' }, `${k.size} · ${fmtM(k.speed)}${k.darkvision ? ` · visión ${k.darkvision} m` : ''}`)))),
+      h('div', { class: 'cr-grid small-cards' }, official.map(speciesCard)),
+      h('div', { class: 'eyebrow cr-basque' }, 'De Euskal Herria · especies propias de esta app, equilibradas como las del manual'),
+      h('div', { class: 'cr-grid small-cards' }, basque.map(speciesCard)),
       s && h('section', { class: 'panel cr-detail' },
-        h('div', { class: 'panel-head' }, h('h3', {}, SPECIES_ICON[s.id], ' ', s.name), h('span', { class: 'chip' }, `MdJ p. ${s.page}`)),
+        h('div', { class: 'panel-head' }, h('h3', {}, SPECIES_ICON[s.id], ' ', s.name), h('span', { class: 'chip' }, source(s))),
         h('ul', { class: 'cr-traits' }, s.traits.map(([n, t]) => h('li', {}, h('b', {}, n), ' — ', t))),
+        s.size.includes(' o ') && [h('div', { class: 'eyebrow' }, 'Tamaño'),
+          h('div', { class: 'cr-options' }, s.size.split(' o ').map((z) => option(st.size === z, () => { st.size = z; }, z)))],
         s.options && [h('div', { class: 'eyebrow' }, s.options_label),
-          h('div', { class: 'cr-options' }, s.options.map(([n, t]) => h('button', { class: `cr-option ${st.lineage === n ? 'sel' : ''}`, type: 'button', onclick: () => { st.lineage = n; refresh(); } },
-            h('b', {}, n), h('span', { class: 'tiny' }, t))))],
+          h('div', { class: 'cr-options' }, s.options.map(([n, t]) => option(st.lineage === n, () => { st.lineage = n; }, n, t)))],
         s.skill_choice && [h('div', { class: 'eyebrow' }, s.id === 'elfo' ? 'Sentidos agudos' : 'Diestro: una habilidad'),
           h('div', { class: 'cr-skills' }, (s.skill_choice === 'any' ? R.skills.map((k) => k.key) : s.skill_choice).map((k) => {
             const taken = (b?.skills || []).includes(k) || st.classSkills.includes(k);
@@ -210,8 +242,7 @@ export async function openCreator({ onCreate }) {
               onclick: () => { st.speciesSkill = k; refresh(); } }, skillName(k));
           }))],
         s.origin_feat_choice && [h('div', { class: 'eyebrow' }, 'Versátil: una dote de origen'),
-          h('div', { class: 'cr-options' }, originFeats.map((f) => h('button', { class: `cr-option ${st.humanFeat === f.name ? 'sel' : ''}`, type: 'button', onclick: () => { st.humanFeat = f.name; refresh(); } },
-            h('b', {}, f.name), h('span', { class: 'tiny' }, f.summary))))]),
+          h('div', { class: 'cr-options' }, originFeats.map((f) => option(st.humanFeat === f.name, () => { st.humanFeat = f.name; }, f.name, f.summary)))]),
       h('h3', { class: 'cr-h' }, '3 · Idiomas'),
       h('p', { class: 'small muted' }, 'Sabes común y otros dos idiomas estándar.'),
       h('div', { class: 'cr-skills' }, R.languages.estandar.map((l) => {
@@ -291,17 +322,43 @@ export async function openCreator({ onCreate }) {
         h('p', { class: 'tiny muted' }, 'Ninguna puntuación puede superar 20.')));
   }
 
+  // Mejora de característica (o dote) de un nivel: un desplegable con todas las opciones
+  function asiRow(l) {
+    const epic = cls().features[l].includes('Don épico');
+    const cur = st.asi[l] || {};
+    const pairs = ABILITY_KEYS.flatMap((a, i) => ABILITY_KEYS.slice(i + 1).map((b) => [a, b]));
+    const pool = R.feats.filter((f) => f.category === (epic ? 'don épico' : 'general') && f.name !== 'Mejora de característica');
+    const sel = h('select', { 'aria-label': `Mejora del nivel ${l}`, onchange: (e) => { st.asi[l] = { pick: e.target.value, boost: '' }; refresh(); } },
+      h('option', { value: '' }, '— Elige —'),
+      h('optgroup', { label: '+2 a una característica' }, ABILITY_KEYS.map((k) => h('option', { value: `2:${k}`, selected: cur.pick === `2:${k}` }, `+2 ${ABILITY_NAME[k]}`))),
+      h('optgroup', { label: '+1 a dos características' }, pairs.map(([a, b]) => h('option', { value: `1:${a},${b}`, selected: cur.pick === `1:${a},${b}` }, `+1 ${ABILITY_SHORT[a]} y +1 ${ABILITY_SHORT[b]}`))),
+      h('optgroup', { label: epic ? 'Dones épicos' : 'Dotes generales' }, pool.map((f) => h('option', { value: `feat:${f.name}`, selected: cur.pick === `feat:${f.name}` }, `${f.name}${f.prereq ? ` (${f.prereq})` : ''}`))));
+    const feat = cur.pick?.startsWith('feat:') && R.feats.find((f) => f.name === cur.pick.slice(5));
+    const boosts = featAbilities(feat);
+    return h('div', { class: 'cr-asi' }, h('span', { class: 'chip' }, `Nv ${l}`), sel,
+      boosts.length > 0 && h('select', { 'aria-label': 'Característica +1 de la dote', onchange: (e) => { cur.boost = e.target.value; refresh(); } },
+        h('option', { value: '' }, '+1 a…'), boosts.map((k) => h('option', { value: k, selected: cur.boost === k }, `+1 ${ABILITY_NAME[k]}`))),
+      feat && h('span', { class: 'tiny muted grow' }, feat.summary));
+  }
+
+  // Lista de objetos de un paquete de equipo
+  const kitText = (items, gold) => `${items.map(([n, name]) => (n > 1 ? `${n} × ${name}` : name)).join(', ')} y ${gold} po`;
+
   // Paso 4: detalles
   function stepDetails() {
     const c = cls();
+    const b = bg();
     const nameIn = h('input', { value: st.name, placeholder: 'Nombre del personaje', oninput: (e) => { st.name = e.target.value; hint.textContent = problem(3); } });
     const playerIn = h('input', { value: st.player, placeholder: 'Quién lo juega', oninput: (e) => { st.player = e.target.value; } });
+    const styles = c?.style_level && st.level >= c.style_level
+      ? [...R.feats.filter((f) => f.category === 'estilo de combate').map((f) => [f.name, f.summary]), ...(STYLE_EXTRA[c.id] ? [STYLE_EXTRA[c.id]] : [])] : [];
+    const letters = 'ABC';
     return h('div', { class: 'stack' },
-      h('p', { class: 'cr-intro' }, 'Ponle nombre, elige su alineamiento y con qué nivel empieza la aventura.'),
+      h('p', { class: 'cr-intro' }, 'Ponle nombre, elige su alineamiento, con qué nivel empieza y su equipo.'),
       h('div', { class: 'grid cols-2' },
         h('label', { class: 'field' }, 'Nombre', nameIn), h('label', { class: 'field' }, 'Jugador/a', playerIn)),
       h('div', { class: 'eyebrow' }, 'Alineamiento'),
-      h('div', { class: 'cr-align' }, R.alignments.map((a) => h('button', { class: `cr-option ${st.alignment === a ? 'sel' : ''}`, type: 'button', onclick: () => { st.alignment = a; refresh(); } }, a))),
+      h('div', { class: 'cr-align' }, R.alignments.map((a) => option(st.alignment === a, () => { st.alignment = a; }, a))),
       h('div', { class: 'grid cols-2' },
         h('div', {}, h('div', { class: 'eyebrow' }, 'Nivel inicial'),
           h('div', { class: 'row nowrap' }, h('input', { type: 'range', min: 1, max: 20, value: st.level, oninput: (e) => { st.level = Number(e.target.value); refresh(); } }),
@@ -309,10 +366,21 @@ export async function openCreator({ onCreate }) {
           h('p', { class: 'tiny muted' }, `Empiezas con ${R.level_xp[st.level - 1].toLocaleString('es-ES')} PX. Los PG de cada nivel usan el valor fijo del manual.`)),
         h('div', {}, h('div', { class: 'eyebrow' }, 'Color de la ficha y los dados'),
           h('div', { class: 'row' }, COLORS.map((col) => h('button', { class: `cr-color ${st.color === col ? 'sel' : ''}`, type: 'button', style: { background: col }, 'aria-label': `Color ${col}`, onclick: () => { st.color = col; refresh(); } }))))),
-      c && st.level >= 3 && [h('div', { class: 'eyebrow' }, `Subclase (nivel 3) · MdJ p. ${c.page}`),
-        h('div', { class: 'cr-options' }, c.subclasses.map((s) => h('button', { class: `cr-option ${st.subclass === s ? 'sel' : ''}`, type: 'button', onclick: () => { st.subclass = s; refresh(); } }, h('b', {}, s))))],
-      c && h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: st.gold, onchange: (e) => { st.gold = e.target.checked; } }),
-        `Equipo inicial: tomar el oro (${c.gold} po de la clase + 50 po del trasfondo) y comprar luego`));
+      c && st.level >= 3 && [h('div', { class: 'eyebrow' }, `Subclase (nivel 3) · ${source(c)}`),
+        h('div', { class: 'cr-options' }, c.subclasses.map((s) => option(st.subclass === s, () => { st.subclass = s; }, s,
+          (c.subclass_features[s] || []).filter(([l]) => l === 3).map(([, n]) => n).join(' · '))))],
+      styles.length > 0 && [h('div', { class: 'eyebrow' }, `Estilo de combate (nivel ${c.style_level})`),
+        h('div', { class: 'cr-options' }, styles.map(([n, t]) => option(st.style === n, () => { st.style = n; }, n, t)))],
+      asiLevels().length > 0 && [h('div', { class: 'eyebrow' }, 'Mejoras de característica y dotes de tus niveles'),
+        h('div', { class: 'stack-sm' }, asiLevels().map(asiRow))],
+      c && b && [h('div', { class: 'eyebrow' }, 'Equipo inicial'),
+        h('div', { class: 'grid cols-2' },
+          h('div', { class: 'cr-options vertical' }, h('b', { class: 'small' }, `${c.name}`),
+            c.kits.map((k, i) => option(st.kit === i, () => { st.kit = i; }, `Opción ${letters[i]}`, kitText(k.items, k.gold))),
+            option(st.kit === c.kits.length, () => { st.kit = c.kits.length; }, `Opción ${letters[c.kits.length]}`, `${c.gold} po para comprar a tu gusto`)),
+          h('div', { class: 'cr-options vertical' }, h('b', { class: 'small' }, b.name),
+            option(st.bgKit === 0, () => { st.bgKit = 0; }, 'Opción A', kitText(b.kit.items, b.kit.gold)),
+            option(st.bgKit === 1, () => { st.bgKit = 1; }, 'Opción B', `${b.kit_gold} po`)))]);
   }
 
   // Construye la ficha final.
@@ -320,32 +388,47 @@ export async function openCreator({ onCreate }) {
     const c = cls();
     const b = bg();
     const s = sp();
-    const fin = finalScores();
+    const { scores, feats: levelFeats } = withImprovements(finalScores());
     const skills = {};
     [...st.classSkills, ...(b?.skills || []), st.speciesSkill].filter(Boolean).forEach((k) => { skills[k] = 1; });
     const lineageText = st.lineage ? ` (${st.lineage.split(' (')[0]})` : '';
+    const effects = c.choice?.options.find(([n]) => n === st.classChoice)?.[2] || {};
     const ch = newCharacter('jugador', {
       name: st.name.trim(), player: st.player.trim(), color: st.color, alignment: st.alignment,
-      classId: c.id, cls: c.name, subclass: st.level >= 3 ? st.subclass : '', level: st.level, xp: R.level_xp[st.level - 1],
-      speciesId: s.id, race: s.name, lineage: st.lineage, size: s.size.includes(' o ') ? s.size.split(' o ')[0] : s.size,
+      classId: c.id, cls: c.name, subclass: st.level >= 3 ? st.subclass : '', classChoice: st.classChoice, level: st.level, xp: R.level_xp[st.level - 1],
+      speciesId: s.id, race: s.name, lineage: st.lineage, size: st.size || s.size.split(' o ')[0],
       backgroundId: b.id, background: b.name,
-      abilities: fin, saves: [...c.saves], skills,
-      feats: [b.feat, st.humanFeat].filter(Boolean), masteries: [],
-      weaponTraining: [...c.weapon_training], armorTraining: [...c.armor_training],
-      tools: [b.tool, c.tools].filter(Boolean).join('; '),
+      abilities: scores, saves: [...c.saves], skills,
+      feats: [b.feat, st.humanFeat, st.style, ...levelFeats].filter(Boolean), masteries: [],
+      weaponTraining: [...new Set([...c.weapon_training, ...(effects.weapons || [])])], armorTraining: [...new Set([...c.armor_training, ...(effects.armor || [])])],
+      tools: [b.tool, c.tools, s.tool].filter(Boolean).join('; '),
       languages: st.languages.join(', '),
       speed: st.lineage === 'Elfo de los bosques' ? 10.5 : s.speed,
       hitDie: `d${c.hit_die}`, hitDiceLeft: st.level,
       spellAbility: c.spell_ability || '', autoSlots: !!c.caster, acMode: 'auto',
-      coins: { pc: 0, pp: 0, pe: 0, po: st.gold ? c.gold + 50 : 0, ppt: 0 },
       notes: `Especie: ${s.name}${lineageText}. Trasfondo: ${b.name}. Alineamiento: ${st.alignment}.`,
     });
+    // equipo inicial: armas a la lista de ataques, armadura y escudo a la CA, el resto al inventario
+    const kit = c.kits[st.kit];
+    const bkit = st.bgKit === 0 ? b.kit : null;
+    ch.coins.po = (kit ? kit.gold : c.gold) + (bkit ? bkit.gold : b.kit_gold);
+    for (const [qty, name] of [...(kit?.items || []), ...(bkit?.items || [])]) {
+      const w = R.weapons.find((x) => x.name === name);
+      if (R.armor.some((a) => a.name === name) && !ch.armor) ch.armor = name;
+      if (name === 'Escudo') ch.shield = true;
+      if (w && !ch.attacks.some((a) => a.weapon === name)) ch.attacks.push(weaponAttack(ch, w));
+      const same = ch.inventory.find((it) => it.name === name);
+      if (same) same.qty += qty; else ch.inventory.push({ name, qty, notes: '' });
+    }
+    ch.attacks.push(...derivedAttacks(ch));
+    // magia de la especie (trucos y conjuros de linaje)
+    const known = speciesSpells(ch);
+    ch.spellList = [...new Set(known)];
+    if (known.length && !ch.spellAbility) ch.spellAbility = ['int', 'sab', 'car'].reduce((best, k) => (scores[k] > scores[best] ? k : best), 'car');
     ch.maxHp = ch.hp = maxHpFor(ch, st.level);
     ch.ac = computeAC(ch);
     ch.slots = slotsFor(c, st.level).map((max) => ({ max, used: 0 }));
-    const pb = profBonus(ch);
-    ch.resources = [...classResources(ch, c, st.level),
-      ...(SPECIES_RESOURCES[s.id] || []).map(([name, uses, reset]) => ({ name, max: uses === 'pb' ? pb : uses, used: 0, reset, auto: true }))];
+    ch.resources = [...classResources(ch, c, st.level), ...speciesResources(ch, st.level)];
     return ch;
   }
 
@@ -357,27 +440,37 @@ export async function openCreator({ onCreate }) {
     const pb = profBonus(ch);
     const cantrips = c.cantrips ? columnAt({ columns: { x: c.cantrips } }, 'x', ch.level) : null;
     const prepared = c.prepared ? c.prepared[ch.level - 1] : null;
+    const pending = pendingChoices(ch);
     return h('div', { class: 'cr-summary' },
       h('div', { class: 'cr-sum-head' },
         h('span', { class: 'cr-avatar', style: { background: ch.color } }, CLASS_ICON[c.id]),
         h('div', {}, h('h2', {}, ch.name),
-          h('div', { class: 'muted' }, `${ch.cls}${ch.subclass ? ` (${ch.subclass})` : ''} de nivel ${ch.level} · ${s.name}${st.lineage ? ` (${st.lineage.split(' (')[0]})` : ''} · ${ch.background} · ${ch.alignment}`))),
+          h('div', { class: 'muted' }, `${ch.cls}${ch.subclass ? ` (${ch.subclass})` : ''} de nivel ${ch.level} · ${s.name}${st.lineage ? ` (${st.lineage.split(' (')[0]})` : ''} · ${ch.size} · ${ch.background} · ${ch.alignment}`))),
       h('div', { class: 'cr-sum-stats' },
-        [['PG', ch.maxHp], ['CA', ch.ac], ['Velocidad', fmtM(ch.speed)], ['Iniciativa', fmtMod(mod(ch.abilities.des) + (ch.feats.includes('Alerta') ? pb : 0))],
+        [['PG', ch.maxHp], ['CA', ch.ac], ['Velocidad', fmtM(ch.speed)], ['Iniciativa', fmtMod(initBonus(ch))],
           ['Competencia', fmtMod(pb)], ['Dados de golpe', `${ch.level}${ch.hitDie}`]].map(([l, v]) => h('div', { class: 'cr-stat' }, h('b', {}, v), h('span', {}, l)))),
       h('div', { class: 'cr-sum-abil' }, ABILITY_KEYS.map((k) => h('div', { class: 'cr-stat' }, h('span', {}, ABILITY_SHORT[k]), h('b', {}, fmtMod(mod(ch.abilities[k]))), h('small', {}, ch.abilities[k], ch.saves.includes(k) ? ' · salv.' : '')))),
       h('div', { class: 'grid cols-2' },
         h('div', { class: 'panel' }, h('h3', {}, 'Competencias'),
           h('p', { class: 'small' }, h('b', {}, 'Habilidades: '), Object.keys(ch.skills).map(skillName).join(', ')),
-          h('p', { class: 'small' }, h('b', {}, 'Armas: '), c.weapons, h('br'), h('b', {}, 'Armaduras: '), c.armor),
+          h('p', { class: 'small' }, h('b', {}, 'Armas: '), c.weapons, effects(ch, 'weapons', 'marciales'), h('br'), h('b', {}, 'Armaduras: '), c.armor, effects(ch, 'armor', ch.armorTraining.includes('pesada') ? 'pesadas' : 'medias')),
           h('p', { class: 'small' }, h('b', {}, 'Herramientas: '), ch.tools || '—', h('br'), h('b', {}, 'Idiomas: '), ch.languages),
-          h('p', { class: 'small' }, h('b', {}, 'Dotes: '), ch.feats.join(', '))),
+          h('p', { class: 'small' }, h('b', {}, 'Dotes: '), ch.feats.join(', ')),
+          ch.attacks.length > 0 && h('p', { class: 'small' }, h('b', {}, 'Ataques: '), ch.attacks.map((a) => (a.save ? `${a.name} (${a.save}, ${a.damage})` : `${a.name} ${fmtMod(a.bonus)} (${a.damage})`)).join(' · ')),
+          h('p', { class: 'small' }, h('b', {}, 'Equipo: '), [ch.armor, ch.shield && 'escudo'].filter(Boolean).join(' y ') || 'sin armadura', ` · ${ch.inventory.length} objetos · ${ch.coins.po} po`)),
         h('div', { class: 'panel' }, h('h3', {}, 'Rasgos'),
-          h('ul', { class: 'cr-traits small' }, featuresUpTo(c, ch.level).map(([l, f]) => h('li', {}, h('span', { class: 'chip' }, `Nv ${l}`), ' ', f)),
-            s.traits.map(([n]) => h('li', {}, h('span', { class: 'chip' }, s.name), ' ', n))),
+          h('ul', { class: 'cr-traits small' }, featuresUpTo(c, ch.level, ch.subclass).map(([l, f, t]) => h('li', { 'data-tip': t || null }, h('span', { class: 'chip' }, `Nv ${l}`), ' ', f)),
+            s.traits.map(([n, t]) => h('li', { 'data-tip': t }, h('span', { class: 'chip' }, s.name), ' ', n))),
           c.caster && h('p', { class: 'small' }, h('b', {}, 'Magia: '), [cantrips != null && `${cantrips} trucos`, prepared != null && `${prepared} conjuros preparados`,
-            `espacios ${ch.slots.map((x, i) => (x.max ? `${x.max}×nv${i + 1}` : null)).filter(Boolean).join(', ')}`].filter(Boolean).join(' · ')))),
-      h('p', { class: 'tiny muted center' }, 'Elige tus conjuros, equipo y maestrías con armas en la ficha. Todo queda editable.'));
+            `espacios ${ch.slots.map((x, i) => (x.max ? `${x.max}×nv${i + 1}` : null)).filter(Boolean).join(', ')}`].filter(Boolean).join(' · ')),
+          ch.spellList.length > 0 && h('p', { class: 'small' }, h('b', {}, 'Magia de especie: '), ch.spellList.join(', ')))),
+      pending.length > 0 && h('div', { class: 'cr-note' }, h('b', {}, 'Te quedará por elegir en la ficha: '), pending.join(' · ')),
+      h('p', { class: 'tiny muted center' }, 'Todo queda editable en la ficha.'));
+  }
+  // Entrenamiento extra que da la elección de clase (Protector, Guardián)
+  function effects(ch, key, what) {
+    const extra = cls().choice?.options.find(([n]) => n === ch.classChoice)?.[2];
+    return extra?.[key] ? ` (y ${what} por tu ${cls().choice.name.toLowerCase()})` : '';
   }
 
   function create() {

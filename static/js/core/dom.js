@@ -38,6 +38,7 @@ const ICONS = {
   mesa: '<path d="M2.5 9.5h19"/><path d="M4 9.5 5.5 20M20 9.5 18.5 20M7 14h10"/><path d="M12 2.8l3.6 2.1v4.2L12 11.2 8.4 9.1V4.9z"/>',
   personajes: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c3 0 5.5 2 5.5 5"/>',
   combate: '<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="m13 19 6-6M16 16l4 4M19 21l2-2"/><path d="M9.5 17.5 21 6V3h-3L6.5 14.5"/><path d="m11 19-6-6M8 16l-4 4M5 21l-2-2"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
   mapas: '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
   juegos: '<path d="M6.5 8h11A4.5 4.5 0 0 1 22 12.5v1a3.5 3.5 0 0 1-6.3 2.1L14.5 14h-5l-1.2 1.6A3.5 3.5 0 0 1 2 13.5v-1A4.5 4.5 0 0 1 6.5 8z"/><path d="M7 10.5v3M5.5 12h3M15.5 11h.01M17.5 13h.01"/>',
   grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
@@ -237,56 +238,126 @@ export function hpBar(hp, max, temp = 0) {
 export const initials = (name) => (name || '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
 // -- Aspecto: una cara sencilla y complementos graciosos (sombreros, gafas, ropa, algo en la mano) --
-// ch.look = { base: 'cara' | 'iniciales', skin, hair, hairColor, expr, hat, face, outfit, item }.
-// Los complementos son emoji o, si el nombre está en HAT_SVG / FACE_SVG, un dibujo propio.
-export const SKINS = ['#ffdbb4', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#5c3a21', '#9ccf8a', '#93b4e8', '#c9a0dc', '#e8e8e8'];
+// ch.look = { base: 'cara' | 'iniciales', skin, hair, hairColor, eyes, expr, ears, marks, beard, horns, body, bodyColor,
+//             hat, hatColor, face, outfit, item, bg }.
+// La cara se dibuja en un SVG de 0-100 (cabeza: círculo de radio 31 en 50,55) recortado al círculo del avatar.
+// Los complementos son emoji (también uno cualquiera escrito a mano) o un dibujo propio (HAT_SVG, FACE_SVG).
+export const SKINS = ['#ffdbb4', '#f1c27d', '#e0ac69', '#c68642', '#8d5524', '#5c3a21', '#9ccf8a', '#93b4e8', '#c9a0dc', '#e8e8e8', '#d65a4a', '#6b7b8c'];
 export const HAIR_COLORS = ['#2b1d14', '#6b3e1f', '#b5651d', '#e8c26e', '#d9d9d9', '#c0392b', '#3b6fd1', '#8e44ad', '#1f8a4c', '#ff7ab8'];
-export const HAIRS = [['', 'Calvo'], ['corto', 'Corto'], ['largo', 'Largo'], ['rizos', 'Rizos'], ['cresta', 'Cresta'], ['mono', 'Moño']];
-export const EXPRESSIONS = [['normal', '🙂'], ['feliz', '😄'], ['picaro', '😏'], ['enfadado', '😠'], ['sorpresa', '😮'], ['dormido', '😴'], ['loco', '🤪']];
+export const EYE_COLORS = ['#3a2414', '#7a4a22', '#2e6fd1', '#2f8f4e', '#7d8a96', '#c0392b', '#8e44ad', '#d4a017', '#111111'];
+export const BODY_COLORS = ['#7b5a34', '#2f4f8f', '#8e2b2b', '#2f6b3f', '#5b3f8a', '#c9963f', '#3a3a3a', '#d9d4c7', '#b8577a', '#2b8a8a'];
+export const HAIRS = [['', 'Calvo'], ['corto', 'Corto'], ['flequillo', 'Flequillo'], ['melena', 'Melena'], ['largo', 'Largo'], ['coleta', 'Coleta'],
+  ['trenzas', 'Trenzas'], ['rizos', 'Rizos'], ['afro', 'Afro'], ['cresta', 'Cresta'], ['mono', 'Moño']];
+export const EXPRESSIONS = [['normal', 'Normal'], ['feliz', 'Feliz'], ['picaro', 'Pícaro'], ['guino', 'Guiño'], ['serio', 'Serio'], ['triste', 'Triste'],
+  ['enfadado', 'Enfadado'], ['sorpresa', 'Sorpresa'], ['lengua', 'Burlón'], ['dormido', 'Dormido'], ['loco', 'Loco']];
+const HC = (fallback) => `style="fill:var(--hc,${fallback})"`; // color elegible del sombrero
+const SHADE = 'fill="rgba(0,0,0,.28)"';
 const HAT_SVG = {
-  mago: '<path d="M22,86 Q36,52 54,6 Q60,40 78,86Z" fill="#4b3aa8"/><path d="M8,86 Q50,72 92,86 Q50,98 8,86Z" fill="#33277a"/><path d="M30,75 Q50,69 70,75" stroke="#f2c14e" stroke-width="5" fill="none"/><circle cx="46" cy="46" r="3" fill="#f2c14e"/><circle cx="58" cy="60" r="2.4" fill="#f2c14e"/><circle cx="52" cy="27" r="2" fill="#f2c14e"/>',
-  fiesta: '<path d="M32,88 L52,10 L70,88Z" fill="#ff5fa2"/><path d="M39,66 L64,66 M45,42 L58,42" stroke="#ffe35a" stroke-width="6"/><circle cx="52" cy="9" r="7" fill="#5bd1ff"/>',
-  vikingo: '<path d="M26,66 Q4,58 6,24 Q16,52 32,58Z" fill="#f4ecd8"/><path d="M74,66 Q96,58 94,24 Q84,52 68,58Z" fill="#f4ecd8"/><path d="M24,86 Q24,46 50,44 Q76,46 76,86Z" fill="#a7b0ba"/><path d="M50,46 L50,80" stroke="#7d868f" stroke-width="3"/><rect x="22" y="78" width="56" height="9" rx="3" fill="#7b5a34"/>',
-  pirata: '<path d="M18,76 Q30,38 50,36 Q70,38 82,76 Q50,66 18,76Z" fill="#2a2424"/><path d="M4,84 Q20,62 50,60 Q80,62 96,84 Q74,76 50,78 Q26,76 4,84Z" fill="#1f1b1b"/><circle cx="50" cy="52" r="6" fill="#f4ecd8"/><path d="M45,61 L55,67 M55,61 L45,67" stroke="#f4ecd8" stroke-width="2.5"/>',
-  cocinero: '<path d="M30,68 Q12,64 16,44 Q20,28 36,34 Q38,14 56,18 Q72,12 78,32 Q94,40 84,60 Q78,68 70,68Z" fill="#fff" stroke="#cfcfcf" stroke-width="2"/><rect x="30" y="66" width="40" height="22" rx="3" fill="#fff" stroke="#cfcfcf" stroke-width="2"/>',
-  bufon: '<path d="M18,86 Q20,50 8,30 Q34,40 50,62 Q66,40 92,30 Q80,50 82,86Z" fill="#c0392b"/><path d="M50,62 Q44,30 50,8 Q58,32 50,62Z" fill="#2e7dd1"/><path d="M18,86 Q50,74 82,86 L82,91 Q50,80 18,91Z" fill="#f2c14e"/><circle cx="8" cy="30" r="5" fill="#f2c14e"/><circle cx="92" cy="30" r="5" fill="#f2c14e"/><circle cx="50" cy="8" r="5" fill="#f2c14e"/>',
+  mago: `<path d="M22,86 Q36,52 54,6 Q60,40 78,86Z" ${HC('#4b3aa8')}/><path d="M8,86 Q50,72 92,86 Q50,98 8,86Z" ${HC('#4b3aa8')}/><path d="M8,86 Q50,72 92,86 Q50,98 8,86Z" ${SHADE}/><path d="M30,75 Q50,69 70,75" stroke="#f2c14e" stroke-width="5" fill="none"/><circle cx="46" cy="46" r="3" fill="#f2c14e"/><circle cx="58" cy="60" r="2.4" fill="#f2c14e"/><circle cx="52" cy="27" r="2" fill="#f2c14e"/>`,
+  bruja: `<path d="M32,84 Q46,62 46,34 Q48,14 72,8 Q58,22 60,48 Q62,70 70,84Z" ${HC('#2b2433')}/><ellipse cx="50" cy="86" rx="46" ry="8" ${HC('#2b2433')}/><ellipse cx="50" cy="86" rx="46" ry="8" ${SHADE}/><path d="M34,78 Q52,72 68,78 L68,83 Q52,77 34,83Z" fill="#8e44ad"/><rect x="47" y="75" width="7" height="7" rx="1" fill="none" stroke="#f2c14e" stroke-width="1.8"/>`,
+  txapela: `<path d="M12,84 Q18,60 50,58 Q84,60 88,82Z" ${HC('#1f2433')}/><ellipse cx="50" cy="84" rx="39" ry="7" ${HC('#1f2433')}/><ellipse cx="50" cy="85" rx="39" ry="6" ${SHADE}/><path d="M52,58 Q54,52 51,48" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round" fill="none"/>`,
+  corona: `<path d="M22,88 L18,58 L35,72 L50,48 L65,72 L82,58 L78,88Z" ${HC('#f2c14e')} stroke="#a8782a" stroke-width="2"/><circle cx="50" cy="78" r="4" fill="#c0392b"/><circle cx="34" cy="80" r="3" fill="#2e6fd1"/><circle cx="66" cy="80" r="3" fill="#2f8f4e"/>`,
+  fiesta: `<path d="M32,88 L52,10 L70,88Z" ${HC('#ff5fa2')}/><path d="M39,66 L64,66 M45,42 L58,42" stroke="#ffe35a" stroke-width="6"/><circle cx="52" cy="9" r="7" fill="#5bd1ff"/>`,
+  vikingo: `<path d="M26,66 Q4,58 6,24 Q16,52 32,58Z" fill="#f4ecd8"/><path d="M74,66 Q96,58 94,24 Q84,52 68,58Z" fill="#f4ecd8"/><path d="M24,86 Q24,46 50,44 Q76,46 76,86Z" ${HC('#a7b0ba')}/><path d="M50,46 L50,80" stroke="rgba(0,0,0,.25)" stroke-width="3"/><rect x="22" y="78" width="56" height="9" rx="3" fill="#7b5a34"/>`,
+  pirata: `<path d="M18,76 Q30,38 50,36 Q70,38 82,76 Q50,66 18,76Z" ${HC('#2a2424')}/><path d="M4,84 Q20,62 50,60 Q80,62 96,84 Q74,76 50,78 Q26,76 4,84Z" ${HC('#2a2424')}/><path d="M4,84 Q20,62 50,60 Q80,62 96,84 Q74,76 50,78 Q26,76 4,84Z" ${SHADE}/><circle cx="50" cy="52" r="6" fill="#f4ecd8"/><path d="M45,61 L55,67 M55,61 L45,67" stroke="#f4ecd8" stroke-width="2.5"/>`,
+  cocinero: `<path d="M30,68 Q12,64 16,44 Q20,28 36,34 Q38,14 56,18 Q72,12 78,32 Q94,40 84,60 Q78,68 70,68Z" ${HC('#ffffff')} stroke="#cfcfcf" stroke-width="2"/><rect x="30" y="66" width="40" height="22" rx="3" ${HC('#ffffff')} stroke="#cfcfcf" stroke-width="2"/>`,
+  bufon: `<path d="M18,86 Q20,50 8,30 Q34,40 50,62 Q66,40 92,30 Q80,50 82,86Z" ${HC('#c0392b')}/><path d="M50,62 Q44,30 50,8 Q58,32 50,62Z" fill="#2e7dd1"/><path d="M18,86 Q50,74 82,86 L82,91 Q50,80 18,91Z" fill="#f2c14e"/><circle cx="8" cy="30" r="5" fill="#f2c14e"/><circle cx="92" cy="30" r="5" fill="#f2c14e"/><circle cx="50" cy="8" r="5" fill="#f2c14e"/>`,
 };
-const FACE_SVG = { // en coordenadas de la cara (0-100); bigote y barba toman el color del pelo
+const FACE_SVG = { // en coordenadas de la cara; el vello facial toma el color del pelo
   bigote: '<path d="M33,63 Q41,55 50,60 Q59,55 67,63 Q61,61 56,64 Q50,61 44,64 Q39,61 33,63Z" fill="currentColor" stroke="rgba(40,20,10,.55)" stroke-width="1.4"/>',
+  retorcido: '<path d="M50,60 Q42,55 34,61 Q26,66 24,58 Q26,64 33,62 Q42,58 50,63 Q58,58 67,62 Q74,64 76,58 Q74,66 66,61 Q58,55 50,60Z" fill="currentColor" stroke="rgba(40,20,10,.55)" stroke-width="1.2"/>',
+  perilla: '<path d="M44,74 Q50,92 56,74 Q50,78 44,74Z" fill="currentColor" stroke="rgba(40,20,10,.45)" stroke-width="1.2"/><path d="M38,64 Q44,60 50,63 Q56,60 62,64 Q56,64 50,66 Q44,64 38,64Z" fill="currentColor"/>',
+  patillas: '<path d="M20,50 Q19,64 26,72 L29,70 Q24,62 25,50Z M80,50 Q81,64 74,72 L71,70 Q76,62 75,50Z" fill="currentColor"/>',
   barba: '<path d="M21,56 Q23,90 50,92 Q77,90 79,56 Q70,75 50,75 Q30,75 21,56Z" fill="currentColor" stroke="rgba(40,20,10,.45)" stroke-width="1.4"/>',
+  barbalarga: '<path d="M21,56 Q20,82 34,96 Q42,104 50,108 Q58,104 66,96 Q80,82 79,56 Q70,75 50,75 Q30,75 21,56Z" fill="currentColor" stroke="rgba(40,20,10,.45)" stroke-width="1.4"/><path d="M42,84 Q44,94 48,100 M58,84 Q56,94 52,100" stroke="rgba(40,20,10,.3)" stroke-width="1.4" fill="none"/>',
   monoculo: '<circle cx="60" cy="53" r="8.5" fill="rgba(200,230,255,.3)" stroke="#d4a63c" stroke-width="2.5"/><path d="M67,59 Q71,72 65,88" stroke="#d4a63c" stroke-width="1.3" fill="none"/>',
   parche: '<path d="M22,41 L78,63" stroke="#111" stroke-width="2.5"/><ellipse cx="60" cy="53" rx="8.5" ry="7.5" fill="#111"/>',
   payaso: '<circle cx="50" cy="60" r="6.5" fill="#e3262e"/><circle cx="48" cy="58" r="2" fill="#fff" opacity=".6"/>',
   gafas: '<g fill="rgba(255,255,255,.18)" stroke="#2a2a2a" stroke-width="2.6"><circle cx="40" cy="53" r="8"/><circle cx="60" cy="53" r="8"/></g><path d="M48,53 Q50,50 52,53" stroke="#2a2a2a" stroke-width="2.6" fill="none"/>',
+  antifaz: '<path d="M26,48 Q38,42 50,49 Q62,42 74,48 Q74,60 62,59 Q54,58 50,54 Q46,58 38,59 Q26,60 26,48Z" fill="#1d1d2b"/><ellipse cx="40" cy="52" rx="4.5" ry="3.2" fill="#fff" opacity=".85"/><ellipse cx="60" cy="52" rx="4.5" ry="3.2" fill="#fff" opacity=".85"/>',
+};
+// Rasgos dibujados dentro de la cara (no son complementos): orejas, marcas, cuernos y ropa.
+const EARS = { // back: detrás de la cabeza; front: delante del pelo
+  humanas: { back: (s) => `<ellipse cx="19" cy="57" rx="5" ry="7.5" fill="${s}"/><ellipse cx="81" cy="57" rx="5" ry="7.5" fill="${s}"/>` },
+  elfo: { back: (s) => `<path d="M24,50 L7,31 L22,65Z M76,50 L93,31 L78,65Z" fill="${s}" stroke="rgba(0,0,0,.18)" stroke-width="1.2"/>` },
+  largas: { back: (s) => `<path d="M23,50 Q2,40 5,56 Q10,66 23,64Z M77,50 Q98,40 95,56 Q90,66 77,64Z" fill="${s}" stroke="rgba(0,0,0,.18)" stroke-width="1.2"/>` },
+  gato: { front: (s) => `<path d="M22,40 L25,12 L45,27Z M78,40 L75,12 L55,27Z" fill="${s}" stroke="rgba(0,0,0,.2)" stroke-width="1.2"/><path d="M27,32 L28,19 L38,27Z M73,32 L72,19 L62,27Z" fill="#f4a0a8"/>` },
+  oso: { front: (s) => `<circle cx="25" cy="29" r="9" fill="${s}"/><circle cx="75" cy="29" r="9" fill="${s}"/><circle cx="25" cy="29" r="4.5" fill="rgba(0,0,0,.18)"/><circle cx="75" cy="29" r="4.5" fill="rgba(0,0,0,.18)"/>` },
+};
+const MARKS = {
+  pecas: [33, 37, 30, 63, 67, 70].map((x, i) => `<circle cx="${x}" cy="${i % 3 === 1 ? 57 : 60}" r="1.3" fill="#9c5b3a" opacity=".75"/>`).join(''),
+  rubor: '<ellipse cx="33" cy="63" rx="7" ry="4" fill="#ff5c6c" opacity=".45"/><ellipse cx="67" cy="63" rx="7" ry="4" fill="#ff5c6c" opacity=".45"/>',
+  cicatriz: '<path d="M57,40 L66,67" stroke="#a8454a" stroke-width="2.4" stroke-linecap="round"/><path d="M58,47 L64,45 M60,54 L66,52 M62,61 L68,59" stroke="#a8454a" stroke-width="1.4"/>',
+  pintura: '<path d="M27,58 L39,61 M27,64 L39,67 M73,58 L61,61 M73,64 L61,67" stroke="#2f6fd1" stroke-width="3.2" stroke-linecap="round"/>',
+  runa: '<path d="M50,30 L50,42 M45,34 L55,38 M45,38 L55,34" stroke="#2b8a8a" stroke-width="2.2" stroke-linecap="round"/>',
+  lunar: '<circle cx="62" cy="67" r="1.9" fill="#3a2414"/>',
+};
+const HORNS = {
+  tiefling: '<path d="M38,32 Q30,10 14,10 Q26,17 31,34Z M62,32 Q70,10 86,10 Q74,17 69,34Z" fill="#3b2a2e" stroke="rgba(255,255,255,.15)" stroke-width="1"/>',
+  carnero: '<path d="M34,34 Q14,24 14,44 Q16,58 28,54 Q33,50 30,45 M66,34 Q86,24 86,44 Q84,58 72,54 Q67,50 70,45" stroke="#bfa47c" stroke-width="7" stroke-linecap="round" fill="none"/>',
+  astas: '<path d="M38,30 L29,8 M32,16 L21,13 M30,11 L35,4 M62,30 L71,8 M68,16 L79,13 M70,11 L65,4" stroke="#8b6a43" stroke-width="4" stroke-linecap="round" fill="none"/>',
+  cuernecillos: '<path d="M36,30 L39,19 L44,28Z M64,30 L61,19 L56,28Z" fill="#e9dcc2" stroke="rgba(0,0,0,.25)" stroke-width="1"/>',
+  unicornio: '<path d="M45,28 L50,3 L55,28Z" fill="#f2c14e"/><path d="M46,24 L54,21 M47,17 L53,14 M48,10 L52,8" stroke="#c9963f" stroke-width="1.6"/>',
+};
+const BODY = {
+  camisa: (c) => `<path d="M8,100 Q10,84 30,80 Q50,90 70,80 Q90,84 92,100Z" fill="${c}"/><path d="M40,81 L50,91 L60,81" stroke="rgba(0,0,0,.28)" stroke-width="2" fill="none"/>`,
+  tunica: (c) => `<path d="M8,100 Q10,84 30,80 Q50,90 70,80 Q90,84 92,100Z" fill="${c}"/><path d="M42,82 L50,96 L58,82Z" fill="rgba(0,0,0,.3)"/><path d="M12,96 L88,96" stroke="#c9963f" stroke-width="2.5"/>`,
+  capa: (c) => `<path d="M6,100 Q8,80 30,78 Q50,88 70,78 Q92,80 94,100Z" fill="${c}"/><path d="M38,82 Q50,92 62,82 L60,100 L40,100Z" fill="#e9e1cf"/><circle cx="50" cy="86" r="3.2" fill="#f2c14e" stroke="#a8782a" stroke-width="1"/>`,
+  armadura: (c) => `<path d="M8,100 Q10,84 30,80 Q50,88 70,80 Q90,84 92,100Z" fill="#9aa4ad"/><circle cx="22" cy="90" r="11" fill="#7d878f"/><circle cx="78" cy="90" r="11" fill="#7d878f"/><path d="M42,84 L58,84 L58,100 L42,100Z" fill="${c}"/><circle cx="22" cy="90" r="1.6" fill="#d6dde3"/><circle cx="78" cy="90" r="1.6" fill="#d6dde3"/>`,
+  estrellada: (c) => `<path d="M8,100 Q10,84 30,80 Q50,90 70,80 Q90,84 92,100Z" fill="${c}"/><circle cx="26" cy="93" r="1.6" fill="#f2c14e"/><circle cx="70" cy="90" r="1.3" fill="#f2c14e"/><circle cx="58" cy="97" r="1.6" fill="#f2c14e"/><path d="M38,80 Q50,90 62,80" stroke="#f2c14e" stroke-width="2" fill="none"/>`,
+  chaleco: (c) => `<path d="M8,100 Q10,84 30,80 Q50,90 70,80 Q90,84 92,100Z" fill="#efe6d2"/><path d="M8,100 Q10,84 30,80 L44,100Z M92,100 Q90,84 70,80 L56,100Z" fill="${c}"/>`,
 };
 export const LOOK_SLOTS = {
-  hat: ['mago', 'fiesta', 'vikingo', 'pirata', 'cocinero', 'bufon', '🎩', '👑', '🎓', '🧢', '👒', '⛑️', '🪖', '🎀', '🍳', '🪣', '🦆', '🐸', '🍕', '🎃', '🌻', '🧁', '🍌', '🐙'],
-  face: ['bigote', 'barba', 'monoculo', 'parche', 'payaso', 'gafas', '🕶️', '🥽', '🎭'],
+  hat: ['mago', 'bruja', 'txapela', 'corona', 'fiesta', 'vikingo', 'pirata', 'cocinero', 'bufon', '🎩', '👑', '🎓', '🧢', '👒', '⛑️', '🪖', '🎀', '🍳', '🪣', '🦆', '🐸', '🍕', '🎃', '🌻', '🧁', '🍌', '🐙'],
+  face: ['gafas', 'monoculo', 'parche', 'antifaz', 'payaso', '🕶️', '🥽', '🎭'],
+  beard: ['bigote', 'retorcido', 'perilla', 'patillas', 'barba', 'barbalarga'],
+  ears: Object.keys(EARS), marks: Object.keys(MARKS), horns: Object.keys(HORNS), body: Object.keys(BODY),
   outfit: ['🎀', '👔', '🧣', '🦺', '👘', '👗', '🥻', '🧥', '🏅', '📿', '🩱', '🩲'],
   item: ['🦆', '🍺', '🍗', '🐟', '🥖', '🌹', '🧀', '🍄', '🐔', '🎈', '🍭', '🧸', '🪄', '🗡️', '🥄', '🧹', '🐈', '🐉', '🥕', '🪕', '📜', '💩'],
 };
 export const LOOK_NAMES = {
-  mago: 'Sombrero de mago', fiesta: 'Gorro de fiesta', vikingo: 'Casco vikingo', pirata: 'Sombrero pirata', cocinero: 'Gorro de cocinero', bufon: 'Gorro de bufón',
-  bigote: 'Bigote', barba: 'Barba', monoculo: 'Monóculo', parche: 'Parche', payaso: 'Nariz de payaso', gafas: 'Gafas redondas',
+  mago: 'Sombrero de mago', bruja: 'Sombrero de bruja', txapela: 'Txapela', corona: 'Corona', fiesta: 'Gorro de fiesta', vikingo: 'Casco vikingo',
+  pirata: 'Sombrero pirata', cocinero: 'Gorro de cocinero', bufon: 'Gorro de bufón',
+  bigote: 'Bigote', retorcido: 'Bigote retorcido', perilla: 'Perilla', patillas: 'Patillas', barba: 'Barba', barbalarga: 'Barba larga de enano',
+  monoculo: 'Monóculo', parche: 'Parche', antifaz: 'Antifaz', payaso: 'Nariz de payaso', gafas: 'Gafas redondas',
+  humanas: 'Orejas', elfo: 'Orejas de elfo', largas: 'Orejas largas', gato: 'Orejas de gato', oso: 'Orejas de oso',
+  pecas: 'Pecas', rubor: 'Coloretes', cicatriz: 'Cicatriz', pintura: 'Pintura de guerra', runa: 'Runa en la frente', lunar: 'Lunar',
+  tiefling: 'Cuernos de tiefling', carnero: 'Cuernos de carnero', astas: 'Astas', cuernecillos: 'Cuernecillos', unicornio: 'Cuerno de unicornio',
+  camisa: 'Camisa', tunica: 'Túnica', capa: 'Capa', armadura: 'Armadura', estrellada: 'Túnica estrellada', chaleco: 'Chaleco',
 };
 const EYE = 'stroke="#3a2414" stroke-width="3.6" stroke-linecap="round" fill="none"';
 const dot = (x, y, r = 3.6) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#3a2414"/>`;
+const eye = (x, y, r = 3.6) => `<circle cx="${x}" cy="${y}" r="${r}" style="fill:var(--eye,#3a2414)"/>`; // ojo con el color elegido
 const EXPR_SVG = {
-  normal: `${dot(40, 53)}${dot(60, 53)}<path d="M41,65 Q50,72 59,65" ${EYE}/>`,
+  normal: `${eye(40, 53)}${eye(60, 53)}<path d="M41,65 Q50,72 59,65" ${EYE}/>`,
   feliz: `<path d="M35,55 Q40,48 45,55 M55,55 Q60,48 65,55" ${EYE}/><path d="M39,63 Q50,78 61,63Z" fill="#7a2a20"/>`,
-  picaro: `<path d="M35,53 L45,53" ${EYE}/>${dot(60, 53)}<path d="M42,67 Q53,71 61,62" ${EYE}/>`,
-  enfadado: `${dot(40, 54)}${dot(60, 54)}<path d="M33,45 L46,49 M67,45 L54,49 M42,69 Q50,63 58,69" ${EYE}/>`,
-  sorpresa: `${dot(40, 52, 4.6)}${dot(60, 52, 4.6)}<ellipse cx="50" cy="68" rx="4.5" ry="5.5" fill="#3a2414"/>`,
+  picaro: `<path d="M35,53 L45,53" ${EYE}/>${eye(60, 53)}<path d="M42,67 Q53,71 61,62" ${EYE}/>`,
+  guino: `<path d="M35,54 Q40,50 45,54" ${EYE}/>${eye(60, 53)}<path d="M41,64 Q50,72 59,64" ${EYE}/>`,
+  serio: `${eye(40, 53)}${eye(60, 53)}<path d="M34,46 L45,47 M66,46 L55,47 M43,67 L57,67" ${EYE}/>`,
+  triste: `${eye(40, 55)}${eye(60, 55)}<path d="M34,47 L45,45 M66,47 L55,45 M42,70 Q50,63 58,70" ${EYE}/><ellipse cx="37" cy="62" rx="1.8" ry="3" fill="#7fc8ff"/>`,
+  enfadado: `${eye(40, 54)}${eye(60, 54)}<path d="M33,45 L46,49 M67,45 L54,49 M42,69 Q50,63 58,69" ${EYE}/>`,
+  sorpresa: `${eye(40, 52, 4.6)}${eye(60, 52, 4.6)}<ellipse cx="50" cy="68" rx="4.5" ry="5.5" fill="#3a2414"/>`,
+  lengua: `${eye(40, 53)}${eye(60, 53)}<path d="M41,64 Q50,70 59,64" ${EYE}/><path d="M45,66 Q50,78 55,66Z" fill="#ff7a8a"/>`,
   dormido: `<path d="M35,53 Q40,57 45,53 M55,53 Q60,57 65,53" ${EYE}/>${dot(50, 67, 2.6)}<text x="70" y="32" font-size="15" font-weight="700" fill="#fff">z</text>`,
-  loco: `<circle cx="40" cy="52" r="5.5" fill="#fff" stroke="#3a2414" stroke-width="2"/>${dot(41, 53, 2.2)}${dot(60, 53, 3)}<path d="M40,64 Q50,71 60,64" ${EYE}/><ellipse cx="54" cy="70" rx="4" ry="5" fill="#ff7a8a"/>`,
+  loco: `<circle cx="40" cy="52" r="5.5" fill="#fff" stroke="#3a2414" stroke-width="2"/>${eye(41, 53, 2.2)}${eye(60, 53, 3)}<path d="M40,64 Q50,71 60,64" ${EYE}/><ellipse cx="54" cy="70" rx="4" ry="5" fill="#ff7a8a"/>`,
 };
 const HAIR_BACK = {
   largo: (c) => `<path d="M17,52 Q15,20 50,18 Q85,20 83,52 L86,86 Q76,92 70,80 L30,80 Q24,92 14,86Z" fill="${c}"/>`,
+  melena: (c) => `<path d="M16,52 Q14,18 50,17 Q86,18 84,52 L84,74 Q80,80 74,76 L26,76 Q20,80 16,74Z" fill="${c}"/>`,
+  coleta: (c) => `<path d="M66,27 Q93,30 91,58 Q89,80 78,90 Q84,64 73,44Z" fill="${c}"/>`,
+  trenzas: (c) => [20, 80].map((x) => [0, 1, 2, 3, 4].map((i) => `<ellipse cx="${x}" cy="${58 + i * 8}" rx="6.5" ry="5" fill="${c}" stroke="rgba(0,0,0,.18)" stroke-width="1"/>`).join('')
+    + `<circle cx="${x}" cy="99" r="3" fill="#c0392b"/>`).join(''),
   rizos: (c) => Array.from({ length: 9 }, (_, i) => { const a = Math.PI * (1.05 + i * 0.1125); return `<circle cx="${(50 + Math.cos(a) * 31).toFixed(1)}" cy="${(52 + Math.sin(a) * 31).toFixed(1)}" r="11" fill="${c}"/>`; }).join(''),
+  afro: (c) => `<circle cx="50" cy="46" r="41" fill="${c}"/>`,
 };
 const HAIR_TOP = {
   corto: (c) => `<path d="M19,52 Q17,22 50,21 Q83,22 81,52 Q74,38 60,36 Q50,42 38,36 Q26,40 19,52Z" fill="${c}"/>`,
+  flequillo: (c) => `<path d="M19,54 Q15,20 50,19 Q85,20 81,54 L79,44 Q50,47 21,44Z" fill="${c}"/>`,
+  melena: (c) => `<path d="M19,50 Q18,22 50,21 Q82,22 81,50 Q72,31 50,31 Q28,31 19,50Z" fill="${c}"/>`,
   largo: (c) => HAIR_TOP.corto(c),
+  coleta: (c) => HAIR_TOP.melena(c),
+  trenzas: (c) => `<path d="M19,54 Q17,22 50,21 Q83,22 81,54 Q78,34 50,31 Q22,34 19,54Z" fill="${c}"/><path d="M50,21 L50,31" stroke="rgba(0,0,0,.25)" stroke-width="1.5"/>`,
+  afro: (c) => `<path d="M20,48 Q22,22 50,20 Q78,22 80,48 Q72,34 50,32 Q28,34 20,48Z" fill="${c}"/>`,
   cresta: (c) => `<path d="M40,32 L44,6 L50,26 L55,3 L58,27 L65,9 L62,33 Q50,26 40,32Z" fill="${c}"/>`,
   mono: (c) => `<circle cx="50" cy="15" r="10" fill="${c}"/><path d="M20,50 Q18,24 50,23 Q82,24 80,50 Q66,32 50,32 Q34,32 20,50Z" fill="${c}"/>`,
 };
@@ -300,27 +371,40 @@ function svgEl(cls, inner, color) {
   s.innerHTML = inner;
   return s;
 }
+// Cara completa por capas: pelo de atrás, ropa, orejas, cabeza, marcas, pelo, ojos y boca, orejas de encima, cuernos.
 function faceSvg(look) {
   const hc = look.hairColor || HAIR_COLORS[0];
   const skin = look.skin || SKINS[1];
-  return svgEl('face-svg', (HAIR_BACK[look.hair]?.(hc) || '')
+  const ears = EARS[look.ears] || {};
+  const s = svgEl('face-svg', (HAIR_BACK[look.hair]?.(hc) || '')
+    + (BODY[look.body]?.(look.bodyColor || BODY_COLORS[0]) || '') + (ears.back?.(skin) || '')
     + `<circle cx="50" cy="55" r="31" fill="${skin}"/><ellipse cx="33" cy="63" rx="5" ry="3" fill="#ff6b6b" opacity=".3"/><ellipse cx="67" cy="63" rx="5" ry="3" fill="#ff6b6b" opacity=".3"/>`
-    + (HAIR_TOP[look.hair]?.(hc) || '') + (EXPR_SVG[look.expr] || EXPR_SVG.normal));
+    + (MARKS[look.marks] || '') + (HAIR_TOP[look.hair]?.(hc) || '') + (EXPR_SVG[look.expr] || EXPR_SVG.normal)
+    + (ears.front?.(skin) || '') + (HORNS[look.horns] || ''));
+  if (look.eyes) s.style.setProperty('--eye', look.eyes);
+  return s;
 }
 // Un complemento suelto (para el avatar o para los botones del editor).
 export function lookPiece(slot, key, look = {}) {
   if (!key) return null;
-  if (slot === 'hat' && HAT_SVG[key]) return svgEl('acc hat svg', HAT_SVG[key]);
-  if (slot === 'face' && FACE_SVG[key]) return svgEl('acc face-svg', FACE_SVG[key], look.hairColor || HAIR_COLORS[0]);
+  if (slot === 'hat' && HAT_SVG[key]) {
+    const s = svgEl('acc hat svg', HAT_SVG[key]);
+    if (look.hatColor) s.style.setProperty('--hc', look.hatColor);
+    return s;
+  }
+  if ((slot === 'face' || slot === 'beard') && FACE_SVG[key]) return svgEl('acc face-svg', FACE_SVG[key], look.hairColor || HAIR_COLORS[0]);
   return h('span', { class: `acc ${slot}` }, key);
 }
-export const hasExtras = (look) => !!(look && (look.hat || look.face || look.outfit || look.item));
+export const isSvgHat = (key) => !!HAT_SVG[key];
+export const hasExtras = (look) => !!(look && (look.hat || look.face || look.beard || look.horns || look.outfit || look.item));
 export function randomLook(extras = true) {
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   const maybe = (a, p) => (extras && Math.random() < p ? pick(a) : '');
   return {
-    base: 'cara', skin: pick(SKINS.slice(0, 6)), hair: pick(HAIRS)[0], hairColor: pick(HAIR_COLORS.slice(0, 6)), expr: pick(EXPRESSIONS)[0],
-    hat: maybe(LOOK_SLOTS.hat, 0.7), face: maybe(LOOK_SLOTS.face, 0.35), outfit: maybe(LOOK_SLOTS.outfit, 0.5), item: maybe(LOOK_SLOTS.item, 0.6),
+    base: 'cara', skin: pick(SKINS.slice(0, 6)), hair: pick(HAIRS)[0], hairColor: pick(HAIR_COLORS.slice(0, 6)), eyes: pick(EYE_COLORS.slice(0, 5)),
+    expr: pick(EXPRESSIONS)[0], body: pick(LOOK_SLOTS.body), bodyColor: pick(BODY_COLORS), ears: Math.random() < 0.5 ? 'humanas' : '',
+    marks: maybe(LOOK_SLOTS.marks, 0.3), beard: maybe(LOOK_SLOTS.beard, 0.3), horns: maybe(LOOK_SLOTS.horns, 0.15), hatColor: '',
+    hat: maybe(LOOK_SLOTS.hat, 0.7), face: maybe(LOOK_SLOTS.face, 0.3), outfit: maybe(LOOK_SLOTS.outfit, 0.4), item: maybe(LOOK_SLOTS.item, 0.6),
   };
 }
 
@@ -329,9 +413,9 @@ export function avatar(ch, cls = '') {
   const face = look.base === 'cara' && !ch.portrait;
   const el = h('span', { class: `avatar ${cls} ${face ? 'is-face' : ''}`, style: { '--c': ch.color || '#666' } });
   if (ch.portrait) el.style.backgroundImage = `url("${ch.portrait}")`;
-  else if (face) el.append(faceSvg(look));
+  else if (face) { el.append(faceSvg(look)); if (look.bg) el.style.backgroundColor = look.bg; }
   else el.textContent = initials(ch.name);
-  for (const slot of ['face', 'outfit', 'item', 'hat']) { const p = lookPiece(slot, look[slot], look); if (p) el.append(p); }
+  for (const slot of ['beard', 'face', 'outfit', 'item', 'hat']) { const p = lookPiece(slot, look[slot], look); if (p) el.append(p); }
   return el;
 }
 

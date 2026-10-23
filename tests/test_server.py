@@ -1,6 +1,8 @@
 import io
 import json
+import math
 import random
+import re
 import tempfile
 import threading
 import unittest
@@ -94,12 +96,31 @@ class Phb2024Tests(unittest.TestCase):
 
     def test_origins(self):
         feats = {f["name"] for f in self.d["feats"]}
-        self.assertEqual(len(self.d["species"]), 10)
+        self.assertEqual(len([s for s in self.d["species"] if s["page"]]), 10)  # y las de Euskal Herria
         self.assertEqual(len(self.d["backgrounds"]), 16)
         for b in self.d["backgrounds"]:
             self.assertIn(b["feat"].split(" (")[0], feats, b["name"])
             self.assertTrue(set(b["skills"]) <= self.skills, b["name"])
             self.assertEqual(len(b["abilities"]), 3)
+            self.assertGreater(b["kit"]["gold"], 0, b["name"])
+        spells = {s["name"] for s in self.d["spells"]}
+        for s in self.d["species"]:
+            entries = s.get("spells", []) + [e for opt in s.get("lineage_spells", {}).values() for e in opt]
+            for _, name, *_ in entries:
+                self.assertIn(name, spells, s["name"])
+            self.assertTrue(set(s.get("lineage_spells", {})) <= {n for n, _ in s.get("options", [])}, s["name"])
+
+    def test_every_feature_says_what_it_does(self):
+        gear = {w["name"] for w in self.d["weapons"]} | {a["name"] for a in self.d["armor"]}
+        for c in self.d["classes"]:
+            for lvl, names in c["features"].items():
+                for f in names:
+                    self.assertTrue(f == "Rasgo de subclase" or c["feature_text"].get(f), (c["name"], f))
+            self.assertEqual(set(c["subclass_features"]), set(c["subclasses"]), c["name"])
+            sub_levels = {int(l) for l, fs in c["features"].items() if "Rasgo de subclase" in fs} | {3}
+            for name, feats in c["subclass_features"].items():
+                self.assertEqual({l for l, _, _ in feats}, sub_levels, name)
+            self.assertTrue(any(n in gear for k in c["kits"] for _, n in k["items"]), c["name"])
 
     def test_equipment(self):
         masteries = {m["name"] for m in self.d["masteries"]}
@@ -145,6 +166,75 @@ class BestiaryTests(unittest.TestCase):
             text = m["traits"] + " ".join(a["name"] + a["notes"] for a in m["attacks"])
             for word in english:
                 self.assertNotIn(word, text, m["name"])
+
+
+# Guía del Dungeon Master, «Estadísticas de monstruo por valor de desafío»: VD, CA, PG máx., ataque, daño por asalto máx., CD
+CR_TABLE = [
+    ("0", 13, 6, 3, 1, 13), ("1/8", 13, 35, 3, 3, 13), ("1/4", 13, 49, 3, 5, 13), ("1/2", 13, 70, 3, 8, 13),
+    ("1", 13, 85, 3, 14, 13), ("2", 13, 100, 3, 20, 13), ("3", 13, 115, 4, 26, 13), ("4", 14, 130, 5, 32, 14),
+    ("5", 15, 145, 6, 38, 15), ("6", 15, 160, 6, 44, 15), ("7", 15, 175, 6, 50, 15), ("8", 16, 190, 7, 56, 16),
+    ("9", 16, 205, 7, 62, 16), ("10", 17, 220, 7, 68, 16), ("11", 17, 235, 8, 74, 17), ("12", 17, 250, 8, 80, 17),
+    ("13", 18, 265, 8, 86, 18), ("14", 18, 280, 8, 92, 18), ("15", 18, 295, 8, 98, 18), ("16", 18, 310, 9, 104, 18),
+    ("17", 19, 325, 10, 110, 19), ("18", 19, 340, 10, 116, 19), ("19", 19, 355, 10, 122, 19), ("20", 19, 400, 10, 140, 19),
+    ("21", 19, 445, 11, 158, 20), ("22", 19, 490, 11, 176, 20), ("23", 19, 535, 11, 194, 20), ("24", 19, 580, 12, 212, 21),
+]
+
+
+def average(expr):
+    """Daño medio de una expresión como «2d8+5+2d6»."""
+    total = 0.0
+    for sign, n, die, flat in re.findall(r"([+-]?)(?:(\d+)d(\d+)|(\d+))", expr.replace(" ", "")):
+        v = int(n) * (int(die) + 1) / 2 if die else int(flat)
+        total += -v if sign == "-" else v
+    return total
+
+
+def estimate_cr(m):
+    """VD según la Guía del DM: media del VD defensivo (PG efectivos y CA) y el ofensivo (daño por asalto y ataque)."""
+    cr = next(i for i, row in enumerate(CR_TABLE) if row[0] == m["cr"])
+    tier = lambda by: 0 if by <= 7 else 1 if by <= 13 else 2 if by <= 19 else 3  # VD 1-4, 5-10, 11-16, 17+
+    ehp = m["hp"] * ((2, 1.5, 1.25, 1)[tier(cr)] if m.get("resist") else 1) + m.get("lr", 0) * (10, 20, 30, 40)[tier(cr)]
+    d = next(i for i, row in enumerate(CR_TABLE) if ehp <= row[2])
+    d += math.trunc((m["ac"] - CR_TABLE[d][1]) / 2)
+    hits = [a for a in m["attacks"] if a.get("per_turn") and not a.get("save")]
+    routine = sum(average(a["damage"]) * a["per_turn"] for a in hits)
+    bursts = [average(a["damage"]) * (2 if a.get("area") else 1) for a in m["attacks"] if a.get("save") and "recarga" in a["name"]]
+    dpr = max([routine] + [(b + 2 * routine) / 3 for b in bursts])  # recarga: se usa una vez cada tres asaltos
+    o = next(i for i, row in enumerate(CR_TABLE) if dpr <= row[4])
+    o += math.trunc((max(a["bonus"] for a in hits) - CR_TABLE[o][3]) / 2)
+    return round((d + o) / 2), cr
+
+
+class EuskalTests(unittest.TestCase):
+    def test_creatures_follow_the_dmg_challenge_table(self):
+        from server.euskal import CREATURES
+        self.assertGreaterEqual(len(CREATURES), 15)
+        for m in CREATURES:
+            got, want = estimate_cr(m)
+            self.assertLessEqual(abs(got - want), 1, f"{m['name']}: VD {m['cr']} declarado, el cálculo da {CR_TABLE[got][0]}")
+            abil = m["abilities"]
+            pb = rules.prof_bonus_cr(m["cr"])
+            for a in m["attacks"]:  # el bonificador sale de una característica más la competencia
+                if not a.get("save"):
+                    self.assertIn(a["bonus"] - pb, [(v - 10) // 2 for v in abil.values()], (m["name"], a["name"]))
+
+    def test_estimator_on_official_monster(self):
+        from server.monsters import MONSTERS
+        giant = next(m for m in MONSTERS if m["name"] == "Gigante de las colinas")
+        club = dict(giant["attacks"][0], per_turn=2)  # Multiataque: 2 garrotes
+        self.assertEqual(CR_TABLE[estimate_cr({**giant, "attacks": [club]})[0]][0], "5")
+
+    def test_playable_species(self):
+        from server.euskal import SPECIES
+        from server.phb2024 import SPELLS, data
+        names = {s["name"] for s in SPELLS}
+        self.assertTrue({s["id"] for s in SPECIES} <= {s["id"] for s in data()["species"]})
+        for s in SPECIES:
+            self.assertTrue(4 <= len(s["traits"]) <= 5, s["id"])
+            for lvl, spell, *uses in s.get("spells", []):
+                self.assertIn(spell, names, s["id"])
+            for name, uses, reset, lvl in s.get("resources", []):
+                self.assertIn(reset, ("corto", "largo"))
 
 
 class GeneratorTests(unittest.TestCase):
@@ -196,25 +286,45 @@ class SceneTests(unittest.TestCase):
                 self.assertGreaterEqual(len(sc["spawns"]["party"]), 4)
                 self.assertGreaterEqual(len(sc["spawns"]["enemies"]), 3)
 
+    def assert_reachable(self, sc):
+        ok = self.walkable_cells(sc)
+        for x, y in sc["spawns"]["party"] + sc["spawns"]["enemies"]:
+            self.assertTrue(ok(x, y), (x, y))
+        start = tuple(sc["spawns"]["party"][0])
+        seen, queue = {start}, deque([start])
+        while queue:
+            x, y = queue.popleft()
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    n = (x + dx, y + dy)
+                    if n in seen or not ok(*n) or (dx and dy and not ok(x + dx, y) and not ok(x, y + dy)):
+                        continue
+                    seen.add(n)
+                    queue.append(n)
+        for e in sc["spawns"]["enemies"]:
+            self.assertIn(tuple(e), seen)
+        return seen
+
     def test_party_can_reach_the_enemies(self):
         for sc in scenes.PRESETS:
             with self.subTest(sc["id"]):
-                ok = self.walkable_cells(sc)
-                for x, y in sc["spawns"]["party"] + sc["spawns"]["enemies"]:
-                    self.assertTrue(ok(x, y), (x, y))
-                start = tuple(sc["spawns"]["party"][0])
-                seen, queue = {start}, deque([start])
-                while queue:
-                    x, y = queue.popleft()
-                    for dx in (-1, 0, 1):
-                        for dy in (-1, 0, 1):
-                            n = (x + dx, y + dy)
-                            if n in seen or not ok(*n) or (dx and dy and not ok(x + dx, y) and not ok(x, y + dy)):
-                                continue
-                            seen.add(n)
-                            queue.append(n)
-                for e in sc["spawns"]["enemies"]:
-                    self.assertIn(tuple(e), seen)
+                self.assert_reachable(sc)
+
+    def test_random_dungeons_are_playable(self):
+        from server import dungeon
+        for kind in ("mazmorra", "cueva"):
+            for size in dungeon.SIZES:
+                for seed in range(1, 9):
+                    with self.subTest(kind=kind, size=size, seed=seed):
+                        sc = dungeon.generate(seed, size, kind)
+                        self.assertEqual(len(sc["tiles"]), sc["cols"] * sc["rows"])
+                        self.assertLessEqual(set(sc["tiles"]), scenes.TERRAIN_CODES)
+                        seen = self.assert_reachable(sc)
+                        if kind == "mazmorra":  # casi todo el suelo libre está conectado: ninguna sala queda aislada
+                            ok = self.walkable_cells(sc)
+                            free = {(x, y) for y in range(sc["rows"]) for x in range(sc["cols"]) if ok(x, y)}
+                            self.assertGreaterEqual(len(seen & free) / len(free), 0.95)
+        self.assertEqual(dungeon.generate(5)["tiles"], dungeon.generate(5)["tiles"])
 
     def test_presets_are_deterministic(self):
         self.assertEqual(scenes._bosque(), scenes._bosque())
@@ -303,6 +413,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, _ = self.json_call("GET", f"/api/characters/{ch['id']}")
         self.assertEqual(status, 404)
+
+    def test_world_compendium_and_session_prep(self):
+        status, e = self.json_call("POST", "/api/wiki", {"name": "Anboto", "type": "lugar", "body": "Cueva de @[Mari]"})
+        self.assertEqual(status, 201)
+        status, s = self.json_call("POST", "/api/sessions", {"number": 1, "secrets": [{"text": "Mari vive en @[Anboto]", "done": False}]})
+        self.assertEqual(status, 201)
+        status, got = self.json_call("GET", "/api/wiki")
+        self.assertIn("Anboto", [x["name"] for x in got])
+        status, r = self.json_call("POST", "/api/relations", {"a": f"wiki:{e['id']}", "b": "char:x", "kind": "aliado"})
+        self.assertEqual(status, 201)
+        status, b = self.json_call("POST", "/api/bastions", {"name": "Torre", "facilities": [{"key": "biblioteca", "order": "investigar"}]})
+        self.assertEqual(status, 201)
+        for col, doc in (("wiki", e), ("sessions", s), ("relations", r), ("bastions", b)):
+            self.assertEqual(self.json_call("DELETE", f"/api/{col}/{doc['id']}")[0], 200)
 
     def test_roll_and_log(self):
         status, r = self.json_call("POST", "/api/roll", {"expr": "1d20+1", "who": "DM"})

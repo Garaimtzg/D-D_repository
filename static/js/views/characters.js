@@ -4,15 +4,16 @@ import { api, debounced } from '../core/api.js';
 import {
   h, clear, icon, bind, field, selectEl, segmented, searchBox, hpBar, shield, modal, confirmDialog,
   toast, toastError, pickFiles, floatNum, prefs, bigBanner, avatar, token,
-  SKINS, HAIR_COLORS, HAIRS, EXPRESSIONS, LOOK_SLOTS, LOOK_NAMES, lookPiece, randomLook, hasExtras,
+  SKINS, HAIR_COLORS, EYE_COLORS, BODY_COLORS, HAIRS, EXPRESSIONS, LOOK_SLOTS, LOOK_NAMES, lookPiece, randomLook, hasExtras, isSvgHat,
 } from '../core/dom.js';
 import {
   TYPES, TYPE_LABEL, TYPE_COLOR, TYPE_ICON, CONDITION_ICON, condLabel, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, CRS, COINS, reference, monsters,
   mod, fmtMod, fmtM, profBonus, initBonus, saveBonus, skillBonus, passivePerception, critExpr, xpProgress, d20, effectiveSpeed, exhaustionPenalty,
   newCharacter, migrateCharacter, fromMonster, applyDamage, applyHealing, longRest, shortRest, combatantFrom,
   classOf, speciesOf, backgroundOf, computeAC, maxHpFor, slotsFor, classResources, featuresUpTo, masteryCount, columnAt, weaponAttack, weaponProficient,
+  source, speciesResources, speciesSpells, derivedAttacks, pendingChoices, featAbilities,
 } from '../core/dnd.js';
-import { openCreator, SPECIES_RESOURCES } from './creator.js';
+import { openCreator } from './creator.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
 import { sortInitiative } from '../core/combat.js';
@@ -132,14 +133,14 @@ async function mount(root, [selId]) {
     const all = await monsters();
     const grid = h('div', { class: 'bestiary' });
     let q = '';
-    const draw = () => clear(grid, all.filter((m) => `${m.name} ${m.en || ''} ${m.creature}`.toLowerCase().includes(q)).map((m) => h('button', {
-      class: 'beast', type: 'button', onclick: () => { grid.closest('.modal-back').remove(); create(fromMonster(m)); },
-    }, h('span', { class: 'beast-cr' }, `VD ${m.cr}`), h('b', {}, m.name), h('span', { class: 'tiny muted' }, m.creature),
+    const draw = () => clear(grid, all.filter((m) => `${m.name} ${m.en || ''} ${m.eu || ''} ${m.source || ''} ${m.creature}`.toLowerCase().includes(q)).map((m) => h('button', {
+      class: `beast ${m.source ? 'homebrew' : ''}`, type: 'button', onclick: () => { grid.closest('.modal-back').remove(); create(fromMonster(m)); },
+    }, h('span', { class: 'beast-cr' }, `VD ${m.cr}`), h('b', {}, m.name), h('span', { class: 'tiny muted' }, m.source ? `${m.creature} · Euskal Herria` : m.creature),
     h('span', { class: 'beast-stats' }, h('span', {}, icon('shield', 13), m.ac), h('span', {}, icon('heart', 13), m.hp), h('span', {}, icon('sword', 13), m.attacks.length)))));
     draw();
     modal('Bestiario', h('div', { class: 'stack' },
-      searchBox('Buscar por nombre o tipo (dragón, no muerto, bestia…)', (v) => { q = v.toLowerCase(); draw(); }),
-      grid, h('p', { class: 'tiny muted' }, `${all.length} criaturas del SRD 5.2.1 de Wizards of the Coast (CC-BY-4.0), traducidas al castellano. Al elegir una se crea una ficha de enemigo que puedes editar.`)),
+      searchBox('Buscar por nombre o tipo (dragón, no muerto, vasca…)', (v) => { q = v.toLowerCase(); draw(); }),
+      grid, h('p', { class: 'tiny muted' }, `${all.filter((m) => !m.source).length} criaturas del SRD 5.2.1 de Wizards of the Coast (CC-BY-4.0), traducidas al castellano, y ${all.filter((m) => m.source).length} de la mitología de Euskal Herria (propias de esta app, equilibradas con la Guía del DM; busca «vasca»). Al elegir una se crea una ficha de enemigo que puedes editar.`)),
     [], { wide: true, iconName: 'book' });
   }
 
@@ -210,10 +211,18 @@ async function mount(root, [selId]) {
           h('button', { class: 'btn danger', type: 'button', onclick: () => remove(c) }, icon('trash', 16), 'Eliminar'))),
       h('article', { class: `sheet parchment ${c.type}` },
         headerSection(c),
+        pendingBox(c),
         h('div', { class: 'sheet-row1' }, abilitiesCol(c), savesSkillsCol(c), combatCol(c)),
         attacksSection(c),
         h('div', { class: 'sheet-row3' }, spellsSection(c), resourcesSection(c), inventorySection(c)),
         h('div', { class: 'sheet-row4' }, notesSection(c))));
+  }
+
+  // Decisiones que el manual pide y aún no están en la ficha (maestrías, pericia, conjuros…)
+  function pendingBox(c) {
+    const list = c.type === 'jugador' ? pendingChoices(c) : [];
+    return list.length > 0 && h('div', { class: 'pending-box' }, icon('sparkle', 15), h('b', {}, 'Por elegir:'),
+      list.map((t) => h('span', { class: `chip ${t.startsWith('⚠') ? 'bad' : ''}` }, t)));
   }
 
   const section = (title, iconName, ...content) => h('section', { class: 'ssec' }, h('h3', { class: 'ssec-title' }, icon(iconName, 17), title), ...content);
@@ -228,6 +237,7 @@ async function mount(root, [selId]) {
     const linSel = sp?.options && selectEl([['', `— ${sp.options_label} —`], ...sp.options.map(([n]) => [n, n])], c.lineage, (v) => {
       c.lineage = v;
       if (sp.id === 'elfo') c.speed = v === 'Elfo de los bosques' ? 10.5 : 9;
+      syncSpecies(c);
       save(c); refresh();
     }, { 'aria-label': sp.options_label });
     let fields;
@@ -285,7 +295,7 @@ async function mount(root, [selId]) {
       c.weaponTraining = [...cls.weapon_training];
       c.armorTraining = [...cls.armor_training];
       syncClassData(c);
-      toast(h('div', {}, h('b', {}, cls.name), h('div', { class: 'small' }, `${cls.summary} Dado de golpe d${cls.hit_die}. (MdJ p. ${cls.page})`)), { iconName: 'book', ms: 6000 });
+      toast(h('div', {}, h('b', {}, cls.name), h('div', { class: 'small' }, `${cls.summary} Dado de golpe d${cls.hit_die}. (${source(cls)})`)), { iconName: 'book', ms: 6000 });
     }
     save(c); refresh();
   }
@@ -298,11 +308,10 @@ async function mount(root, [selId]) {
     if (sp) {
       c.speed = sp.speed;
       if (!sp.size.includes(c.size)) c.size = sp.size.split(' o ')[0];
-      const pb = profBonus(c);
-      const kept = c.resources.filter((r) => !Object.values(SPECIES_RESOURCES).flat().some(([n]) => n === r.name));
-      c.resources = [...kept, ...(SPECIES_RESOURCES[sp.id] || []).map(([name, uses, reset]) => ({ name, max: uses === 'pb' ? pb : uses, used: 0, reset, auto: true }))];
-      toast(h('div', {}, h('b', {}, sp.name), h('div', { class: 'small' }, `${sp.traits.map(([n]) => n).join(' · ')} (MdJ p. ${sp.page})`)), { iconName: 'book', ms: 6000 });
+      toast(h('div', {}, h('b', {}, sp.name), h('div', { class: 'small' }, `${sp.traits.map(([n]) => n).join(' · ')} (${source(sp)})`)), { iconName: 'book', ms: 6000 });
     }
+    syncSpecies(c);
+    if (c.acMode === 'auto') c.ac = computeAC(c);
     save(c); refresh();
   }
 
@@ -333,12 +342,31 @@ async function mount(root, [selId]) {
       const auto = classResources(c, cls, level).map((r) => ({ ...r, used: Math.min(c.resources.find((x) => x.name === r.name)?.used || 0, r.max) }));
       c.resources = [...auto, ...c.resources.filter((r) => !names.includes(r.name))];
     }
-    const pb = profBonus(c);
-    for (const [name, uses] of SPECIES_RESOURCES[speciesOf(c)?.id] || []) {
-      const r = c.resources.find((x) => x.name === name);
-      if (r && uses === 'pb') r.max = pb;
-    }
+    syncSpecies(c);
     if (c.acMode === 'auto') c.ac = computeAC(c);
+  }
+
+  // Recursos, ataques (aliento, peñas, golpe sin armas del monje) y conjuros de la especie para el nivel actual.
+  const speciesResNames = new Set(ref.species.flatMap((sp) => (sp.resources || []).map(([n]) => n)));
+  function syncSpecies(c) {
+    const fresh = speciesResources(c);
+    const usedOf = (name) => c.resources.find((x) => x.name === name)?.used || 0;
+    c.resources = [...c.resources.filter((r) => !r.species && !speciesResNames.has(r.name)), ...fresh.map((r) => ({ ...r, used: Math.min(usedOf(r.name), r.max) }))];
+    c.attacks = [...c.attacks.filter((a) => !a.auto), ...derivedAttacks(c)];
+    const known = speciesSpells(c);
+    c.spellList = [...new Set([...(c.spellList || []), ...known])];
+    if (known.length && !c.spellAbility) c.spellAbility = ['int', 'sab', 'car'].reduce((best, k) => (c.abilities[k] > c.abilities[best] ? k : best), 'car');
+  }
+
+  // Orden divina u Orden primigenia: cambia el entrenamiento con armas y armaduras.
+  function setClassChoice(c, v) {
+    const cls = classOf(c);
+    const fx = cls.choice.options.find(([n]) => n === v)?.[2] || {};
+    c.classChoice = v;
+    c.weaponTraining = [...new Set([...cls.weapon_training, ...(fx.weapons || [])])];
+    c.armorTraining = [...new Set([...cls.armor_training, ...(fx.armor || [])])];
+    if (c.acMode === 'auto') c.ac = computeAC(c);
+    save(c); refresh();
   }
 
   // Subida de nivel guiada: PG (fijos o tirados), rasgos nuevos, subclase y mejora o dote.
@@ -349,8 +377,9 @@ async function mount(root, [selId]) {
     const con = mod(c.abilities.con);
     const die = cls?.hit_die || Number(String(c.hitDie || 'd8').replace(/\D/g, '')) || 8;
     const extra = (speciesOf(c)?.hp_per_level || 0) + (c.feats.some((f) => f.startsWith('Duro')) ? 2 : 0);
-    const st = { hp: Math.max(1, (ref.hp_fixed[die] ?? Math.floor(die / 2) + 1) + con) + extra, rolled: false, subclass: c.subclass, choice: 'asi', p2: '', p1: '', feat: '' };
+    const st = { hp: Math.max(1, (ref.hp_fixed[die] ?? Math.floor(die / 2) + 1) + con) + extra, rolled: false, subclass: c.subclass, choice: 'asi', p2: '', p1: '', feat: '', boost: '' };
     const feats = cls?.features[to] || [];
+    const subFeats = (sub) => (cls?.subclass_features?.[sub] || []).filter(([l]) => l === to);
     const asi = feats.includes('Mejora de característica');
     const epic = feats.includes('Don épico');
     const needsSub = cls && to >= 3 && !c.subclass;
@@ -386,12 +415,16 @@ async function mount(root, [selId]) {
       ? h('div', { class: 'row' }, field('+1 (o +2 si es la única)', abilSel('p2')), field('+1 a otra (opcional)', abilSel('p1')),
         h('p', { class: 'tiny muted', style: { flexBasis: '100%' } }, 'Mejora de característica: +2 a una o +1 a dos, sin pasar de 20.'))
       : h('div', { class: 'stack' },
-        selectEl([['', `— ${epic ? 'Don épico' : 'Dote general'} —`], ...featPool.map((f) => [f.name, `${f.name}${f.prereq ? ` (${f.prereq})` : ''}`])], st.feat, (v) => { st.feat = v; drawFeat(); }, { 'aria-label': 'Dote' }),
+        selectEl([['', `— ${epic ? 'Don épico' : 'Dote general'} —`], ...featPool.map((f) => [f.name, `${f.name}${f.prereq ? ` (${f.prereq})` : ''}`])], st.feat, (v) => { st.feat = v; st.boost = ''; drawFeat(); }, { 'aria-label': 'Dote' }),
+        h('div', { class: 'feat-boost' }),
         h('p', { class: 'small muted feat-desc' })));
     const drawFeat = () => {
       const f = featPool.find((x) => x.name === st.feat);
       const p = featBox.querySelector('.feat-desc');
       if (p) p.textContent = f ? `${f.summary} (MdJ p. ${f.page})` : '';
+      const boosts = featAbilities(f); // las dotes de 2024 también suben +1 una característica
+      const box = featBox.querySelector('.feat-boost');
+      if (box) clear(box, boosts.length > 0 && field('La dote sube +1', selectEl([['', '—'], ...boosts.map((k) => [k, `${ABILITY_NAME[k]} (${c.abilities[k]})`])], st.boost, (v) => { st.boost = v; }, { 'aria-label': 'Característica +1 de la dote' })));
     };
     drawChoice();
 
@@ -401,7 +434,8 @@ async function mount(root, [selId]) {
       h('div', { class: 'panel' }, h('div', { class: 'row between' }, h('h3', { style: { margin: 0 } }, icon('heart', 17), ' Puntos de golpe'), hpOut),
         h('div', { class: 'row' }, h('span', { class: 'small muted grow' }, `Valor fijo del manual (${ref.hp_fixed[die] ?? '—'} + CON${extra ? ` + ${extra} de especie o dote` : ''}) o tirar el dado.`), rollBtn)),
       (feats.length || changes.length) && h('div', { class: 'panel' }, h('h3', {}, icon('sparkle', 17), ' Novedades'),
-        h('ul', { class: 'lu-list' }, feats.filter((f) => f !== 'Mejora de característica' && f !== 'Don épico').map((f) => h('li', {}, h('b', {}, f))),
+        h('ul', { class: 'lu-list' }, feats.filter((f) => !['Mejora de característica', 'Don épico', 'Rasgo de subclase'].includes(f)).map((f) => h('li', {}, h('b', {}, f), cls.feature_text?.[f] && h('div', { class: 'tiny muted' }, cls.feature_text[f]))),
+          subFeats(c.subclass).map(([, n, t]) => h('li', {}, h('b', {}, n), h('span', { class: 'chip tiny-chip' }, c.subclass), h('div', { class: 'tiny muted' }, t))),
           changes.map((t) => h('li', { class: 'small' }, t)))),
       needsSub && h('div', { class: 'panel' }, h('h3', {}, icon('crown', 17), ' Subclase'),
         selectEl([['', '— Elige subclase —'], ...cls.subclasses.map((s) => [s, s])], st.subclass, (v) => { st.subclass = v; }, { 'aria-label': 'Subclase' })),
@@ -421,7 +455,10 @@ async function mount(root, [selId]) {
       const cap = 20;
       if (st.p1 && st.p1 !== st.p2) { c.abilities[st.p2] = Math.min(cap, c.abilities[st.p2] + 1); c.abilities[st.p1] = Math.min(cap, c.abilities[st.p1] + 1); }
       else c.abilities[st.p2] = Math.min(cap, c.abilities[st.p2] + 2);
-    } else if ((asi || epic) && st.choice === 'feat' && st.feat) c.feats.push(st.feat);
+    } else if ((asi || epic) && st.choice === 'feat' && st.feat) {
+      c.feats.push(st.feat);
+      if (st.boost) c.abilities[st.boost] = Math.min(epic ? 30 : 20, c.abilities[st.boost] + 1);
+    }
     syncClassData(c);
     save(c);
     refresh();
@@ -441,7 +478,8 @@ async function mount(root, [selId]) {
     } catch (e) { toastError(e); }
   }
 
-  // Vestir al personaje: cara sencilla (piel, pelo, expresión) y complementos graciosos.
+  // Vestir al personaje por pestañas: cara, pelo, ropa, complementos y fondo, con colores libres.
+  let lookTab = 'cara';
   async function lookDialog(c) {
     c.look ||= randomLook(false);
     const L = c.look;
@@ -450,33 +488,66 @@ async function mount(root, [selId]) {
     const panel = h('div', { class: 'look-controls' });
     const set = (key, val) => { L[key] = val; sfx.click(); save(c); draw(); };
     const group = (title, ...content) => h('div', { class: 'look-group' }, h('div', { class: 'eyebrow' }, title), ...content);
-    const swatches = (list, key) => h('div', { class: 'look-swatches' }, list.map((col) => h('button', {
+    // muestras de color y, al final, un selector para cualquier otro
+    const colors = (list, key, fallback) => h('div', { class: 'look-swatches' }, list.map((col) => h('button', {
       type: 'button', class: 'look-sw', style: { background: col }, 'aria-label': col, 'aria-pressed': String(L[key] === col), onclick: () => set(key, col),
-    })));
+    })), h('label', { class: `look-sw custom ${L[key] && !list.includes(L[key]) ? 'on' : ''}`, 'data-tip': 'Cualquier otro color', style: { background: L[key] && !list.includes(L[key]) ? L[key] : null } },
+      h('input', { type: 'color', value: L[key] || fallback, 'aria-label': 'Cualquier otro color', onchange: (e) => set(key, e.target.value) })));
     const choice = (key, k, content, tip) => h('button', { type: 'button', class: `look-opt ${typeof content === 'string' && /[a-z]/i.test(content) ? 'txt' : ''}`, 'aria-pressed': String((L[key] || '') === k), 'data-tip': tip || null, onclick: () => set(key, k) }, content);
-    const icon4 = (slot, k) => (slot === 'face' && LOOK_NAMES[k]
-      ? avatar({ color: c.color, look: { ...L, base: 'cara', hat: '', outfit: '', item: '', face: k } }, 'look-mini')
-      : lookPiece(slot, k, L));
-    const slotRow = (title, slot) => group(title, h('div', { class: 'look-opts' },
-      choice(slot, '', '∅', 'Nada'), LOOK_SLOTS[slot].map((k) => choice(slot, k, icon4(slot, k), LOOK_NAMES[k]))));
+    const none = (key, tip = 'Nada') => choice(key, '', '∅', tip);
+    // miniatura de la cara con ese rasgo cambiado (sin complementos para que se vea bien)
+    const mini = (over) => avatar({ color: c.color, look: { ...L, base: 'cara', hat: '', face: '', outfit: '', item: '', ...over } }, 'look-mini');
+    const features = (key, list) => h('div', { class: 'look-opts' }, none(key), list.map((k) => choice(key, k, mini({ [key]: k }), LOOK_NAMES[k])));
+    // complementos: los de la lista y cualquier emoji que se escriba o se pegue
+    const firstEmoji = (v) => [...new Intl.Segmenter().segment(v.trim())][0]?.segment || '';
+    const pieces = (slot) => h('div', { class: 'look-opts' }, none(slot),
+      LOOK_SLOTS[slot].map((k) => choice(slot, k, slot === 'face' && LOOK_NAMES[k] ? mini({ face: k }) : lookPiece(slot, k, L), LOOK_NAMES[k])),
+      h('input', { class: 'look-emoji', maxlength: 16, placeholder: '+😀', 'aria-label': 'Otro emoji', 'data-tip': 'Escribe o pega cualquier emoji',
+        value: L[slot] && !LOOK_SLOTS[slot].includes(L[slot]) ? L[slot] : '', onchange: (e) => set(slot, firstEmoji(e.target.value)) }));
+    const TABS = {
+      cara: () => [
+        group('Piel', colors(SKINS, 'skin', '#f1c27d')),
+        group('Ojos', colors(EYE_COLORS, 'eyes', '#3a2414')),
+        group('Expresión', h('div', { class: 'look-opts' }, EXPRESSIONS.map(([k, l]) => choice('expr', k, mini({ expr: k }), l)))),
+        group('Orejas', features('ears', LOOK_SLOTS.ears)),
+        group('Marcas', features('marks', LOOK_SLOTS.marks)),
+        group('Cuernos', features('horns', LOOK_SLOTS.horns))],
+      pelo: () => [
+        group('Peinado', h('div', { class: 'look-opts' }, HAIRS.map(([k, l]) => choice('hair', k, mini({ hair: k }), l)))),
+        group('Color del pelo', colors(HAIR_COLORS, 'hairColor', '#2b1d14')),
+        group('Barba y bigote (del color del pelo)', features('beard', LOOK_SLOTS.beard))],
+      ropa: () => [
+        group('Ropa', features('body', LOOK_SLOTS.body)),
+        L.body && group('Color de la ropa', colors(BODY_COLORS, 'bodyColor', '#7b5a34')),
+        group('Encima', pieces('outfit'))],
+      complementos: () => [
+        group('En la cabeza', pieces('hat')),
+        isSvgHat(L.hat) && group('Color del sombrero', h('div', { class: 'row' }, colors(['#4b3aa8', '#2b2433', '#1f2433', '#c0392b', '#2f8f4e', '#f2c14e', '#ff5fa2', '#ffffff'], 'hatColor', '#4b3aa8'),
+          L.hatColor && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => set('hatColor', '') }, 'Original'))),
+        group('En la cara', pieces('face')),
+        group('En la mano', pieces('item'))],
+      fondo: () => [
+        group('Fondo del retrato', h('div', { class: 'row' }, colors(['#1d2b3a', '#2f4f3a', '#4a2c2c', '#3b2e4f', '#6b5530', '#f4ecd8', '#87b6d6', '#c9a0dc'], 'bg', '#1d2b3a'),
+          h('button', { class: 'btn xs ghost', type: 'button', 'aria-pressed': String(!L.bg), onclick: () => set('bg', '') }, 'El color del personaje')))],
+    };
     function draw() {
       clear(preview, token(c, { size: 170, showHp: false }), h('b', {}, c.name),
-        h('div', { class: 'row' },
-          h('button', { class: 'btn sm primary', type: 'button', onclick: () => { Object.assign(L, randomLook(), { base: L.base }); sfx.magic(); save(c); draw(); } }, '🎲 Al azar'),
-          h('button', { class: 'btn sm', type: 'button', onclick: () => { Object.assign(L, { hat: '', face: '', outfit: '', item: '' }); save(c); draw(); } }, icon('close', 14), 'Sin complementos')));
+        h('div', { class: 'row center' },
+          h('button', { class: 'btn sm primary', type: 'button', onclick: () => { Object.assign(L, randomLook(), { base: L.base, bg: L.bg }); sfx.magic(); save(c); draw(); } }, '🎲 Todo al azar'),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => {
+            const r = randomLook(false);
+            Object.assign(L, { skin: r.skin, hair: r.hair, hairColor: r.hairColor, eyes: r.eyes, expr: r.expr, ears: r.ears }); sfx.magic(); save(c); draw();
+          } }, '🎲 Solo la cara'),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => { Object.assign(L, { hat: '', hatColor: '', face: '', outfit: '', item: '' }); save(c); draw(); } }, icon('close', 14), 'Sin complementos')));
       const face = L.base === 'cara' && !c.portrait;
       clear(panel,
         group('Estilo', h('div', { class: 'row' },
           segmented([['cara', '🙂 Cara'], ['iniciales', 'Aa Iniciales']], L.base, (v) => set('base', v)),
           h('button', { class: 'btn sm', type: 'button', onclick: async () => { await uploadPortrait(c); draw(); } }, icon('image', 14), c.portrait ? 'Cambiar retrato' : 'Usar una imagen'),
           c.portrait && h('button', { class: 'btn sm ghost', type: 'button', onclick: async () => { await api.removeUpload(c.portrait).catch(() => {}); c.portrait = ''; save(c); draw(); } }, icon('trash', 14), 'Quitar imagen'))),
-        face && group('Piel', swatches(SKINS, 'skin')),
-        face && group('Pelo', h('div', { class: 'look-opts' }, HAIRS.map(([k, l]) => choice('hair', k, l))), swatches(HAIR_COLORS, 'hairColor')),
-        face && group('Expresión', h('div', { class: 'look-opts' }, EXPRESSIONS.map(([k, e]) => choice('expr', k, e)))),
-        slotRow('En la cabeza', 'hat'),
-        slotRow('En la cara', 'face'),
-        slotRow('Ropa', 'outfit'),
-        slotRow('En la mano', 'item'));
+        segmented([['cara', 'Cara'], ['pelo', 'Pelo'], ['ropa', 'Ropa'], ['complementos', 'Complementos'], ['fondo', 'Fondo']], lookTab, (v) => { lookTab = v; draw(); }),
+        !face && lookTab !== 'complementos' && h('p', { class: 'small muted' }, c.portrait ? 'Con una imagen solo se ven los complementos. Quita la imagen para dibujar la cara.' : 'Elige «Cara» en el estilo para dibujarla.'),
+        TABS[lookTab]());
     }
     draw();
     await modal(`Aspecto de ${c.name}`, h('div', { class: 'look-editor' }, preview, panel), [{ label: 'Listo', value: true, class: 'primary', icon: 'check' }], { wide: true, iconName: 'sparkle' });
@@ -801,12 +872,24 @@ async function mount(root, [selId]) {
     return section('Inventario', 'coins',
       h('div', { class: 'coins' }, COINS.map(([k, l, col]) => h('label', { class: 'coin', 'data-tip': l },
         h('span', { class: 'coin-face', style: { '--coin': col } }, k.toUpperCase()), bind(c.coins, k, { type: 'number', min: 0, onChange: () => save(c), 'aria-label': l })))),
-      h('ul', { class: 'items' }, c.inventory.map((it, i) => h('li', {},
+      h('ul', { class: 'items' }, c.inventory.map((it, i) => h('li', { class: it.magic ? 'magic' : '' },
         bind(it, 'qty', { type: 'number', class: 'inline mini', min: 0, onChange: () => save(c), 'aria-label': 'Cantidad' }),
-        bind(it, 'name', { class: 'grow', onChange: () => save(c), placeholder: 'Objeto', 'aria-label': 'Objeto' }),
+        bind(it, 'name', { class: 'grow', onChange: () => save(c), placeholder: 'Objeto', 'aria-label': 'Objeto', 'data-tip': it.magic ? it.notes : null }),
+        it.attune != null && h('label', { class: 'check small attune', 'data-tip': `Sintonizado${it.attune ? ` (solo ${it.attune})` : ''}: como mucho 3 objetos` },
+          h('input', { type: 'checkbox', checked: !!it.attuned, onchange: (e) => { it.attuned = e.target.checked; save(c); refresh(); } }), 'S'),
         bind(it, 'notes', { class: 'item-notes', placeholder: 'notas', onChange: () => save(c), 'aria-label': 'Notas' }),
         h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': 'Quitar objeto', onclick: () => { c.inventory.splice(i, 1); save(c); refresh(); } }, icon('trash', 14))))),
-      h('button', { class: 'btn sm', type: 'button', onclick: () => { c.inventory.push({ name: '', qty: 1, notes: '' }); save(c); refresh(); } }, icon('plus', 15), 'Añadir objeto'));
+      h('div', { class: 'row' },
+        h('button', { class: 'btn sm', type: 'button', onclick: () => { c.inventory.push({ name: '', qty: 1, notes: '' }); save(c); refresh(); } }, icon('plus', 15), 'Añadir objeto'),
+        h('select', { class: 'mini-sel', 'aria-label': 'Añadir un objeto mágico', onchange: (e) => {
+          const m = ref.magic_items.find((x) => x.name === e.target.value);
+          if (!m) return;
+          c.inventory.push({ name: m.name, qty: 1, notes: `${m.rarity} · ${m.summary}`, magic: true, attune: m.attune, attuned: false });
+          sfx.magic(); save(c); refresh();
+        } }, h('option', { value: '' }, '+ Objeto mágico…'),
+        [['Common', 'Comunes'], ['Uncommon', 'Poco comunes'], ['Rare', 'Raros'], ['Very Rare', 'Muy raros'], ['Legendary', 'Legendarios'], ['Rarity Varies', 'Rareza variable'], ['Artifact', 'Artefactos']]
+          .map(([k, l]) => h('optgroup', { label: l }, ref.magic_items.filter((m) => m.rarityKey === k).map((m) => h('option', { value: m.name }, `${m.name}${m.attune != null ? ' (S)' : ''}`))))),
+        (() => { const n = c.inventory.filter((it) => it.attuned).length; return n > 0 && h('span', { class: `chip ${n > 3 ? 'bad' : ''}`, 'data-tip': 'Objetos sintonizados (máximo 3)' }, `Sintonía ${n}/3`); })()));
   }
 
   function notesSection(c) {
@@ -833,16 +916,18 @@ async function mount(root, [selId]) {
     return [
       (cls || sp || c.feats.length || c.type === 'jugador') && section('Rasgos y dotes', 'sparkle',
         cls && h('div', { class: 'traits-block' },
-          h('div', { class: 'row between' }, h('b', {}, `${cls.name} ${level}`, c.subclass ? ` · ${c.subclass}` : ''), h('span', { class: 'tiny muted' }, `MdJ p. ${cls.page}`)),
+          h('div', { class: 'row between' }, h('b', {}, `${cls.name} ${level}`, c.subclass ? ` · ${c.subclass}` : ''), h('span', { class: 'tiny muted' }, source(cls))),
           columns.length > 0 && h('div', { class: 'row' }, columns.map(([k, v]) => h('span', { class: 'chip' }, `${k}: `, h('b', {}, v)))),
-          h('ul', { class: 'trait-list' }, featuresUpTo(cls, level).filter(([, f]) => f !== 'Mejora de característica').map(([l, f]) => h('li', {}, h('span', { class: 'lvl' }, l), f)))),
+          cls.choice && field(cls.choice.name, selectEl([['', '— Elige —'], ...cls.choice.options.map(([n, t]) => [n, `${n}: ${t}`])], c.classChoice || '', (v) => setClassChoice(c, v), { 'aria-label': cls.choice.name })),
+          h('ul', { class: 'trait-list' }, featuresUpTo(cls, level, c.subclass).filter(([, f]) => f !== 'Mejora de característica').map(([l, f, t, sub]) => h('li', { class: sub ? 'sub' : '' },
+            h('span', { class: 'lvl' }, l), h('b', {}, f), t && h('span', { class: 'tiny muted' }, ` — ${t}`))))),
         sp && h('div', { class: 'traits-block' },
-          h('div', { class: 'row between' }, h('b', {}, sp.name, c.lineage ? ` · ${c.lineage}` : ''), h('span', { class: 'tiny muted' }, `MdJ p. ${sp.page}`)),
+          h('div', { class: 'row between' }, h('b', {}, sp.name, c.lineage ? ` · ${c.lineage}` : ''), h('span', { class: 'tiny muted' }, source(sp))),
           h('ul', { class: 'trait-list' }, sp.traits.map(([n, t]) => h('li', {}, h('b', {}, n), h('span', { class: 'tiny muted' }, ` — ${t}`))),
             c.lineage && sp.options && h('li', {}, h('b', {}, c.lineage), h('span', { class: 'tiny muted' }, ` — ${sp.options.find(([n]) => n === c.lineage)?.[1] || ''}`)))),
         h('div', { class: 'traits-block' }, h('b', {}, 'Dotes'), h('ul', { class: 'feat-list' }, ownFeats), featAdd)),
       section('Otros rasgos y competencias', 'scroll',
-        bind(c, 'features', { type: 'textarea', rows: 5, onChange: () => save(c), placeholder: 'Rasgos de subclase, objetos mágicos, bendiciones…' }),
+        bind(c, 'features', { type: 'textarea', rows: 5, onChange: () => save(c), placeholder: 'Invocaciones, maniobras, metamagia, objetos mágicos, bendiciones…' }),
         h('div', { class: 'row' },
           field('Idiomas', bind(c, 'languages', { onChange: () => save(c) }), 'grow'),
           field('Herramientas', bind(c, 'tools', { onChange: () => save(c) }), 'grow'))),

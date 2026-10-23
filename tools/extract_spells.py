@@ -18,6 +18,13 @@ FIXES = {"Escupo": "Escudo", "A los aventureros para la grandeza favor divino": 
 PROPER = {"bigby", "leomund", "drawmij", "mordenkainen", "otiluke", "tasha", "evard", "melf", "nystul", "rary", "tenser", "jallarzi", "otto", "yolande", "agathys", "hadar"}
 DAMAGE_TYPES = {"ácido", "contundente", "cortante", "frío", "fuego", "fuerza", "necrótico", "perforante", "psíquico", "radiante", "relámpago", "trueno", "veneno"}
 DAMAGE_FIX = {"Proyectil mágico": "1d4+1 fuerza"}  # en el PDF el dado sale mal reconocido
+NO_ATTACK = {"Rociada prismática"}  # su columna se mezcla con la de rociada venenosa
+# Conjuros cuyo encabezado sale tan mezclado con la columna vecina que no se reconoce
+MISSING = [
+    {"name": "Rociada venenosa", "level": 0, "school": "Nigromancia", "classes": ["Brujo", "Druida", "Hechicero", "Mago"],
+     "time": "Acción", "ritual": False, "range": "9 m", "components": "V, S", "cost": "", "duration": "Instantáneo",
+     "concentration": False, "save": "", "attack": "dist", "damage": "1d12 veneno", "heal": "", "page": 330},
+]
 JUNK = re.compile(r"^(?:cap[ií]tulo 7 \| conjuros|\d+ xx|\d+|pg|\||“|\")\s*", re.I)  # cabeceras, números de página, comillas
 
 
@@ -96,11 +103,12 @@ def main(src, dst, first):
             "duration": dur.rstrip(" ."),
             "concentration": dur.startswith("Concentración"),
             "save": save.group(1) if save else "",
-            "attack": attack,
+            "attack": "" if sentence(name) in NO_ATTACK else attack,
             "damage": DAMAGE_FIX.get(sentence(name)) or (f"{dmg.group(1).replace(' ', '')} {dmg.group(2).lower().rstrip('y')}" if dmg and dmg.group(2).lower().rstrip('y') in DAMAGE_TYPES else ""),
             "heal": heal.group(1) if heal and not dmg else "",
             "page": page_of(m.start()),
         })
+    out += [s for s in MISSING if s["name"] not in {x["name"] for x in out}]
     out.sort(key=lambda s: s["name"])
     json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     print(len(out), "conjuros")

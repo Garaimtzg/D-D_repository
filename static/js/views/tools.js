@@ -5,6 +5,7 @@ import { h, clear, icon, bind, field, selectEl, segmented, toast, toastError, co
 import { CRS, newCharacter } from '../core/dnd.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
+import { calendarOf, worldDate, moonOf } from '../core/calendar.js';
 
 export default { id: 'herramientas', title: 'Herramientas', icon: 'herramientas', hint: 'Generadores, reloj, temporizadores y copia de la campaña · tecla 8', mount };
 
@@ -118,7 +119,8 @@ function clockTile(settings) {
     dial.style.setProperty('--angle', `${(clock.minutes / 1440) * 360}deg`);
     dial.classList.toggle('night', night);
     clear(dial, h('span', { class: 'dial-body' }, icon(night ? 'moon' : 'sun', 22)));
-    clear(label, h('b', {}, `Día ${clock.day}`), h('span', { class: 'clock-time' }, `${String(hh).padStart(2, '0')}:${String(clock.minutes % 60).padStart(2, '0')}`),
+    const cal = calendarOf(settings);
+    clear(label, h('b', { 'data-tip': `Día ${clock.day} de la campaña · ${moonOf(cal, clock.day).emoji} ${moonOf(cal, clock.day).name}` }, worldDate(cal, clock.day, { weekday: true })), h('span', { class: 'clock-time' }, `${String(hh).padStart(2, '0')}:${String(clock.minutes % 60).padStart(2, '0')}`),
       h('span', { class: 'muted small' }, period(clock.minutes)));
   };
   const advance = (mins) => {
@@ -178,7 +180,7 @@ function timerTile(timers) {
 // ------------------------------------------------------------------ narración
 function narrationTile(settings) {
   const s = { text: settings.playerMessage || '' };
-  const send = (text) => api.saveSettings({ playerMessage: text })
+  const send = (text) => api.saveSettings({ playerMessage: text, playerImage: '' })
     .then(() => toast(text ? 'La narración aparece sobre la mesa.' : 'Narración retirada.', { iconName: 'feather' })).catch(toastError);
   const presets = ['Una niebla espesa cubre el camino…', 'Se oye un rugido en la oscuridad.', 'El suelo empieza a temblar.', 'Huele a azufre y a ceniza.'];
   return tile('Narración en la mesa', 'feather', '',

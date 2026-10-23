@@ -14,6 +14,7 @@ import { sfx } from '../core/sfx.js';
 import { roll, onRoll, describe } from '../core/dice.js';
 import { createBattleMap } from '../core/battlemap.js';
 import { groupCheck, partyScreen } from '../core/party.js';
+import { calendarOf, worldDate, moonOf } from '../core/calendar.js';
 import { loadScenes, findScene, ensureBoard, boardTokens, autoPlace, placeNear } from '../core/board.js';
 
 export default { id: 'mesa', title: 'Mesa', icon: 'mesa', hint: 'Mapa o tablero de combate, iniciativa y dados · tecla 1', mount };
@@ -21,8 +22,8 @@ export default { id: 'mesa', title: 'Mesa', icon: 'mesa', hint: 'Mapa o tablero 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 
 async function mount(root) {
-  const [settings, maps, chars, rolls, scenes] = await Promise.all([
-    api.settings(), api.list('maps'), api.list('characters'), api.get('/api/rolls'), loadScenes(),
+  const [settings, maps, chars, rolls, scenes, wiki] = await Promise.all([
+    api.settings(), api.list('maps'), api.list('characters'), api.get('/api/rolls'), loadScenes(), api.list('wiki'),
   ]);
   let combat = null;
   if (settings.activeCombat) {
@@ -34,6 +35,7 @@ async function mount(root) {
     settings, maps, chars, combat, rolls,
     map: maps.find((m) => m.id === (settings.tableMap || settings.shownMap)) || null,
     who: prefs.get('mesa.who', ''), mode: '', mod: 0, player: false, view: prefs.get('mesa.view', 'tablero'),
+    draw: null, pen: prefs.get('mesa.pen', '#e0524a'), // dibujo a mano alzada sobre el mapa: 'pen', 'erase' o nada
   };
   const view = { scale: 1, x: 0, y: 0 };
   const cleanups = [];
@@ -48,7 +50,10 @@ async function mount(root) {
   const ribbonEl = h('div', { class: 'ribbon' });
   const img = h('img', { class: 'board-img', alt: '', draggable: 'false' });
   const tokensEl = h('div', { class: 'board-tokens' });
-  const layer = h('div', { class: 'board-layer' }, img, tokensEl);
+  const drawSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  drawSvg.setAttribute('class', 'board-draw');
+  const pinsEl = h('div', { class: 'board-pins' });
+  const layer = h('div', { class: 'board-layer' }, img, drawSvg, pinsEl, tokensEl);
   const emptyEl = h('div', { class: 'board-empty' });
   const narration = h('div', { class: 'narration' });
   const clockEl = h('div', { class: 'board-clock' });
@@ -70,7 +75,7 @@ async function mount(root) {
   let bm = null;
   const battleScene = () => (state.combat ? findScene(state.combat.board?.scene, scenes) : null);
   const inBattle = () => !!battleScene() && state.view !== 'mapa';
-  const refreshBattle = () => { if (bm && inBattle()) { bm.setTokens(boardTokens(state.combat, { player: state.player })); bm.setFog(state.combat.board?.fog); } };
+  const refreshBattle = () => { if (bm && inBattle()) { bm.setTokens(boardTokens(state.combat, { player: state.player })); bm.setFog(state.combat.board?.fog); bm.setDoors(state.combat.board?.doors); } };
   function ensureBm() {
     if (bm) return bm;
     bm = createBattleMap({
@@ -111,6 +116,7 @@ async function mount(root) {
       },
       onBackgroundClick: () => hidePopover(),
       onFog: (f) => { ensureBoard(state.combat).fog = f; saveCombat(state.combat); },
+      onDoor: (open) => { ensureBoard(state.combat).doors = open; saveCombat(state.combat); },
     });
     board.prepend(bm.el);
     return bm;
@@ -208,7 +214,8 @@ async function mount(root) {
       h('div', { class: 'row dm-only' },
         !inBattle() && [icon('mapas'), mapSel,
           h('button', { class: 'btn sm', type: 'button', onclick: uploadMap, 'data-tip': 'Sube una imagen y ponla sobre la mesa' }, icon('upload'), 'Subir mapa'),
-          state.map && h('label', { class: 'row small muted size-ctl', 'data-tip': 'Tamaño de las fichas en este mapa' }, icon('target', 16), sizeInput)],
+          state.map && h('label', { class: 'row small muted size-ctl', 'data-tip': 'Tamaño de las fichas en este mapa' }, icon('target', 16), sizeInput),
+          state.map && drawTools()],
         h('button', { class: 'btn sm', type: 'button', onclick: narrate, 'data-tip': 'Muestra un texto sobre la mesa' }, icon('feather'), 'Narrar'),
         selectEl(WEATHERS, state.settings.tableWeather || '', setWeather, { 'aria-label': 'Clima sobre la mesa', class: 'weather-select', 'data-tip': 'Clima sobre el tablero (con su sonido de ambiente)' })),
       battleScene() && h('div', { class: 'row nowrap mesa-mode dm-only', 'data-tip': 'El combate activo tiene tablero con cuadrícula' },
@@ -220,6 +227,54 @@ async function mount(root) {
         h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Ajustar el mapa', 'data-tip': 'Ajustar (doble clic en el mapa)', onclick: fit }, icon('fit', 18))]),
       h('button', { class: `btn ${state.player ? '' : 'primary'} dm-only`, type: 'button', onclick: () => setPlayerMode(true),
         'data-tip': 'Pantalla completa sin secretos: oculta los PG de los enemigos, los ocultos y las tiradas secretas' }, icon('eye'), 'Modo jugadores'));
+  }
+
+  // Dibujo a mano alzada (como en Owlbear Rodeo) y chinchetas del mapa sobre la mesa.
+  const PEN_COLORS = ['#e0524a', '#ffd479', '#4cc38a', '#5b9cff', '#f4ecd8', '#111111'];
+  function drawTools() {
+    const m = state.map;
+    const setDraw = (v) => { state.draw = state.draw === v ? null : v; board.classList.toggle('drawing', state.draw === 'pen'); board.classList.toggle('erasing', state.draw === 'erase'); renderBar(); };
+    return h('div', { class: 'row nowrap draw-tools' },
+      h('button', { class: `btn sm ${state.draw === 'pen' ? 'primary' : ''}`, type: 'button', 'aria-pressed': String(state.draw === 'pen'), 'data-tip': 'Dibujar sobre el mapa (lo ven todos)', onclick: () => setDraw('pen') }, '✏️'),
+      state.draw && [PEN_COLORS.map((c) => h('button', { class: `pen-sw ${state.pen === c ? 'on' : ''}`, type: 'button', style: { background: c }, 'aria-label': `Color ${c}`,
+        onclick: () => { state.pen = c; prefs.set('mesa.pen', c); state.draw = 'pen'; board.classList.add('drawing'); board.classList.remove('erasing'); renderBar(); } })),
+      h('button', { class: `btn sm ${state.draw === 'erase' ? 'primary' : ''}`, type: 'button', 'data-tip': 'Goma: pulsa un trazo para borrarlo', onclick: () => setDraw('erase') }, '🧽'),
+      h('button', { class: 'btn sm ghost', type: 'button', 'data-tip': 'Borrar todos los dibujos de este mapa', disabled: !(m.drawings || []).length, onclick: () => { m.drawings = []; saveMap(m); renderDrawings(); renderBar(); } }, icon('trash', 14))],
+      (m.pins || []).length > 0 && selectEl([['master', '📍 Solo el máster'], ['todos', '📍 Para todos'], ['ocultas', '📍 Ocultas']], m.pinsShow || 'master',
+        (v) => { m.pinsShow = v; saveMap(m); renderPins(); }, { class: 'mini-sel', 'aria-label': 'Quién ve las chinchetas', 'data-tip': 'Chinchetas del mapa (se ponen en Mapas)' }));
+  }
+  function renderDrawings() {
+    const m = state.map;
+    const W = img.naturalWidth || 1; const H = img.naturalHeight || 1;
+    drawSvg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    drawSvg.setAttribute('width', W);
+    drawSvg.setAttribute('height', H);
+    drawSvg.innerHTML = '';
+    (m?.drawings || []).forEach((d, i) => drawSvg.append(polyline(d, i)));
+  }
+  function polyline(d, i) {
+    const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    pl.setAttribute('points', d.pts.map(([x, y]) => `${Math.round(x)},${Math.round(y)}`).join(' '));
+    pl.setAttribute('stroke', d.color);
+    pl.setAttribute('stroke-width', d.w);
+    if (i != null) pl.dataset.i = i;
+    return pl;
+  }
+  function renderPins() {
+    const m = state.map;
+    const visible = m && !(state.player ? (m.pinsShow || 'master') !== 'todos' : m.pinsShow === 'ocultas');
+    clear(pinsEl, visible && (m.pins || []).map((p) => {
+      const [kind, id] = String(p.link || '').split(':');
+      const target = kind === 'wiki' ? wiki.find((e) => e.id === id) : kind === 'char' ? state.chars.find((c) => c.id === id) : kind === 'map' ? state.maps.find((x) => x.id === id) : null;
+      const label = p.label || target?.name || '';
+      return h('button', { class: 'mpin', type: 'button', style: { left: `${p.x * img.naturalWidth}px`, top: `${p.y * img.naturalHeight}px`, fontSize: `${tokenSize() * 0.6}px` },
+        'data-tip': [label, target?.summary].filter(Boolean).join(' — ') || null,
+        onclick: (e) => {
+          e.stopPropagation();
+          if (state.player || !target) return;
+          if (kind === 'map') setMap(target); else location.hash = kind === 'wiki' ? `#/mundo/compendio/${id}` : `#/personajes/${id}`;
+        } }, h('span', {}, p.icon || '📍'), label && h('small', {}, label));
+    }));
   }
 
   function setPlayerMode(on) {
@@ -276,7 +331,7 @@ async function mount(root) {
   async function narrate() {
     const text = await promptDialog('Narración sobre la mesa', 'Texto que verán los jugadores', state.settings.playerMessage || '');
     if (text == null) return;
-    state.settings = await api.saveSettings({ playerMessage: text }).catch((e) => { toastError(e); return state.settings; });
+    state.settings = await api.saveSettings({ playerMessage: text, playerImage: '' }).catch((e) => { toastError(e); return state.settings; });
     renderNarration();
   }
 
@@ -288,6 +343,8 @@ async function mount(root) {
     if (!m) {
       img.removeAttribute('src');
       clear(tokensEl);
+      clear(pinsEl);
+      drawSvg.innerHTML = '';
       clear(emptyEl, h('div', { class: 'empty-inner' }, icon('mapas'),
         h('h3', {}, 'La mesa está vacía'),
         h('p', {}, state.player ? 'El máster todavía no ha puesto ningún mapa.' : 'Arrastra aquí una imagen para usarla como mapa, o elige uno arriba.'),
@@ -298,6 +355,8 @@ async function mount(root) {
     img.onload = () => {
       const saved = prefs.get(`view.${m.id}`, null);
       if (saved && saved.scale) { Object.assign(view, saved); apply(); } else fit();
+      renderDrawings();
+      renderPins();
       renderTokens();
       renderBar();
     };
@@ -393,16 +452,36 @@ async function mount(root) {
     else { drag = pinch = null; saveView(); }
     board.classList.toggle('panning', pointers.size > 0);
   };
+  let stroke = null; // trazo que se está dibujando
   board.addEventListener('pointerdown', (e) => {
     if (inBattle()) return;
-    if (!state.map || e.target.closest('.mtoken, .tk-pop, .narration, .board-clock, .board-empty button')) return;
+    if (!state.map || e.target.closest('.mtoken, .mpin, .tk-pop, .narration, .board-clock, .board-empty button')) return;
     if (e.shiftKey) { ping(e); return; }
+    if (state.draw === 'erase' && e.target.tagName === 'polyline') {
+      state.map.drawings.splice(Number(e.target.dataset.i), 1);
+      saveMap(state.map); renderDrawings(); sfx.brush?.();
+      return;
+    }
+    if (state.draw === 'pen') {
+      const p = toImage(e.clientX, e.clientY);
+      stroke = { color: state.pen, w: Math.max(2, Math.round((img.naturalWidth || 1000) * 0.004)), pts: [[p.x, p.y]] };
+      stroke.el = polyline(stroke);
+      drawSvg.append(stroke.el);
+      try { board.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
+      return;
+    }
     hidePopover();
     try { board.setPointerCapture(e.pointerId); } catch { /* sin captura */ }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     regesture();
   });
   board.addEventListener('pointermove', (e) => {
+    if (stroke) {
+      const p = toImage(e.clientX, e.clientY);
+      const [lx, ly] = stroke.pts[stroke.pts.length - 1];
+      if (Math.hypot(p.x - lx, p.y - ly) * view.scale > 3) { stroke.pts.push([p.x, p.y]); stroke.el.setAttribute('points', stroke.pts.map(([x, y]) => `${Math.round(x)},${Math.round(y)}`).join(' ')); }
+      return;
+    }
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch) {
@@ -415,7 +494,17 @@ async function mount(root) {
       pinch = { d, m };
     } else if (drag) { view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply(); }
   });
-  const endPointer = (e) => { pointers.delete(e.pointerId); regesture(); };
+  const endPointer = (e) => {
+    if (stroke) {
+      const { el, ...done } = stroke;
+      stroke = null;
+      if (done.pts.length > 1) { state.map.drawings ||= []; state.map.drawings.push(done); saveMap(state.map); sfx.brush?.(); }
+      renderDrawings();
+      renderBar();
+      return;
+    }
+    pointers.delete(e.pointerId); regesture();
+  };
   board.addEventListener('pointerup', endPointer);
   board.addEventListener('pointercancel', endPointer);
   board.addEventListener('wheel', (e) => {
@@ -698,8 +787,10 @@ async function mount(root) {
       state.settings = await api.saveSettings({ clock: cl }).catch((e) => { toastError(e); return state.settings; });
       renderClock();
     };
+    const cal = calendarOf(state.settings);
     clear(clockEl, icon(night ? 'moon' : 'sun', 18),
-      h('span', {}, `Día ${cl.day} · ${String(hh).padStart(2, '0')}:${String(cl.minutes % 60).padStart(2, '0')}`),
+      h('span', { 'data-tip': `${worldDate(cal, cl.day, { weekday: true })} · ${moonOf(cal, cl.day).name}` },
+        `${worldDate(cal, cl.day, { short: true })} ${night ? moonOf(cal, cl.day).emoji : ''} · ${String(hh).padStart(2, '0')}:${String(cl.minutes % 60).padStart(2, '0')}`),
       h('span', { class: 'dm-only clock-adv' },
         h('button', { class: 'btn xs ghost', type: 'button', onclick: () => advance(10) }, '+10′'),
         h('button', { class: 'btn xs ghost', type: 'button', onclick: () => advance(60) }, '+1h')));
@@ -708,11 +799,13 @@ async function mount(root) {
 
   function renderNarration() {
     const text = state.settings.playerMessage;
-    narration.hidden = !text;
-    if (!text) return;
-    clear(narration, icon('feather', 18), h('p', {}, text),
+    const image = state.settings.playerImage; // imagen para los jugadores (una entrada del compendio, un retrato…)
+    narration.hidden = !text && !image;
+    narration.classList.toggle('with-image', !!image);
+    if (!text && !image) return;
+    clear(narration, image ? h('img', { class: 'handout', src: image, alt: '' }) : icon('feather', 18), text && h('p', {}, text),
       h('button', { class: 'btn ghost icon xs dm-only', type: 'button', 'aria-label': 'Quitar narración', onclick: async () => {
-        state.settings = await api.saveSettings({ playerMessage: '' }).catch(() => state.settings);
+        state.settings = await api.saveSettings({ playerMessage: '', playerImage: '' }).catch(() => state.settings);
         renderNarration();
       } }, icon('close', 14)));
   }
@@ -722,6 +815,7 @@ async function mount(root) {
     applyBattle();
     renderRibbon();
     renderTokens();
+    if (state.map && img.naturalWidth) renderPins();
     renderParty();
     renderDock();
     renderFeed();

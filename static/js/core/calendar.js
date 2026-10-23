@@ -8,6 +8,7 @@ export const PRESETS = {
     months: [['Urtarrila', 31], ['Otsaila', 28], ['Martxoa', 31], ['Apirila', 30], ['Maiatza', 31], ['Ekaina', 30],
       ['Uztaila', 31], ['Abuztua', 31], ['Iraila', 30], ['Urria', 31], ['Azaroa', 30], ['Abendua', 31]],
     weekdays: ['Astelehena', 'Asteartea', 'Asteazkena', 'Osteguna', 'Ostirala', 'Larunbata', 'Igandea'],
+    short: ['Al', 'Ar', 'Az', 'Og', 'Or', 'Lr', 'Ig'],
     festivals: [[0, 20, 'Danborrada'], [5, 23, 'Sanjuan gaua (hogueras)'], [6, 31, 'San Ignazio'], [11, 21, 'Santo Tomas azoka'], [11, 24, 'Olentzero']],
   },
   gregoriano: {
@@ -15,6 +16,7 @@ export const PRESETS = {
     months: [['Enero', 31], ['Febrero', 28], ['Marzo', 31], ['Abril', 30], ['Mayo', 31], ['Junio', 30],
       ['Julio', 31], ['Agosto', 31], ['Septiembre', 30], ['Octubre', 31], ['Noviembre', 30], ['Diciembre', 31]],
     weekdays: ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'],
+    short: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
     festivals: [[0, 1, 'Año nuevo'], [5, 23, 'Noche de San Juan'], [9, 31, 'Noche de difuntos']],
   },
   fantasia: {
@@ -35,6 +37,8 @@ export function calendarOf(settings) {
   return {
     preset: saved.preset || 'euskal', months: (saved.months?.length ? saved.months : preset.months).map(([n, d]) => [n, Math.max(1, Number(d) || 1)]),
     weekdays: saved.weekdays?.length ? saved.weekdays : preset.weekdays, year: saved.year ?? 1024,
+    // abreviaturas de la semana: las de la plantilla si la semana es la suya; si no, las tres primeras letras
+    short: (saved.weekdays?.length ? saved.weekdays : preset.weekdays).map((w, i) => (preset.short && (preset.weekdays[i] === w) ? preset.short[i] : w.slice(0, 3))),
     start: saved.start ?? 0, moon: saved.moon || 29.5, moonOffset: saved.moonOffset || 0,
     events: saved.events || preset.festivals.map(([month, day, title], i) => ({ id: `f${i}`, title, month, day, yearly: true, kind: 'festivo' })),
   };

@@ -1,6 +1,6 @@
 // Reglas: referencia rápida del Manual del Jugador 2024 con buscador. Estados, acciones, clases,
 // especies, trasfondos, dotes, armas y armaduras, y las tablas de PX. Cada entrada remite a su página.
-import { h, clear, icon, searchBox, segmented, selectEl } from '../core/dom.js';
+import { h, clear, icon, searchBox, segmented, selectEl, toast } from '../core/dom.js';
 import { roll } from '../core/dice.js';
 import { reference, ABILITY_SHORT, CONDITION_ICON, fmtM } from '../core/dnd.js';
 
@@ -13,18 +13,19 @@ const ACTION_ICON = {
 const CLASS_ICON = { barbaro: '🪓', bardo: '🪕', brujo: '👁️', clerigo: '☀️', druida: '🌿', explorador: '🏹', guerrero: '⚔️', hechicero: '🔥', mago: '📜', monje: '👊', paladin: '🛡️', picaro: '🗡️' };
 const DC = [[5, 'Muy fácil'], [10, 'Fácil'], [15, 'Media'], [20, 'Difícil'], [25, 'Muy difícil'], [30, 'Casi imposible']];
 const CASTER = { full: 'Lanzador completo', half: 'Medio lanzador', pact: 'Magia del pacto' };
-const SECTIONS = [['todo', 'Todo'], ['estados', 'Estados'], ['combate', 'Combate'], ['personajes', 'Personajes'], ['conjuros', 'Conjuros'], ['equipo', 'Equipo'], ['tablas', 'Tablas']];
+const SECTIONS = [['todo', 'Todo'], ['estados', 'Estados'], ['combate', 'Combate'], ['personajes', 'Personajes'], ['conjuros', 'Conjuros'], ['objetos', 'Objetos mágicos'], ['equipo', 'Equipo'], ['tablas', 'Tablas']];
+const RARITIES = [['Common', 'Común'], ['Uncommon', 'Poco común'], ['Rare', 'Raro'], ['Very Rare', 'Muy raro'], ['Legendary', 'Legendario'], ['Artifact', 'Artefacto'], ['Rarity Varies', 'Variable']];
 
 async function mount(root) {
   const ref = await reference();
-  const state = { q: '', section: 'todo', level: '', cls: '', conc: false, ritual: false };
+  const state = { q: '', section: 'todo', level: '', cls: '', conc: false, ritual: false, itype: '', rarity: '', attune: '' };
   const out = h('div', { class: 'ref-layout' });
   const skillName = (k) => ref.skills.find((s) => s.key === k)?.name || k;
 
   const match = (...txt) => !state.q || txt.flat().join(' ').toLowerCase().includes(state.q);
   const show = (key) => state.section === 'todo' || state.section === key;
   const panel = (title, iconName, cls, ...content) => h('section', { class: `panel ${cls}` }, h('div', { class: 'panel-head' }, h('h3', {}, icon(iconName), title)), ...content);
-  const page = (p) => h('span', { class: 'page-ref' }, `MdJ p. ${p}`);
+  const page = (p) => h('span', { class: 'page-ref' }, typeof p === 'number' ? `MdJ p. ${p}` : p || ''); // sin página: material propio (p. ej. «Euskal Herria»)
 
   function draw() {
     const blocks = [];
@@ -89,13 +90,16 @@ async function mount(root) {
           c.tools && [h('dt', {}, 'Herramientas'), h('dd', {}, c.tools)],
           c.caster && [h('dt', {}, 'Magia'), h('dd', {}, `${CASTER[c.caster]} (${ABILITY_SHORT[c.spell_ability]})`)],
           h('dt', {}, 'Subclases'), h('dd', {}, c.subclasses.join(' · '))),
-        h('ol', { class: 'feat-levels' }, Object.entries(c.features).map(([l, fs]) => h('li', {}, h('span', { class: 'lvl' }, l), fs.join(', ')))))))));
+        h('ol', { class: 'feat-levels' }, Object.entries(c.features).map(([l, fs]) => h('li', {}, h('span', { class: 'lvl' }, l),
+          fs.map((f, i) => [i ? ', ' : '', h('span', { class: c.feature_text?.[f] ? 'has-tip' : '', 'data-tip': c.feature_text?.[f] || null }, f)])))),
+        h('dl', { class: 'ref compact' }, c.subclasses.map((s) => [h('dt', {}, s),
+          h('dd', {}, (c.subclass_features?.[s] || []).map(([l, n, t], i) => [i ? ' · ' : '', h('span', { class: 'has-tip', 'data-tip': t }, `${n} (${l})`)]))])))))));
     }
     const species = ref.species.filter((s) => match(s.name, s.traits));
     if (show('personajes') && species.length) {
       blocks.push(panel('Especies', 'personajes', '', h('div', { class: 'stack-sm' }, species.map((s) => h('details', { class: 'class-card' },
         h('summary', {}, h('div', { class: 'grow' }, h('b', {}, s.name), h('div', { class: 'tiny muted' },
-          `${s.size} · ${fmtM(s.speed)}${s.darkvision ? ` · visión en la oscuridad ${s.darkvision} m` : ''}`)), page(s.page)),
+          `${s.size} · ${fmtM(s.speed)}${s.darkvision ? ` · visión en la oscuridad ${s.darkvision} m` : ''}`)), page(s.page || s.origin)),
         h('dl', { class: 'ref compact' }, s.traits.map(([n, t]) => [h('dt', {}, n), h('dd', {}, t)])),
         s.options && h('p', { class: 'tiny muted' }, `${s.options_label}: ${s.options.map(([n]) => n).join(', ')}`))))));
     }
@@ -140,6 +144,32 @@ async function mount(root) {
                 '🎲 ', s.damage || `${s.heal} curación`)),
             h('td', {}, page(s.page))))))),
         h('p', { class: 'tiny muted' }, 'Datos de cada conjuro del Manual del Jugador 2024; la descripción completa está en la página indicada.')));
+    }
+
+    // --------------------------------------------------------- objetos mágicos (SRD 5.2.1)
+    if (state.section === 'objetos' || (state.section === 'todo' && state.q)) {
+      const items = ref.magic_items.filter((m) => match(m.name, m.en, m.type, m.detail, m.summary)
+        && (!state.itype || m.type === state.itype) && (!state.rarity || m.rarityKey === state.rarity)
+        && (!state.attune || (state.attune === 'si' ? m.attune != null : m.attune == null)));
+      const pick = () => {
+        const pool = items.length ? items : ref.magic_items;
+        const it = pool[Math.floor(Math.random() * pool.length)];
+        toast(h('div', {}, h('b', {}, `🎁 ${it.name}`), h('div', { class: 'small' }, `${it.type} · ${it.rarity}. ${it.summary}`)), { ms: 9000, iconName: 'gem' });
+      };
+      blocks.push(panel(`Objetos mágicos (${items.length})`, 'gem', 'wide',
+        state.section === 'objetos' && h('div', { class: 'row spell-filters' },
+          selectEl([['', 'Todos los tipos'], ...[...new Set(ref.magic_items.map((m) => m.type))].sort().map((t) => [t, t])], state.itype, (v) => { state.itype = v; draw(); }, { class: 'mini-sel', 'aria-label': 'Tipo' }),
+          selectEl([['', 'Todas las rarezas'], ...RARITIES], state.rarity, (v) => { state.rarity = v; draw(); }, { class: 'mini-sel', 'aria-label': 'Rareza' }),
+          selectEl([['', 'Con o sin sintonía'], ['si', 'Requiere sintonía'], ['no', 'Sin sintonía']], state.attune, (v) => { state.attune = v; draw(); }, { class: 'mini-sel', 'aria-label': 'Sintonía' }),
+          h('button', { class: 'btn sm', type: 'button', onclick: pick, 'data-tip': 'Un objeto al azar entre los que cumplen el filtro' }, '🎲 Al azar')),
+        h('div', { class: 'table-scroll' }, h('table', { class: 'ref-table spell-table' },
+          h('thead', {}, h('tr', {}, ['Objeto', 'Tipo', 'Rareza', 'Qué hace', ''].map((t) => h('th', {}, t)))),
+          h('tbody', {}, items.slice(0, state.section === 'objetos' ? 300 : 30).map((m) => h('tr', {},
+            h('td', {}, h('b', { 'data-tip': m.en }, m.name), m.attune != null && h('span', { class: 'chip tiny-chip', 'data-tip': `Requiere sintonía${m.attune ? ` ${m.attune}` : ''}` }, 'S')),
+            h('td', { class: 'small' }, m.type, m.detail && h('div', { class: 'tiny muted' }, m.detail)),
+            h('td', { class: 'small' }, m.rarity), h('td', { class: 'small' }, m.summary),
+            h('td', {}, page(`SRD p. ${m.page}`))))))),
+        h('p', { class: 'tiny muted' }, 'Objetos mágicos del SRD 5.2.1 de Wizards of the Coast (CC-BY-4.0), con nombres y resúmenes en castellano. «S»: requiere sintonía.')));
     }
 
     // ------------------------------------------------------------------ equipo

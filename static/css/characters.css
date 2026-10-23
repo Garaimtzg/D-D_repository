@@ -339,7 +339,14 @@ input.mini { width: 54px; padding: 4px; }
 .look-opt.txt { font-size: .8rem; }
 .look-opt > .acc { position: static; transform: none; font-size: 1.4rem; filter: none; }
 .look-opt > svg.acc { width: 30px; height: 30px; }
-.look-opt .avatar.look-mini { width: 32px; height: 32px; --s: 32px; box-shadow: none; }
+.look-opt .avatar.look-mini { width: 38px; height: 38px; --s: 38px; box-shadow: none; }
+.look-opt:has(.look-mini) { height: 46px; padding: 0 4px; }
+.look-sw.custom { position: relative; background: conic-gradient(#ff5f5f, #ffd84d, #6be36b, #4dd8ff, #6b7bff, #ff6bdc, #ff5f5f); }
+.look-sw.custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.look-sw.custom.on { box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 4px var(--gold); }
+.look-emoji { width: 58px; height: 40px; box-sizing: border-box; text-align: center; font-size: 1.3rem; padding: 0 4px; }
+.look-controls > .seg { align-self: flex-start; flex-wrap: wrap; }
+.look-preview .row.center { justify-content: center; }
 .look-opt:hover { transform: translateY(-2px); border-color: var(--line-2); }
 .look-opt[aria-pressed="true"] { border-color: var(--gold); background: rgba(226, 180, 86, .18); color: var(--gold-2); box-shadow: 0 0 0 1px var(--gold); }
 .look-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -351,3 +358,27 @@ input.mini { width: 54px; padding: 4px; }
 .spell-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .spell-list li { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 9px; background: rgba(255, 250, 235, .35); }
 .spell-list .tiny-chip { margin-left: 5px; }
+
+/* ------------------------------------------- Euskal Herria, equipo y decisiones pendientes */
+.cr-card.homebrew, .beast.homebrew { border-color: rgba(76, 195, 138, .45); }
+.cr-card.homebrew::after, .beast.homebrew::after {
+  content: 'EH'; position: absolute; top: 8px; left: 8px; padding: 1px 6px; border-radius: 6px;
+  font: 800 .6rem var(--font); letter-spacing: .06em; color: #0d2b18; background: #4cc38a;
+}
+.cr-card.homebrew { position: relative; }
+.beast.homebrew { background: linear-gradient(180deg, #17291d, #101a13); }
+.beast.homebrew:hover, .beast.homebrew:focus-visible { border-color: #4cc38a; }
+.beast.homebrew b { margin-top: 10px; }
+.cr-basque { color: #7fdcae; }
+.cr-options.vertical { grid-template-columns: 1fr; align-content: start; }
+.cr-asi { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cr-asi select { max-width: 260px; }
+.pending-box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 10px; padding: 8px 12px; border-radius: 10px;
+  background: rgba(226, 180, 86, .18); border: 1px dashed rgba(110, 75, 30, .5); color: #4a2c14; font-size: .88rem;
+}
+.parchment .pending-box .chip.bad { color: #8a1c12; border-color: rgba(138, 28, 18, .45); background: rgba(224, 82, 74, .12); }
+.trait-list li.sub .lvl { background: #7a5212; }
+.has-tip { border-bottom: 1px dotted currentColor; cursor: help; }
+.items li.magic input.grow { color: #7a3fb0; font-weight: 700; }
+.items .attune { gap: 2px; font-weight: 700; }

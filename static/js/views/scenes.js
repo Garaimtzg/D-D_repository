@@ -117,6 +117,47 @@ async function mount(root, [sceneId]) {
     } catch (e) { toastError(e); }
   }
 
+  // Mazmorra o cueva al azar (como donjon o el «One Page Dungeon» de watabou): se ve antes de guardarla.
+  async function dungeonDialog() {
+    const s = { size: 'mediana', kind: 'mazmorra', seed: '' };
+    const stage = h('div', { class: 'preview-stage' });
+    const keyEl = h('pre', { class: 'dungeon-key' });
+    const bm = createBattleMap({ catalog: cat, dm: true, range: false });
+    stage.append(bm.el);
+    let sc = null;
+    const make = async (seed = '') => {
+      try {
+        sc = await api.post('/api/dungeon', { ...s, seed });
+        s.seed = sc.seed;
+        seedIn.value = sc.seed;
+        bm.setScene(sc);
+        bm.fit();
+        keyEl.textContent = sc.description;
+        sfx.unroll();
+      } catch (e) { toastError(e); }
+    };
+    const seedIn = h('input', { class: 'inline', type: 'number', min: 1, 'aria-label': 'Semilla', onchange: (e) => make(e.target.value) });
+    const done = modal('Mazmorra al azar', h('div', { class: 'stack' },
+      h('div', { class: 'row' },
+        segmented([['mazmorra', '🏰 Mazmorra'], ['cueva', '🕳️ Cueva']], s.kind, (v) => { s.kind = v; make(); }),
+        segmented([['pequena', 'Pequeña'], ['mediana', 'Mediana'], ['grande', 'Grande']], s.size, (v) => { s.size = v; make(); }),
+        h('button', { class: 'btn', type: 'button', onclick: () => make() }, '🎲 Otra'),
+        field('Semilla', seedIn)),
+      h('div', { class: 'dungeon-layout' }, stage, keyEl),
+      h('p', { class: 'tiny muted' }, 'Las puertas empiezan cerradas: en combate se abren con un clic. Con la misma semilla sale la misma mazmorra.')),
+    [{ label: 'Cancelar', value: false }, { label: 'Guardar como escenario', value: true, class: 'primary', icon: 'save' }], { wide: true, iconName: 'grid' });
+    requestAnimationFrame(() => make());
+    const ok = await done;
+    bm.destroy();
+    if (!ok || !sc) return;
+    try {
+      const saved = await api.create('scenes', sc);
+      state.custom.push(saved);
+      toast(`«${saved.name}» guardada en tus escenarios.`, { kind: 'good', iconName: 'grid' });
+      renderGallery();
+    } catch (e) { toastError(e); }
+  }
+
   async function fromImage() {
     const [file] = await pickFiles('image/*');
     if (!file) return;
@@ -170,6 +211,7 @@ async function mount(root, [sceneId]) {
       h('div', { class: 'panel ornate row' },
         h('div', { class: 'grow' }, h('h2', { style: { margin: 0 } }, 'Escenarios de combate'),
           h('p', { class: 'muted', style: { margin: '4px 0 0' } }, 'Tableros con cuadrícula de 1,5 m por casilla. Usa uno prediseñado tal cual, personalízalo o crea el tuyo pintando el terreno y colocando objetos.')),
+        h('button', { class: 'btn', type: 'button', onclick: dungeonDialog, 'data-tip': 'Salas, pasillos, puertas y la clave de cada sala' }, '🎲 Mazmorra al azar'),
         h('button', { class: 'btn', type: 'button', onclick: fromImage, 'data-tip': 'Sube un mapa de batalla y ponle cuadrícula encima' }, icon('image', 16), 'Desde una imagen'),
         h('button', { class: 'btn primary lg', type: 'button', onclick: () => newSceneDialog() }, icon('plus', 18), 'Nuevo escenario')),
       h('section', { class: 'stack' },

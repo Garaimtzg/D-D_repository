@@ -3,7 +3,7 @@ import re
 import time
 import uuid
 
-from . import config, dice, generators, rules, scenes
+from . import config, dice, dungeon, generators, rules, scenes
 from .monsters import MONSTERS
 
 SAFE_UPLOAD = re.compile(r"^[a-f0-9]{32}\.[a-z0-9]{2,5}$")
@@ -95,6 +95,15 @@ def scene_catalog(app, p, body):
     return 200, scenes.catalog()
 
 
+def make_dungeon(app, p, body):
+    body = body if isinstance(body, dict) else {}
+    try:
+        seed = int(body.get("seed") or 0) or None
+    except (TypeError, ValueError):
+        raise ApiError(400, "La semilla debe ser un número")
+    return 200, dungeon.generate(seed, body.get("size", "mediana"), body.get("kind", "mazmorra"))
+
+
 def encounter(app, p, body):
     body = _require_dict(body)
     try:
@@ -147,6 +156,7 @@ ROUTES = [
     ("POST", r"/api/generate/(?P<kind>\w+)", generate),
     ("POST", r"/api/encounter", encounter),
     ("GET", r"/api/scene-catalog", scene_catalog),
+    ("POST", r"/api/dungeon", make_dungeon),
     ("GET", r"/api/settings", get_settings),
     ("PUT", r"/api/settings", put_settings),
     ("POST", r"/api/uploads", upload),

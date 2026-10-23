@@ -49,6 +49,8 @@ export const classOf = (ch) => REF?.classes.find((c) => c.id === ch.classId) || 
 export const speciesOf = (ch) => REF?.species.find((s) => s.id === ch.speciesId) || REF?.species.find((s) => norm(s.name) === norm(ch.race)) || null;
 export const backgroundOf = (ch) => REF?.backgrounds.find((b) => b.id === ch.backgroundId) || REF?.backgrounds.find((b) => norm(b.name) === norm(ch.background)) || null;
 export const hasFeat = (ch, name) => (ch.feats || []).some((f) => norm(f).startsWith(norm(name)));
+// Dónde mirar una regla: la página del manual o el origen del material propio (Euskal Herria).
+export const source = (x) => (x?.page ? `MdJ p. ${x.page}` : x?.origin || '');
 
 export function profBonus(ch) {
   if (ch.type === 'enemigo' && ch.cr != null && ch.cr !== '') {
@@ -73,7 +75,9 @@ export function passivePerception(ch) {
   return 10 + mod(ch.abilities?.sab) + (ch.skills?.percepcion || 0) * profBonus(ch);
 }
 
-// Clase de armadura: armadura del manual (con su límite de DES), escudo, Defensa sin armadura y la dote Defensa.
+// Clase de armadura: armadura del manual (con su límite de DES), escudo, Defensa sin armadura (de la clase
+// o la subclase), la armadura natural de la especie y la dote Defensa. Sin armadura se usa la mejor opción.
+const NO_SHIELD = ['monje', 'Colegio de la danza']; // su Defensa sin armadura no admite escudo
 export function computeAC(ch) {
   const dex = mod(ch.abilities?.des);
   const armor = REF?.armor.find((a) => a.name === ch.armor);
@@ -83,9 +87,12 @@ export function computeAC(ch) {
     let cap = armor.dex_max;
     if (cap === 2 && hasFeat(ch, 'Maestro en armaduras medias') && (ch.abilities?.des || 0) >= 16) cap = 3;
     ac = armor.base + (cap == null ? dex : Math.min(dex, cap));
-  } else if (cls?.unarmored && !(cls.id === 'monje' && ch.shield)) {
-    ac = 10 + cls.unarmored.reduce((s, k) => s + mod(ch.abilities?.[k]), 0);
-  } else ac = 10 + dex;
+  } else {
+    const sets = [[cls?.id, cls?.unarmored], [ch.subclass, cls?.subclass_unarmored?.[ch.subclass]]]
+      .filter(([who, set]) => set && !(ch.shield && NO_SHIELD.includes(who)));
+    const natural = speciesOf(ch)?.natural_ac;
+    ac = Math.max(10 + dex, natural ? natural + dex : 0, ...sets.map(([, set]) => 10 + set.reduce((s, k) => s + mod(ch.abilities?.[k]), 0)));
+  }
   if (ch.shield) ac += 2;
   if (armor && hasFeat(ch, 'Defensa')) ac += 1;
   return ac;
@@ -100,6 +107,7 @@ export function maxHpFor(ch, level = ch.level || 1) {
   let hp = cls.hit_die + con + (level - 1) * Math.max(1, fixed + con);
   if (speciesOf(ch)?.hp_per_level) hp += level * speciesOf(ch).hp_per_level;
   if (hasFeat(ch, 'Duro')) hp += 2 * level;
+  if (ch.subclass === 'Hechicería dracónica' && level >= 3) hp += level; // Resistencia dracónica
   return Math.max(1, hp);
 }
 
@@ -122,6 +130,7 @@ export const masteryCount = (cls, level) => (cls?.masteries ? cls.masteries[Math
 export function classResources(ch, cls = classOf(ch), level = ch.level || 1) {
   if (!cls) return [];
   return (cls.resources || []).map((r) => {
+    if (r.from && level < r.from) return null;
     let max = r.column ? columnAt(cls, r.column, level) : r.uses;
     if (typeof max === 'string' && max.startsWith('mod:')) max = Math.max(1, mod(ch.abilities?.[max.slice(4)]));
     if (max === 'level*5') max = level * 5;
@@ -131,10 +140,91 @@ export function classResources(ch, cls = classOf(ch), level = ch.level || 1) {
   }).filter(Boolean);
 }
 
-export function featuresUpTo(cls, level) {
+// Rasgos de clase hasta un nivel: [nivel, nombre, qué hace]. Con subclase, cada «Rasgo de subclase»
+// se cambia por los rasgos de la subclase de ese nivel.
+export function featuresUpTo(cls, level, subclass = '') {
   if (!cls) return [];
+  const sub = cls.subclass_features?.[subclass] || [];
   const out = [];
-  for (let l = 1; l <= level; l++) for (const f of cls.features[l] || []) out.push([l, f]);
+  for (let l = 1; l <= level; l++) {
+    for (const f of cls.features[l] || []) {
+      if (f === 'Rasgo de subclase' && sub.length) continue;
+      out.push([l, f, cls.feature_text?.[f] || (f === 'Rasgo de subclase' ? 'Elige subclase para ver qué te da.' : '')]);
+    }
+    for (const [sl, name, text] of sub) if (sl === l) out.push([l, name, text, true]);
+  }
+  return out;
+}
+
+// Las dotes generales y los dones épicos de 2024 suben +1 una característica: ¿cuáles se pueden elegir?
+export function featAbilities(feat) {
+  const m = /^\+1 ([A-Z/]+)/.exec(feat?.summary || '');
+  if (m) return m[1].split('/').map((s) => ABILITY_KEYS.find((k) => ABILITY_SHORT[k] === s)).filter(Boolean);
+  return /^\+1/.test(feat?.summary || '') ? [...ABILITY_KEYS] : [];
+}
+
+// --------------------------------------------------------------- especie
+// Recursos de la especie y usos gratis de sus conjuros, según el nivel.
+export function speciesResources(ch, level = ch.level || 1) {
+  const sp = speciesOf(ch);
+  if (!sp) return [];
+  const pb = profBonus({ ...ch, level });
+  const free = speciesSpellEntries(ch).filter(([lvl, , uses]) => uses && level >= lvl).map(([lvl, name, uses]) => [`${name} (gratis)`, uses, 'largo', lvl]);
+  return [...(sp.resources || []), ...free].filter(([, , , min]) => level >= (min || 1))
+    .map(([name, uses, reset]) => ({ name, max: uses === 'pb' ? pb : uses, used: 0, reset, auto: true, species: true }));
+}
+const speciesSpellEntries = (ch) => { const sp = speciesOf(ch); return [...(sp?.spells || []), ...(sp?.lineage_spells?.[ch.lineage] || [])]; };
+export const speciesSpells = (ch, level = ch.level || 1) => speciesSpellEntries(ch).filter(([lvl]) => level >= lvl).map(([, name]) => name);
+
+// Ataques que la ficha calcula sola: los de la especie (aliento dracónico, peñas del jentil) y el golpe sin armas del monje.
+export function derivedAttacks(ch) {
+  const sp = speciesOf(ch);
+  const level = ch.level || 1;
+  const pb = profBonus(ch);
+  const out = [];
+  for (const a of sp?.attacks || []) {
+    if (level < (a.level || 1)) continue;
+    const ab = mod(ch.abilities?.[a.ability || a.dc]);
+    const dice = a.scale ? a.damage.replace(/^1d/, `${1 + a.scale.filter((l) => level >= l).length}d`) : a.damage;
+    const type = a.lineage_type ? sp.options?.find(([n]) => n === ch.lineage)?.[1] : '';
+    out.push(a.save
+      ? { name: a.name, bonus: '', save: `${a.save} CD ${8 + ab + pb}`, damage: dice, notes: [type, a.notes].filter(Boolean).join(' · '), auto: true }
+      : { name: a.name, bonus: ab + pb, damage: `${dice}${ab ? fmtMod(ab) : ''}`, notes: a.notes, auto: true });
+  }
+  if (classOf(ch)?.id === 'monje') {
+    const ab = Math.max(mod(ch.abilities?.fue), mod(ch.abilities?.des));
+    out.push({ name: 'Golpe sin armas', bonus: ab + pb, damage: `${columnAt(classOf(ch), 'Artes marciales', level)}${fmtMod(ab)}`, notes: 'contundente · artes marciales · otro como acción adicional', auto: true });
+  }
+  return out;
+}
+
+// Lo que falta por decidir en la ficha para jugar según el manual, y avisos de reglas.
+export function pendingChoices(ch) {
+  const cls = classOf(ch);
+  const level = ch.level || 1;
+  const out = [];
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  if (cls && level >= 3 && !ch.subclass) out.push('Subclase');
+  if (cls?.choice && !ch.classChoice) out.push(cls.choice.name);
+  if (cls?.style_level && level >= cls.style_level && !(ch.feats || []).some((f) => REF.feats.find((x) => x.name === f)?.category === 'estilo de combate' || /^Guerrero (bendito|druídico)/.test(f))) out.push('Estilo de combate (dote)');
+  const masteries = masteryCount(cls, level) - (ch.masteries || []).length;
+  if (masteries > 0) out.push(plural(masteries, 'maestría con armas', 'maestrías con armas'));
+  const expertise = (cls?.expertise || []).filter(([l]) => level >= l).reduce((s, [, n]) => s + n, 0) - Object.values(ch.skills || {}).filter((v) => v === 2).length;
+  if (expertise > 0) out.push(`Pericia en ${plural(expertise, 'habilidad', 'habilidades')} (◆)`);
+  if (cls?.caster) {
+    const own = new Set(speciesSpells(ch));
+    const spells = (ch.spellList || []).filter((n) => !own.has(n)).map((n) => REF.spells.find((s) => s.name === n)).filter(Boolean);
+    const extra = ['Taumaturgo', 'Naturalista'].includes(ch.classChoice) ? 1 : 0;
+    const cantrips = (cls.cantrips?.[level - 1] || 0) + extra - spells.filter((s) => !s.level).length;
+    const prepared = (cls.prepared?.[level - 1] || 0) - spells.filter((s) => s.level).length;
+    if (cantrips > 0) out.push(plural(cantrips, 'truco', 'trucos'));
+    if (prepared > 0) out.push(plural(prepared, 'conjuro preparado', 'conjuros preparados'));
+  }
+  const armor = REF?.armor.find((a) => a.name === ch.armor);
+  if (armor && ch.type === 'jugador') {
+    if (armor.str && (ch.abilities?.fue || 0) < armor.str) out.push(`⚠ ${armor.name}: con FUE menor de ${armor.str} tu velocidad baja 3 m`);
+    if (ch.armorTraining?.length && !ch.armorTraining.includes(armor.category)) out.push(`⚠ Sin entrenamiento con armadura ${armor.category}: desventaja en FUE y DES y no puedes lanzar conjuros`);
+  }
   return out;
 }
 
@@ -152,8 +242,10 @@ export function weaponProficient(ch, w) {
 export function weaponAttack(ch, w) {
   const fue = mod(ch.abilities?.fue);
   const des = mod(ch.abilities?.des);
-  const ability = w.properties.includes('Sutil') ? Math.max(fue, des) : w.kind === 'dist' ? des : fue;
-  const prof = weaponProficient(ch, w) ? profBonus(ch) : 0;
+  // Artes marciales: con armas de monje (sencillas cuerpo a cuerpo y marciales ligeras) el monje puede usar DES
+  const monkWeapon = classOf(ch)?.id === 'monje' && w.kind === 'cac' && (w.category === 'sencilla' || w.properties.includes('Ligera'));
+  const ability = w.properties.includes('Sutil') || monkWeapon ? Math.max(fue, des) : w.kind === 'dist' ? des : fue;
+  const prof = (weaponProficient(ch, w) ? profBonus(ch) : 0) + (w.kind === 'dist' && hasFeat(ch, 'Tiro con arco') ? 2 : 0);
   const mastery = (ch.masteries || []).includes(w.name);
   const notes = [w.type, ...w.properties.map((p) => (p === 'Arrojadiza' || p === 'Munición') && w.range ? `${p} (${w.range} m)` : p),
     mastery ? `Maestría: ${w.mastery}` : null].filter(Boolean).join(' · ');
@@ -202,7 +294,7 @@ export function fromMonster(m) {
     name: m.name, cr: m.cr, creature: m.creature, ac: m.ac, hp: m.hp, maxHp: m.hp, hpDice: m.hpDice,
     speed: m.speed, size: m.size || 'Mediano', abilities: { ...m.abilities }, attacks: m.attacks.map((a) => ({ notes: '', ...a })),
     saves: [...(m.saves || [])], initBonus: m.init ?? '', alignment: m.alignment || '',
-    features: m.traits, notes: m.en ? `${m.en} · SRD 5.2.1 (CC-BY-4.0)` : '',
+    features: m.traits, notes: m.source ? `${m.eu} · mitología de Euskal Herria (criatura propia de esta app)` : m.en ? `${m.en} · SRD 5.2.1 (CC-BY-4.0)` : '',
   });
 }
 
