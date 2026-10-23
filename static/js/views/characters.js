@@ -531,7 +531,7 @@ async function mount(root, [selId]) {
           h('button', { class: 'btn xs ghost', type: 'button', 'aria-pressed': String(!L.bg), onclick: () => set('bg', '') }, 'El color del personaje')))],
     };
     function draw() {
-      clear(preview, token(c, { size: 170, showHp: false }), h('b', {}, c.name),
+      clear(preview, token(c, { size: 170, showHp: false, live: false }), h('b', {}, c.name),
         h('div', { class: 'row center' },
           h('button', { class: 'btn sm primary', type: 'button', onclick: () => { Object.assign(L, randomLook(), { base: L.base, bg: L.bg }); sfx.magic(); save(c); draw(); } }, '🎲 Todo al azar'),
           h('button', { class: 'btn sm', type: 'button', onclick: () => {

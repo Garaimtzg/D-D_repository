@@ -6,6 +6,7 @@ import { CRS, newCharacter } from '../core/dnd.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
 import { calendarOf, worldDate, moonOf } from '../core/calendar.js';
+import { nightDialog, announceNight } from './night.js';
 
 export default { id: 'herramientas', title: 'Herramientas', icon: 'herramientas', hint: 'Generadores, reloj, temporizadores y copia de la campaña · tecla 8', mount };
 
@@ -124,6 +125,7 @@ function clockTile(settings) {
       h('span', { class: 'muted small' }, period(clock.minutes)));
   };
   const advance = (mins) => {
+    const before = clock.minutes;
     const total = clock.minutes + mins;
     clock.day += Math.floor(total / 1440);
     clock.minutes = ((total % 1440) + 1440) % 1440;
@@ -131,13 +133,15 @@ function clockTile(settings) {
     sfx.click();
     draw();
     api.saveSettings({ clock }).catch(toastError);
+    announceNight(before, clock.minutes);
   };
   draw();
   return tile('Reloj del mundo', 'clock', '',
     h('div', { class: 'row nowrap clock-row' }, dial, label),
     h('div', { class: 'row' },
       [['+1 min', 1], ['+10 min', 10], ['+1 h', 60], ['+8 h', 480], ['+1 día', 1440], ['−1 h', -60]].map(([l, m]) => h('button', { class: 'btn xs', type: 'button', onclick: () => advance(m) }, l)),
-      h('button', { class: 'btn xs', type: 'button', onclick: () => advance(((6 * 60 - clock.minutes) + 1440) % 1440 || 1440) }, icon('sun', 12), 'Amanecer')),
+      h('button', { class: 'btn xs', type: 'button', onclick: () => advance(((6 * 60 - clock.minutes) + 1440) % 1440 || 1440) }, icon('sun', 12), 'Amanecer'),
+      h('button', { class: 'btn xs', type: 'button', 'data-tip': 'Tirada de la noche con criaturas de la mitología vasca', onclick: nightDialog }, '🌑 La noche de Gaueko')),
     h('p', { class: 'tiny muted' }, 'La hora aparece sobre la mesa; de noche el tablero se oscurece.'));
 }
 
@@ -275,7 +279,8 @@ function travelTile() {
   return tile('Viajes', 'compass', '',
     h('div', { class: 'row nowrap' }, field('Kilómetros', bind(s, 'km', { type: 'number', min: 0, onChange: calc })),
       field('Ritmo', selectEl(Object.entries(PACES).map(([d, [l]]) => [d, `${l} · ${d} km`]), 36, (v) => { s.pace = Number(v); calc(); }))),
-    out, h('p', { class: 'tiny muted' }, 'Ritmos de viaje del Manual del Jugador 2024: 8 horas de marcha al día.'));
+    out, h('p', { class: 'tiny muted' }, 'Ritmos de viaje del Manual del Jugador 2024: 8 horas de marcha al día.'),
+    h('button', { class: 'btn sm', type: 'button', 'data-tip': 'Si se viaja o se acampa de noche, tira en «La noche es de Gaueko»', onclick: nightDialog }, '🌑 Si se hace de noche…'));
 }
 
 // ---------------------------------------------------------- dados en el móvil

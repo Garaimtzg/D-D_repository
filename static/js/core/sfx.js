@@ -109,6 +109,8 @@ const SOUNDS = {
     noise({ dur: 0.05, vol: 0.07, type: 'bandpass', freq: 1900, q: 3 });
   },
   brush() { noise({ dur: 0.14, vol: 0.035, type: 'bandpass', freq: 1300, q: 0.7 }); },
+  chop() { noise({ dur: 0.07, vol: 0.3, type: 'bandpass', freq: 1100, q: 1.2 }); tone(150, { dur: 0.09, vol: 0.22, to: 70 }); }, // hacha en la madera
+  thud() { tone(70, { dur: 0.35, vol: 0.35, to: 38 }); noise({ dur: 0.25, vol: 0.14, type: 'lowpass', freq: 380 }); }, // piedra contra el suelo
   tick() { tone(2300, { dur: 0.04, vol: 0.035, type: 'triangle' }); },
   blast() { // área de efecto
     noise({ dur: 0.9, vol: 0.12, type: 'lowpass', freq: 200, to: 2600, q: 0.8 });

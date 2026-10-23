@@ -2,7 +2,7 @@
 // generador de características, historial y la estadística de la suerte con el d20.
 import { api } from '../core/api.js';
 import { h, clear, icon, dieIcon, segmented, selectEl, toast, toastError, fmtTime, promptDialog, prefs } from '../core/dom.js';
-import { roll, onRoll, describe, setLocalTray } from '../core/dice.js';
+import { roll, onRoll, describe, setLocalTray, physicalMode, setPhysicalMode } from '../core/dice.js';
 import { TYPE_LABEL } from '../core/dnd.js';
 
 export default { id: 'dados', title: 'Dados', icon: 'dados', hint: 'Bandeja de dados e historial · tecla 6', mount };
@@ -122,7 +122,7 @@ async function mount(root) {
       return h('li', { class: r.crit === 'critico' ? 'crit' : r.crit === 'pifia' ? 'fumble' : '' },
         h('span', { class: 'h-who', style: { '--c': ch?.color || 'var(--gold)' } }, (r.who || '?').slice(0, 1)),
         h('div', { class: 'grow' },
-          h('div', { class: 'h-lbl' }, r.label || r.expr, r.secret ? h('span', { class: 'chip' }, '🔒 secreta') : '', r.mode ? h('span', { class: 'chip' }, r.mode === 'adv' ? 'ventaja' : 'desventaja') : ''),
+          h('div', { class: 'h-lbl' }, r.label || r.expr, r.physical ? h('span', { class: 'chip' }, '✋ físico') : '', r.secret ? h('span', { class: 'chip' }, '🔒 secreta') : '', r.mode ? h('span', { class: 'chip' }, r.mode === 'adv' ? 'ventaja' : 'desventaja') : ''),
           h('div', { class: 'tiny muted' }, `${describe(r)} · ${fmtTime(r.time)}`)),
         h('b', { class: 'h-total' }, r.total),
         h('button', { class: 'btn icon xs ghost', type: 'button', 'data-tip': 'Repetir esta tirada', onclick: () => doRoll(r.expr, (r.label || '').replace(/^[^:]+:\s*/, '')) }, icon('refresh', 14)));
@@ -152,6 +152,10 @@ async function mount(root) {
   exprInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doRoll(exprInput.value.trim()); });
   const modTxt = h('b', { class: 'mod-val' }, '+0');
   const setMod = (d) => { state.mod += d; modTxt.textContent = state.mod >= 0 ? `+${state.mod}` : String(state.mod); renderBuilder(); };
+  const physSeg = h('div');
+  const drawPhysSeg = () => clear(physSeg, segmented([['off', '🎲 App'], ['jugadores', '✋ Jugadores'], ['todos', '✋ Todo']], physicalMode(), setPhysicalMode));
+  drawPhysSeg();
+  window.addEventListener('dnd:physical', drawPhysSeg);
   const whoOptions = [['', '🎲 Máster'], ...state.chars.map((c) => [c.id, `${c.name} · ${TYPE_LABEL[c.type].split(' ')[0]}`])];
 
   root.append(h('div', { class: 'dice-layout' },
@@ -184,6 +188,10 @@ async function mount(root) {
           h('button', { class: 'btn', type: 'button', onclick: abilityScores }, icon('dados', 16), 'Tirar características'),
           h('p', { class: 'tiny muted' }, 'Alternativa de compra de puntos: 15, 14, 13, 12, 10 y 8.')))),
     h('aside', { class: 'dice-side' },
+      h('div', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h3', {}, '✋ Dados físicos')),
+        physSeg,
+        h('p', { class: 'tiny muted' }, 'Si jugáis con dados de verdad, la app pide lo que ha salido en cada tirada (ataques, daño, salvaciones, iniciativa, pruebas de grupo…) y hace las cuentas: modificadores, ventaja, críticos y PG. ',
+          '«Los jugadores»: solo las tiradas de personajes jugadores; los enemigos los sigue tirando la app. También se cambia con el botón de la barra de arriba.')),
       h('div', { class: 'panel' }, h('div', { class: 'panel-head' }, h('h3', {}, icon('target'), 'La suerte del d20')), statsEl),
       h('div', { class: 'panel history-panel' },
         h('div', { class: 'panel-head' }, h('h3', {}, icon('scroll'), 'Historial'),
@@ -198,5 +206,5 @@ async function mount(root) {
   renderFavs();
   renderHistory();
   const off = onRoll((r) => { state.history.push(r); showResult(r); renderHistory(); });
-  return () => { off(); setLocalTray(null); tray.destroy(); };
+  return () => { off(); setLocalTray(null); tray.destroy(); window.removeEventListener('dnd:physical', drawPhysSeg); };
 }

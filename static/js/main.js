@@ -1,7 +1,7 @@
 // Punto de entrada: navegación, barra lateral, barra superior y atajos de teclado.
-import { h, clear, icon, dieIcon, promptDialog, fmtTime, initTooltips } from './core/dom.js';
+import { h, clear, icon, dieIcon, promptDialog, fmtTime, initTooltips, toast } from './core/dom.js';
 import { api } from './core/api.js';
-import { roll, setSound, soundOn } from './core/dice.js';
+import { roll, setSound, soundOn, PHYSICAL, physicalMode, setPhysicalMode } from './core/dice.js';
 import { sfx } from './core/sfx.js';
 import { startAtmosphere } from './core/atmosphere.js';
 import { player } from './core/audio.js';
@@ -71,6 +71,23 @@ const dicebar = h('div', { class: 'dicebar', role: 'group', 'aria-label': 'Tirar
   onclick: (e) => roll(`1d${s}`, { mode: s === 20 ? (e.shiftKey ? 'adv' : e.altKey ? 'dis' : '') : '' }),
 }, dieIcon(s), h('span', {}, `d${s}`))));
 
+// Dados físicos: cada clic pasa al siguiente modo (app → físicos de los jugadores → todo físico).
+const PHYS_TIP = { off: 'Tira la app. Pulsa para usar dados físicos', jugadores: 'Los jugadores tiran sus dados físicos y apuntan el resultado; los enemigos, la app', todos: 'Todas las tiradas con dados físicos: la app pide lo que ha salido' };
+const physBtn = h('button', { class: 'btn sm phys-toggle', type: 'button', 'data-tip-pos': 'below', onclick: () => {
+  const i = PHYSICAL.findIndex(([k]) => k === physicalMode());
+  setPhysicalMode(PHYSICAL[(i + 1) % PHYSICAL.length][0]);
+  toast(PHYSICAL.find(([k]) => k === physicalMode())[1], { iconName: 'dados' });
+} });
+const drawPhys = () => {
+  const m = physicalMode();
+  physBtn.classList.toggle('on', m !== 'off');
+  physBtn.textContent = m === 'off' ? '🎲' : m === 'jugadores' ? '✋ Jugadores' : '✋ Todo';
+  physBtn.dataset.tip = PHYS_TIP[m];
+  physBtn.setAttribute('aria-label', `Dados físicos: ${PHYSICAL.find(([k]) => k === m)[1]}`);
+};
+drawPhys();
+window.addEventListener('dnd:physical', drawPhys);
+
 const rollInput = h('input', { placeholder: 'Tirar… 2d6+3', 'aria-label': 'Tirada libre, por ejemplo 2d6+3' });
 rollInput.addEventListener('keydown', async (e) => {
   if (e.key === 'Enter' && rollInput.value.trim()) {
@@ -103,7 +120,7 @@ window.addEventListener('dnd:saving', () => setSaveState('saving', 'Guardando…
 window.addEventListener('dnd:saved', (e) => setSaveState('', `Guardado · ${fmtTime(e.detail.at / 1000)}`));
 window.addEventListener('dnd:save-error', () => setSaveState('error', 'No se pudo guardar'));
 
-topbar.append(h('div', { class: 'page-title' }, campaignBtn, titleEl), dicebar, rollbar, mini, saveStatus);
+topbar.append(h('div', { class: 'page-title' }, campaignBtn, titleEl), dicebar, physBtn, rollbar, mini, saveStatus);
 
 // -- Navegación --------------------------------------------------------------------------
 async function route() {

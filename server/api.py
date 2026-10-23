@@ -3,7 +3,7 @@ import re
 import time
 import uuid
 
-from . import config, dice, dungeon, generators, rules, scenes
+from . import config, dice, dungeon, gaueko, generators, rules, scenes
 from .monsters import MONSTERS
 
 SAFE_UPLOAD = re.compile(r"^[a-f0-9]{32}\.[a-z0-9]{2,5}$")
@@ -54,7 +54,7 @@ def delete_item(app, p, body):
 def roll(app, p, body):
     body = _require_dict(body)
     try:
-        result = dice.roll(str(body.get("expr", "")), str(body.get("mode", "")))
+        result = dice.roll(str(body.get("expr", "")), str(body.get("mode", "")), given=body.get("dice"))
     except dice.DiceError as e:
         raise ApiError(400, str(e))
     result.update(id=uuid.uuid4().hex[:8], time=time.time(),
@@ -102,6 +102,21 @@ def make_dungeon(app, p, body):
     except (TypeError, ValueError):
         raise ApiError(400, "La semilla debe ser un número")
     return 200, dungeon.generate(seed, body.get("size", "mediana"), body.get("kind", "mazmorra"))
+
+
+def night(app, p, body):
+    """Tirada de la noche: modificadores y, si llega el total del d20, lo que pasa."""
+    body = _require_dict(body)
+    ctx = body.get("ctx") if isinstance(body.get("ctx"), dict) else {}
+    mods = gaueko.modifiers(ctx)
+    out = {"mods": mods, "bonus": sum(v for _, v in mods)}
+    total = body.get("total")
+    if total is not None:
+        if not isinstance(total, int) or isinstance(total, bool):
+            raise ApiError(400, "El total de la tirada tiene que ser un número")
+        levels = body.get("levels") if isinstance(body.get("levels"), list) else []
+        out["result"] = gaueko.resolve(total, ctx, [l for l in levels if isinstance(l, int) and 1 <= l <= 20])
+    return 200, out
 
 
 def encounter(app, p, body):
@@ -155,6 +170,7 @@ ROUTES = [
     ("DELETE", r"/api/rolls", clear_rolls),
     ("POST", r"/api/generate/(?P<kind>\w+)", generate),
     ("POST", r"/api/encounter", encounter),
+    ("POST", r"/api/night", night),
     ("GET", r"/api/scene-catalog", scene_catalog),
     ("POST", r"/api/dungeon", make_dungeon),
     ("GET", r"/api/settings", get_settings),

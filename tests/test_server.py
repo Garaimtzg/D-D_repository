@@ -49,6 +49,21 @@ class DiceTests(unittest.TestCase):
             with self.assertRaises(dice.DiceError, msg=bad):
                 dice.roll(bad)
 
+    def test_physical_dice(self):
+        r = dice.roll("1d20+5", mode="adv", given=[[4, 20]])
+        self.assertEqual((r["total"], r["natural"], r["crit"], r["physical"]), (25, 20, "critico", True))
+        r = dice.roll("8d6+1d4+2", given=[{"sum": 29}, [3]])
+        self.assertEqual(r["total"], 34)
+        self.assertEqual((sum(r["parts"][0]["rolls"]), r["parts"][0]["sum"]), (29, True))
+        self.assertEqual(dice.roll("4d6kh3", given=[[1, 6, 5, 3]])["total"], 14)
+        for bad in ([[21]], [[0]], [[3, 4]], [], [[3], [4]], [{"sum": 21}], [True], "3"):
+            with self.assertRaises(dice.DiceError, msg=bad):
+                dice.roll("1d20", given=bad)
+        with self.assertRaises(dice.DiceError):
+            dice.roll("4d6kh3", given=[{"sum": 14}])  # «quedarse con» necesita cada dado
+        with self.assertRaises(dice.DiceError):
+            dice.roll("8d6", given=[{"sum": 49}])
+
 
 class RulesTests(unittest.TestCase):
     def test_modifiers_and_proficiency(self):
@@ -235,6 +250,46 @@ class EuskalTests(unittest.TestCase):
                 self.assertIn(spell, names, s["id"])
             for name, uses, reset, lvl in s.get("resources", []):
                 self.assertIn(reset, ("corto", "largo"))
+
+
+class GauekoTests(unittest.TestCase):
+    def test_tables_use_real_creatures(self):
+        from server import gaueko
+        from server.euskal import CREATURES
+        names = {c["name"] for c in CREATURES}
+        entries = [e for lists in (gaueko.ENCOUNTERS, gaueko.DANGERS) for es in lists.values() for e in es]
+        entries += [gaueko.GAUEKO, gaueko.GAUEKO_DOOR, gaueko.OLENTZERO, gaueko.SANJUAN_LAMIAS, gaueko.AATXE]
+        for e in entries:
+            for name, mode in e["creatures"]:
+                self.assertIn(name, names, e["title"])
+                self.assertIn(mode, ("uno", "grupo"))
+        places = set(gaueko.TERRAINS) | {"casa"}
+        for table in (gaueko.ENCOUNTERS, gaueko.DANGERS, gaueko.OMENS):
+            self.assertTrue(places <= set(table), table)
+
+    def test_night_bands_and_special_nights(self):
+        from server import gaueko
+        rng = random.Random(7)
+        ctx = {"terrain": "bosque", "situation": "acampada"}
+        self.assertEqual([gaueko.resolve(t, ctx, [3] * 4, rng)["band"] for t in (1, 9, 10, 14, 18, 21)],
+                         ["calma", "calma", "presagio", "encuentro", "peligro", "gaueko"])
+        self.assertEqual(gaueko.resolve(2, {**ctx, "challenged": True}, [3] * 4, rng)["title"], "Gaueko")
+        self.assertEqual(gaueko.resolve(25, {**ctx, "situation": "casa"}, [3] * 4, rng)["title"], "Gaueko llama a la puerta")
+        self.assertTrue(gaueko.resolve(15, {**ctx, "festival": "olentzero"}, [3] * 4, rng)["friendly"])
+        self.assertEqual(gaueko.resolve(11, {"terrain": "rio", "festival": "sanjuan"}, [3] * 4, rng)["title"], "Lamias de San Juan")
+        mods = dict(gaueko.modifiers({"terrain": "caserio", "situation": "viaje", "moon": "llena", "eguzkilore": True, "festival": "sanjuan"}))
+        self.assertEqual(sum(mods.values()), 2 + 2 - 4 - 4)
+
+    def test_encounters_fit_the_party(self):
+        from server import gaueko
+        for levels in ([1] * 4, [5] * 4, [10] * 5):
+            budget = rules.encounter(levels, [])["budget"]["moderado"]
+            for place, entries in gaueko.ENCOUNTERS.items():
+                for e in entries:
+                    got = gaueko._scale(e, levels, "moderado")
+                    crs = [c["cr"] for c in got for _ in range(c["count"])]
+                    if any(c["count"] > 1 for c in got):  # si se ha añadido alguno, cabe en el presupuesto
+                        self.assertLessEqual(rules.encounter(levels, crs)["xp"], budget, (place, e["title"], levels))
 
 
 class GeneratorTests(unittest.TestCase):
@@ -427,6 +482,17 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 201)
         for col, doc in (("wiki", e), ("sessions", s), ("relations", r), ("bastions", b)):
             self.assertEqual(self.json_call("DELETE", f"/api/{col}/{doc['id']}")[0], 200)
+
+    def test_night_route(self):
+        status, r = self.json_call("POST", "/api/night", {"ctx": {"terrain": "monte", "situation": "viaje", "moon": "nueva"}})
+        self.assertEqual((status, r["bonus"], "result" in r), (200, 3, False))
+        status, r = self.json_call("POST", "/api/night", {"ctx": {"terrain": "monte"}, "total": 19, "levels": [6, 6, 6]})
+        self.assertEqual((status, r["result"]["band"]), (200, "peligro"))
+        self.assertTrue(r["result"]["creatures"])
+        self.assertEqual(self.json_call("POST", "/api/night", {"ctx": {}, "total": "x"})[0], 400)
+        status, r = self.json_call("POST", "/api/roll", {"expr": "2d20kh1+1", "dice": [[7, 13]]})
+        self.assertEqual((status, r["total"], r["physical"]), (200, 14, True))
+        self.assertEqual(self.json_call("POST", "/api/roll", {"expr": "1d6", "dice": [[9]]})[0], 400)
 
     def test_roll_and_log(self):
         status, r = self.json_call("POST", "/api/roll", {"expr": "1d20+1", "who": "DM"})

@@ -64,6 +64,8 @@ def encounter(party_levels, monster_crs) -> dict:
 
 
 def reference() -> dict:
+    from . import gaueko  # gaueko usa encounter() de este módulo
     out = phb2024.data()
     out["cr_xp"] = CR_XP
+    out["night"] = gaueko.info()
     return out

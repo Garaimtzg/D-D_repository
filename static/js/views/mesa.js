@@ -13,6 +13,7 @@ import { ambience } from '../core/ambience.js';
 import { sfx } from '../core/sfx.js';
 import { roll, onRoll, describe } from '../core/dice.js';
 import { createBattleMap } from '../core/battlemap.js';
+import { nightDialog, announceNight } from './night.js';
 import { groupCheck, partyScreen } from '../core/party.js';
 import { calendarOf, worldDate, moonOf } from '../core/calendar.js';
 import { loadScenes, findScene, ensureBoard, boardTokens, autoPlace, placeNear } from '../core/board.js';
@@ -781,11 +782,13 @@ async function mount(root) {
     const hh = Math.floor(cl.minutes / 60);
     const night = hh < 6 || hh >= 20;
     const advance = async (mins) => {
+      const before = cl.minutes;
       const total = cl.minutes + mins;
       cl.day += Math.floor(total / 1440);
       cl.minutes = ((total % 1440) + 1440) % 1440;
       state.settings = await api.saveSettings({ clock: cl }).catch((e) => { toastError(e); return state.settings; });
       renderClock();
+      announceNight(before, cl.minutes);
     };
     const cal = calendarOf(state.settings);
     clear(clockEl, icon(night ? 'moon' : 'sun', 18),
@@ -793,7 +796,8 @@ async function mount(root) {
         `${worldDate(cal, cl.day, { short: true })} ${night ? moonOf(cal, cl.day).emoji : ''} · ${String(hh).padStart(2, '0')}:${String(cl.minutes % 60).padStart(2, '0')}`),
       h('span', { class: 'dm-only clock-adv' },
         h('button', { class: 'btn xs ghost', type: 'button', onclick: () => advance(10) }, '+10′'),
-        h('button', { class: 'btn xs ghost', type: 'button', onclick: () => advance(60) }, '+1h')));
+        h('button', { class: 'btn xs ghost', type: 'button', onclick: () => advance(60) }, '+1h'),
+        night && h('button', { class: 'btn xs ghost', type: 'button', 'data-tip': 'La noche es de Gaueko: ¿qué pasa esta noche?', 'aria-label': 'Tirar la noche', onclick: nightDialog }, '🌑')));
     board.classList.toggle('night', night);
   }
 

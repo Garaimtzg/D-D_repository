@@ -1,18 +1,20 @@
 // Minijuegos para los descansos y las tabernas, todos en el mismo ordenador: el cerdo (dados),
-// carrera de bichos con apuestas, ganzúa, pulso y acertijos. Los jugadores salen con su muñeco.
+// carrera de bichos con apuestas, ganzúa, pulso, herri kirolak y acertijos. Los jugadores salen con su muñeco.
 import { api } from '../core/api.js';
 import { h, clear, avatar, selectEl, bigBanner, toast } from '../core/dom.js';
 import { mod } from '../core/dnd.js';
 import { roll } from '../core/dice.js';
 import { sfx } from '../core/sfx.js';
+import { kirolak } from './games-kirolak.js';
 
-export default { id: 'juegos', title: 'Minijuegos', icon: 'juegos', hint: 'El cerdo, carreras, ganzúa, pulso y acertijos', mount };
+export default { id: 'juegos', title: 'Minijuegos', icon: 'juegos', hint: 'El cerdo, carreras, ganzúa, pulso, herri kirolak y acertijos', mount };
 
 const GAMES = [
   ['cerdo', '🐷', 'El cerdo', 'Dados por turnos: acumula y plántate antes de sacar un 1.', pig],
   ['carrera', '🐸', 'Carrera de bichos', 'Cada uno apuesta por un corredor y a gritar.', race],
   ['ganzua', '🗝️', 'Ganzúa', 'Para la aguja en el punto justo para abrir la cerradura.', lockpick],
   ['pulso', '💪', 'Pulso', 'Dos rivales, dos teclas: gana quien pulse más rápido.', armWrestle],
+  ['kirolak', '🪓', 'Herri kirolak', 'Aizkolari, piedra y sokatira: deporte rural vasco por la txapela.', (stage, chars) => kirolak(stage, players(chars))],
   ['acertijos', '❓', 'Acertijos', 'Adivinanzas para plantear a la mesa.', riddles],
 ];
 
@@ -62,7 +64,7 @@ function pig(stage, chars) {
     st.busy = true;
     draw();
     const p = cur();
-    const r = await roll('1d6', { label: `${p.name}: el cerdo`, who: p.name, color: p.color });
+    const r = await roll('1d6', { label: `${p.name}: el cerdo`, who: p.name, color: p.color, virtual: true });
     st.busy = false;
     if (!r) return draw();
     st.last = r.total;

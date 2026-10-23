@@ -344,3 +344,23 @@ details.box[open] { padding-bottom: 14px; }
 @keyframes bbIn { from { transform: scale(.6); opacity: 0; } }
 @keyframes bbIcon { from { transform: rotate(-30deg) scale(.4); } }
 @keyframes bbFade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Avatares vivos: estados sobre la cara o el retrato */
+.avatar.st-poison { filter: sepia(.3) hue-rotate(55deg) saturate(1.7); }
+.avatar.st-frozen { filter: saturate(.35) hue-rotate(165deg) brightness(1.12); box-shadow: 0 0 0 2px #bfe6ff, 0 0 12px rgba(160, 220, 255, .8); }
+.avatar.st-stone { filter: grayscale(1) sepia(.25) contrast(1.15); }
+.avatar.st-invisible { opacity: .35; }
+.avatar.st-prone { transform: rotate(-75deg); }
+.avatar.st-ko { filter: grayscale(.85) brightness(.75); }
+.avatar.reacting { animation: avBounce .45s var(--ease); }
+@keyframes avBounce { 40% { transform: scale(1.14) rotate(-4deg); } 70% { transform: scale(.96) rotate(2deg); } }
+
+/* Dados físicos */
+.physical-dice .pd-what { margin: 0; }
+.pd-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: 10px; background: rgba(0, 0, 0, .2); border: 1px solid var(--line); }
+.pd-lbl { flex: 1 1 140px; font-size: .9rem; }
+.pd-fields { display: flex; gap: 6px; flex-wrap: wrap; }
+.pd-in { width: 64px; font-size: 1.35rem; font-weight: 700; text-align: center; padding: 6px 4px; }
+.pd-in.sum { width: 96px; }
+.pd-in.bad { border-color: #e0524a; box-shadow: 0 0 0 2px rgba(224, 82, 74, .35); }
+.phys-toggle.on { border-color: var(--gold); color: var(--gold-2); background: rgba(226, 180, 86, .14); }

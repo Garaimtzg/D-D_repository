@@ -249,7 +249,8 @@ export const BODY_COLORS = ['#7b5a34', '#2f4f8f', '#8e2b2b', '#2f6b3f', '#5b3f8a
 export const HAIRS = [['', 'Calvo'], ['corto', 'Corto'], ['flequillo', 'Flequillo'], ['melena', 'Melena'], ['largo', 'Largo'], ['coleta', 'Coleta'],
   ['trenzas', 'Trenzas'], ['rizos', 'Rizos'], ['afro', 'Afro'], ['cresta', 'Cresta'], ['mono', 'Moño']];
 export const EXPRESSIONS = [['normal', 'Normal'], ['feliz', 'Feliz'], ['picaro', 'Pícaro'], ['guino', 'Guiño'], ['serio', 'Serio'], ['triste', 'Triste'],
-  ['enfadado', 'Enfadado'], ['sorpresa', 'Sorpresa'], ['lengua', 'Burlón'], ['dormido', 'Dormido'], ['loco', 'Loco']];
+  ['enfadado', 'Enfadado'], ['sorpresa', 'Sorpresa'], ['lengua', 'Burlón'], ['dormido', 'Dormido'], ['loco', 'Loco'],
+  ['enamorado', 'Enamorado'], ['mareado', 'Mareado'], ['miedo', 'Asustado'], ['dolor', 'Dolorido']];
 const HC = (fallback) => `style="fill:var(--hc,${fallback})"`; // color elegible del sombrero
 const SHADE = 'fill="rgba(0,0,0,.28)"';
 const HAT_SVG = {
@@ -328,6 +329,8 @@ export const LOOK_NAMES = {
 const EYE = 'stroke="#3a2414" stroke-width="3.6" stroke-linecap="round" fill="none"';
 const dot = (x, y, r = 3.6) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#3a2414"/>`;
 const eye = (x, y, r = 3.6) => `<circle cx="${x}" cy="${y}" r="${r}" style="fill:var(--eye,#3a2414)"/>`; // ojo con el color elegido
+const heart = (x, y) => `<path d="M${x},${y + 5} C${x - 8},${y} ${x - 5},${y - 7} ${x},${y - 3} C${x + 5},${y - 7} ${x + 8},${y} ${x},${y + 5}Z" fill="#e3262e"/>`;
+const spiral = (x, y) => `<path d="M${x},${y} m-1,0 a1.5,1.5 0 1,1 2.5,1 a3.2,3.2 0 1,1 -5,-3 a5,5 0 1,1 7.5,6" stroke="#3a2414" stroke-width="1.8" fill="none" stroke-linecap="round"/>`;
 const EXPR_SVG = {
   normal: `${eye(40, 53)}${eye(60, 53)}<path d="M41,65 Q50,72 59,65" ${EYE}/>`,
   feliz: `<path d="M35,55 Q40,48 45,55 M55,55 Q60,48 65,55" ${EYE}/><path d="M39,63 Q50,78 61,63Z" fill="#7a2a20"/>`,
@@ -340,7 +343,38 @@ const EXPR_SVG = {
   lengua: `${eye(40, 53)}${eye(60, 53)}<path d="M41,64 Q50,70 59,64" ${EYE}/><path d="M45,66 Q50,78 55,66Z" fill="#ff7a8a"/>`,
   dormido: `<path d="M35,53 Q40,57 45,53 M55,53 Q60,57 65,53" ${EYE}/>${dot(50, 67, 2.6)}<text x="70" y="32" font-size="15" font-weight="700" fill="#fff">z</text>`,
   loco: `<circle cx="40" cy="52" r="5.5" fill="#fff" stroke="#3a2414" stroke-width="2"/>${eye(41, 53, 2.2)}${eye(60, 53, 3)}<path d="M40,64 Q50,71 60,64" ${EYE}/><ellipse cx="54" cy="70" rx="4" ry="5" fill="#ff7a8a"/>`,
+  // también las usan los avatares vivos según los estados y las heridas
+  enamorado: `${heart(40, 53)}${heart(60, 53)}<path d="M41,64 Q50,73 59,64" ${EYE}/>`,
+  mareado: `${spiral(40, 53)}${spiral(60, 53)}<path d="M40,68 Q43,65 46,68 Q49,71 52,68 Q55,65 58,68" ${EYE}/>`,
+  miedo: `<circle cx="40" cy="53" r="5.5" fill="#fff" stroke="#3a2414" stroke-width="1.8"/><circle cx="60" cy="53" r="5.5" fill="#fff" stroke="#3a2414" stroke-width="1.8"/>${eye(40, 54, 2)}${eye(60, 54, 2)}`
+    + `<path d="M33,44 L45,41 M67,44 L55,41 M41,69 Q44,66 47,69 Q50,72 53,69 Q56,66 59,69" ${EYE}/><path d="M76,38 Q81,47 76,50 Q71,47 76,38Z" fill="#7fc8ff" stroke="rgba(0,0,0,.2)" stroke-width=".8"/>`,
+  dolor: `<path d="M35,49 L44,53 L35,57 M65,49 L56,53 L65,57" ${EYE}/><path d="M40,65 L60,65 L60,71 L40,71Z" fill="#fff" stroke="#3a2414" stroke-width="2.4" stroke-linejoin="round"/><path d="M45,65 L45,71 M50,65 L50,71 M55,65 L55,71" stroke="#3a2414" stroke-width="1.3"/>`,
+  ko: `<path d="M35,48 L45,58 M45,48 L35,58 M55,48 L65,58 M65,48 L55,58" ${EYE}/><path d="M40,69 Q45,65 50,69 Q55,73 60,69" ${EYE}/>`,
 };
+// Avatares vivos: heridas y estados dibujados sobre la cara («under» va bajo los ojos y la boca).
+const LIVE_MARKS = {
+  moraton: ['<ellipse cx="60" cy="54" rx="9" ry="7.5" fill="#6b3f8a" opacity=".45"/>', 'under'],
+  ojeras: ['<path d="M35,59 Q40,62 45,59 M55,59 Q60,62 65,59" stroke="#6b5a8a" stroke-width="2.2" fill="none" opacity=".65"/>', 'under'],
+  tirita: ['<g transform="rotate(-25 34 64)"><rect x="26" y="61" width="17" height="6.5" rx="3.2" fill="#f2c9a0" stroke="rgba(0,0,0,.28)" stroke-width=".8"/><rect x="32" y="61" width="5" height="6.5" fill="#e3ad84"/></g>', 'over'],
+  venda: ['<path d="M18,47 Q50,43 82,47 L82,58 Q50,54 18,58Z" fill="#3a3a4a"/><path d="M80,51 L91,60 M80,54 L88,67" stroke="#3a3a4a" stroke-width="3" stroke-linecap="round"/>', 'over'],
+};
+// Expresión según el estado, de más a menos importante.
+const LIVE_EXPR = [['Inconsciente', 'dormido'], ['Paralizado', 'sorpresa'], ['Aturdido', 'mareado'], ['Asustado', 'miedo'], ['Hechizado', 'enamorado'], ['Envenenado', 'mareado']];
+const LIVE_CLASS = { Envenenado: 'st-poison', Paralizado: 'st-frozen', Petrificado: 'st-stone', Invisible: 'st-invisible', Derribado: 'st-prone' };
+export function liveState(ch) {
+  const conds = new Set((ch.conds || ch.conditions || []).map((k) => (typeof k === 'string' ? k : k?.name)));
+  const max = Number(ch.maxHp) || 0;
+  const r = max ? Number(ch.hp ?? max) / max : 1;
+  const marks = [];
+  if (r <= 0.5 && r > 0) marks.push('tirita');
+  if (r <= 0.25 && r > 0) marks.push('moraton');
+  if ((ch.exhaustion || 0) > 0) marks.push('ojeras');
+  if (conds.has('Cegado')) marks.push('venda');
+  const expr = r <= 0 ? 'ko' : LIVE_EXPR.find(([c]) => conds.has(c))?.[1] || (r <= 0.25 ? 'dolor' : '');
+  const cls = [...conds].map((c) => LIVE_CLASS[c]).filter(Boolean);
+  if (r <= 0) cls.push('st-ko');
+  return { expr, marks, cls };
+}
 const HAIR_BACK = {
   largo: (c) => `<path d="M17,52 Q15,20 50,18 Q85,20 83,52 L86,86 Q76,92 70,80 L30,80 Q24,92 14,86Z" fill="${c}"/>`,
   melena: (c) => `<path d="M16,52 Q14,18 50,17 Q86,18 84,52 L84,74 Q80,80 74,76 L26,76 Q20,80 16,74Z" fill="${c}"/>`,
@@ -372,14 +406,16 @@ function svgEl(cls, inner, color) {
   return s;
 }
 // Cara completa por capas: pelo de atrás, ropa, orejas, cabeza, marcas, pelo, ojos y boca, orejas de encima, cuernos.
-function faceSvg(look) {
+function faceSvg(look, live = null) {
   const hc = look.hairColor || HAIR_COLORS[0];
   const skin = look.skin || SKINS[1];
   const ears = EARS[look.ears] || {};
+  const marks = (where) => (live?.marks || []).filter((m) => LIVE_MARKS[m][1] === where).map((m) => LIVE_MARKS[m][0]).join('');
   const s = svgEl('face-svg', (HAIR_BACK[look.hair]?.(hc) || '')
     + (BODY[look.body]?.(look.bodyColor || BODY_COLORS[0]) || '') + (ears.back?.(skin) || '')
     + `<circle cx="50" cy="55" r="31" fill="${skin}"/><ellipse cx="33" cy="63" rx="5" ry="3" fill="#ff6b6b" opacity=".3"/><ellipse cx="67" cy="63" rx="5" ry="3" fill="#ff6b6b" opacity=".3"/>`
-    + (MARKS[look.marks] || '') + (HAIR_TOP[look.hair]?.(hc) || '') + (EXPR_SVG[look.expr] || EXPR_SVG.normal)
+    + (MARKS[look.marks] || '') + marks('under') + (HAIR_TOP[look.hair]?.(hc) || '')
+    + `<g class="expr">${EXPR_SVG[live?.expr || look.expr] || EXPR_SVG.normal}</g>` + marks('over')
     + (ears.front?.(skin) || '') + (HORNS[look.horns] || ''));
   if (look.eyes) s.style.setProperty('--eye', look.eyes);
   return s;
@@ -408,12 +444,14 @@ export function randomLook(extras = true) {
   };
 }
 
-export function avatar(ch, cls = '') {
+// live: la cara refleja PG, estados y cansancio (en el editor de aspecto se desactiva).
+export function avatar(ch, cls = '', { live = true } = {}) {
   const look = ch.look || {};
   const face = look.base === 'cara' && !ch.portrait;
-  const el = h('span', { class: `avatar ${cls} ${face ? 'is-face' : ''}`, style: { '--c': ch.color || '#666' } });
+  const st = live ? liveState(ch) : null;
+  const el = h('span', { class: `avatar ${cls} ${face ? 'is-face' : ''} ${st?.cls.join(' ') || ''}`, style: { '--c': ch.color || '#666' }, dataset: { who: ch.name || '' } });
   if (ch.portrait) el.style.backgroundImage = `url("${ch.portrait}")`;
-  else if (face) { el.append(faceSvg(look)); if (look.bg) el.style.backgroundColor = look.bg; }
+  else if (face) { el.append(faceSvg(look, st)); if (look.bg) el.style.backgroundColor = look.bg; }
   else el.textContent = initials(ch.name);
   for (const slot of ['beard', 'face', 'outfit', 'item', 'hat']) { const p = lookPiece(slot, look[slot], look); if (p) el.append(p); }
   return el;
@@ -422,7 +460,7 @@ export function avatar(ch, cls = '') {
 const hpColor = (r) => (r > 0.5 ? '#5fd394' : r > 0.25 ? '#f0b648' : '#ef5a4c');
 
 // Token redondo con anillo de PG, como una miniatura sobre la mesa.
-export function token(ch, { size = 52, hp = ch.hp, max = ch.maxHp, showHp = true } = {}) {
+export function token(ch, { size = 52, hp = ch.hp, max = ch.maxHp, showHp = true, live = true } = {}) {
   const ratio = Math.max(0, Math.min(1, (hp ?? 0) / Math.max(1, max ?? 1)));
   const stroke = Math.max(3, size * 0.08);
   const rad = size / 2 - stroke / 2;
@@ -433,7 +471,7 @@ export function token(ch, { size = 52, hp = ch.hp, max = ch.maxHp, showHp = true
   ring.setAttribute('height', size);
   ring.innerHTML = `<circle cx="${size / 2}" cy="${size / 2}" r="${rad}" stroke="rgba(0,0,0,.55)" stroke-width="${stroke}"/>`
     + (showHp ? `<circle cx="${size / 2}" cy="${size / 2}" r="${rad}" stroke="${hpColor(ratio)}" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - ratio)}"/>` : '');
-  const av = avatar(ch);
+  const av = avatar(ch, '', { live });
   const inner = size - stroke * 2 - 4;
   Object.assign(av.style, { width: `${inner}px`, height: `${inner}px`, fontSize: `${Math.max(10, inner * 0.36)}px` });
   av.style.setProperty('--s', `${inner}px`);
@@ -461,7 +499,22 @@ export function floatNum(target, text, kind = 'dmg') {
     target.classList.remove(cls);
     void target.offsetWidth; // reinicia la animación
     target.classList.add(cls);
+    target.querySelectorAll('.avatar.is-face').forEach((av) => flashFace(av, kind === 'dmg' ? 'dolor' : 'feliz'));
   }
+}
+
+// Gesto pasajero de un avatar (un crítico, un golpe, una curación) y vuelta a su cara de siempre.
+function flashFace(av, expr, ms = 2200) {
+  const g = av.querySelector('.face-svg .expr');
+  if (!g || !EXPR_SVG[expr]) return;
+  g.dataset.base ??= g.innerHTML;
+  g.innerHTML = EXPR_SVG[expr];
+  av.classList.remove('reacting'); void av.offsetWidth; av.classList.add('reacting');
+  clearTimeout(g.timer);
+  g.timer = setTimeout(() => { g.innerHTML = g.dataset.base; delete g.dataset.base; av.classList.remove('reacting'); }, ms);
+}
+export function react(name, expr, ms) {
+  document.querySelectorAll('.avatar.is-face').forEach((av) => { if (av.dataset.who === name) flashFace(av, expr, ms); });
 }
 
 export function fmtDate(ts) {
