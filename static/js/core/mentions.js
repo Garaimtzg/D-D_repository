@@ -3,6 +3,10 @@
 import { h, clear } from './dom.js';
 
 export const MENTION = /@\[([^\]\n]+)\]/g;
+
+// El mapa de un lugar del compendio: el elegido en su entrada o, si no, un mapa que se llame igual.
+export const placeMap = (entry, maps) => entry && (maps.find((m) => m.id === entry.map)
+  || maps.find((m) => m.name.localeCompare(entry.name, 'es', { sensitivity: 'base' }) === 0)) || null;
 const KIND_ICON = { wiki: '📖', char: '👤', map: '🗺️', quest: '📌' };
 
 // Todo lo que se puede enlazar y adónde lleva.

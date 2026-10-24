@@ -4,6 +4,7 @@
 import { sfx } from '../core/sfx.js';
 import { api, debounced } from '../core/api.js';
 import { h, clear, icon, bind, modal, confirmDialog, toast, toastError, pickFiles, dropZone, fmtDate, selectEl, segmented, field } from '../core/dom.js';
+import { placeMap } from '../core/mentions.js';
 
 const PIN_ICONS = ['📍', '🏰', '🏠', '🏛️', '⛪', '🍺', '⚔️', '💀', '🐉', '💎', '🗝️', '🌲', '⛰️', '🏕️', '⚓', '🌊', '🕳️', '❓', '⭐', '🔥'];
 const WIKI_ICON = { lugar: '🏰', faccion: '⚜️', objeto: '💎', deidad: '✨', historia: '📜', otro: '📌' };
@@ -87,7 +88,7 @@ async function mount(root, [openId]) {
   // pone una chincheta y se pueden arrastrar. Una chincheta que lleva a otro mapa se abre aquí mismo.
   function linkInfo(link) {
     const [kind, id] = String(link || '').split(':');
-    if (kind === 'wiki') { const e = state.wiki.find((x) => x.id === id); return e && { icon: WIKI_ICON[e.type] || '📖', name: e.name, text: e.summary, image: e.image, href: `#/mundo/compendio/${e.id}` }; }
+    if (kind === 'wiki') { const e = state.wiki.find((x) => x.id === id); return e && { icon: WIKI_ICON[e.type] || '📖', name: e.name, text: e.summary, image: e.image, href: `#/mundo/compendio/${e.id}`, map: placeMap(e, state.maps) }; }
     if (kind === 'char') { const c = state.chars.find((x) => x.id === id); return c && { icon: '👤', name: c.name, text: [c.race, c.cls, c.location].filter(Boolean).join(' · '), href: `#/personajes/${c.id}` }; }
     if (kind === 'map') { const m = state.maps.find((x) => x.id === id); return m && { icon: '🗺️', name: m.name, text: 'Abre este mapa', map: m }; }
     return null;
@@ -107,7 +108,14 @@ async function mount(root, [openId]) {
         m.pins.map((p) => {
           const info = linkInfo(p.link);
           const el = h('button', { class: `pin ${p.id === ui.sel ? 'on' : ''}`, type: 'button', style: { left: `${p.x * 100}%`, top: `${p.y * 100}%` },
-            'data-tip': p.label || info?.name || 'Chincheta', onclick: (e) => { e.stopPropagation(); if (!el.moved) { ui.sel = p.id; sfx.click(); draw(); } } },
+            'data-tip': p.label || info?.name || 'Chincheta', onclick: (e) => {
+              e.stopPropagation();
+              if (el.moved) return;
+              // en «Ver», una chincheta que lleva a otro mapa entra en él; en «Colocar» solo se elige para editarla
+              const into = ui.mode === 'ver' && info?.map && info.map !== m ? info.map : null;
+              if (into) { trail.push(into); ui.sel = null; sfx.unroll(); } else { ui.sel = p.id; sfx.click(); }
+              draw();
+            } },
           h('span', { class: 'pin-ic' }, p.icon || '📍'), (p.label || info?.name) && h('span', { class: 'pin-label' }, p.label || info.name));
           if (ui.mode === 'colocar') el.addEventListener('pointerdown', (e) => dragPin(e, el, p, m));
           return el;
@@ -135,7 +143,7 @@ async function mount(root, [openId]) {
       if (!p) {
         return h('aside', { class: 'pin-side' }, h('p', { class: 'small muted' }, ui.mode === 'colocar'
           ? 'Haz clic en el mapa para poner una chincheta. Arrástralas para moverlas.'
-          : `${m.pins.length ? 'Pulsa una chincheta para ver qué hay allí.' : 'Este mapa no tiene chinchetas. Pasa a «Colocar» para añadirlas.'}`),
+          : `${m.pins.length ? 'Pulsa una chincheta para ver qué hay allí; si lleva a otro mapa, entras en él.' : 'Este mapa no tiene chinchetas. Pasa a «Colocar» para añadirlas.'}`),
         m.pins.length > 0 && h('ul', { class: 'pin-index' }, m.pins.map((x) => h('li', {}, h('button', { class: 'btn xs ghost', type: 'button', onclick: () => { ui.sel = x.id; draw(); } },
           x.icon || '📍', ' ', x.label || linkInfo(x.link)?.name || 'Chincheta')))));
       }
@@ -149,9 +157,9 @@ async function mount(root, [openId]) {
         info?.image && h('img', { class: 'pin-thumb', src: info.image, alt: '' }),
         h('h3', {}, p.icon || '📍', ' ', p.label || info?.name || 'Chincheta'),
         info?.text && h('p', { class: 'small' }, info.text),
-        info && h('button', { class: 'btn sm primary', type: 'button', onclick: () => {
-          if (info.map) { trail.push(info.map); ui.sel = null; sfx.unroll(); draw(); } else leave(info.href);
-        } }, icon('arrowRight', 14), info.map ? 'Entrar en el mapa' : 'Abrir'),
+        info?.map && info.map !== m && h('button', { class: 'btn sm primary', type: 'button', onclick: () => { trail.push(info.map); ui.sel = null; sfx.unroll(); draw(); } },
+          icon('arrowRight', 14), 'Entrar en el mapa'),
+        info?.href && h('button', { class: 'btn sm', type: 'button', onclick: () => leave(info.href) }, icon('arrowRight', 14), 'Abrir'),
         ui.mode === 'colocar' && [
           field('Nombre', bind(p, 'label', { placeholder: info?.name || 'Aldea, cueva, torre…', onChange: () => { changed(); } })),
           field('Enlace', selectEl(links, p.link || '', (v) => { p.link = v; changed(); draw(); })),

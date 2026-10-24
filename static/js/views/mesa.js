@@ -14,6 +14,7 @@ import { sfx } from '../core/sfx.js';
 import { roll, onRoll, describe } from '../core/dice.js';
 import { createBattleMap } from '../core/battlemap.js';
 import { nightDialog, announceNight } from './night.js';
+import { placeMap } from '../core/mentions.js';
 import { groupCheck, partyScreen } from '../core/party.js';
 import { calendarOf, worldDate, moonOf } from '../core/calendar.js';
 import { loadScenes, findScene, ensureBoard, boardTokens, autoPlace, placeNear } from '../core/board.js';
@@ -272,8 +273,17 @@ async function mount(root) {
         'data-tip': [label, target?.summary].filter(Boolean).join(' — ') || null,
         onclick: (e) => {
           e.stopPropagation();
-          if (state.player || !target) return;
-          if (kind === 'map') setMap(target); else location.hash = kind === 'wiki' ? `#/mundo/compendio/${id}` : `#/personajes/${id}`;
+          if (!target) return;
+          // la Mesa no se abandona: un mapa (o el mapa del lugar del compendio) se pone en el tablero, también en el
+          // modo jugadores; lo demás se resume aquí, y en el modo jugadores no se abre nada
+          const goTo = kind === 'map' ? target : kind === 'wiki' ? placeMap(target, state.maps) : null;
+          if (goTo && goTo !== m) return setMap(goTo);
+          if (state.player) return;
+          const href = kind === 'wiki' ? `#/mundo/compendio/${id}` : `#/personajes/${id}`;
+          toast(h('span', {}, h('b', {}, target.name), target.summary ? ` — ${target.summary}` : '',
+            kind === 'wiki' && h('span', { class: 'tiny muted', style: { display: 'block' } }, 'No tiene mapa propio: elígelo en su entrada del compendio (campo «Mapa») o enlaza la chincheta a un mapa.'),
+            h('button', { class: 'btn xs', type: 'button', onclick: () => { location.hash = href; } }, kind === 'wiki' ? 'Abrir en el Mundo' : 'Abrir la ficha')),
+          { iconName: 'pin', ms: 7000 });
         } }, h('span', {}, p.icon || '📍'), label && h('small', {}, label));
     }));
   }

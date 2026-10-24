@@ -151,6 +151,8 @@ async function mount(root, [tab, id]) {
         h('div', { class: 'row' },
           field('Tipo', selectEl(WIKI_TYPES.map(([k, l, em]) => [k, `${em} ${l}`]), e.type, (v) => { e.type = v; changed(); drawEntry(page, drawList); })),
           field('Dentro de', selectEl([['', '—'], ...parents.sort((a, b) => a.name.localeCompare(b.name)).map((x) => [x.id, `${TYPE_ICON[x.type]} ${x.name}`])], e.parent || '', (v) => { e.parent = v; changed(); })),
+          field('Mapa', selectEl([['', '—'], ...state.maps.map((m) => [m.id, `🗺️ ${m.name}`])], e.map || '', (v) => { e.map = v; changed(); },
+            { 'data-tip': 'El mapa de este lugar: las chinchetas que lleven a esta entrada lo ponen en la Mesa' })),
           h('div', { class: 'row', style: { marginLeft: 'auto' } },
             h('button', { class: 'btn sm', type: 'button', 'data-tip': 'Enseña el nombre, el resumen y la imagen en la mesa', onclick: () => showOnTable(e) }, icon('mesa', 14), 'Mostrar en la mesa'),
             h('button', { class: 'btn sm danger', type: 'button', 'aria-label': 'Eliminar', onclick: async () => {
