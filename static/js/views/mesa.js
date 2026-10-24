@@ -273,19 +273,49 @@ async function mount(root) {
         'data-tip': [label, target?.summary].filter(Boolean).join(' — ') || null,
         onclick: (e) => {
           e.stopPropagation();
-          if (!target) return;
           // la Mesa no se abandona: un mapa (o el mapa del lugar del compendio) se pone en el tablero, también en el
-          // modo jugadores; lo demás se resume aquí, y en el modo jugadores no se abre nada
+          // modo jugadores. Si no lleva a otro mapa, el máster elige a cuál y queda guardado.
           const goTo = kind === 'map' ? target : kind === 'wiki' ? placeMap(target, state.maps) : null;
           if (goTo && goTo !== m) return setMap(goTo);
           if (state.player) return;
-          const href = kind === 'wiki' ? `#/mundo/compendio/${id}` : `#/personajes/${id}`;
-          toast(h('span', {}, h('b', {}, target.name), target.summary ? ` — ${target.summary}` : '',
-            kind === 'wiki' && h('span', { class: 'tiny muted', style: { display: 'block' } }, 'No tiene mapa propio: elígelo en su entrada del compendio (campo «Mapa») o enlaza la chincheta a un mapa.'),
-            h('button', { class: 'btn xs', type: 'button', onclick: () => { location.hash = href; } }, kind === 'wiki' ? 'Abrir en el Mundo' : 'Abrir la ficha')),
-          { iconName: 'pin', ms: 7000 });
+          if (kind === 'char' && target) {
+            return toast(h('span', {}, h('b', {}, target.name), ' ', h('button', { class: 'btn xs', type: 'button', onclick: () => { location.hash = `#/personajes/${id}`; } }, 'Abrir la ficha')), { iconName: 'pin' });
+          }
+          choosePinMap(p, kind === 'wiki' ? target : null, !!goTo);
         } }, h('span', {}, p.icon || '📍'), label && h('small', {}, label));
     }));
+  }
+
+  // Chincheta que no lleva a otro mapa: se elige (o se sube) el mapa al que lleva y se guarda en la chincheta
+  // o, si enlaza un lugar del compendio, en el campo «Mapa» de ese lugar.
+  async function choosePinMap(p, entry, here) {
+    const m = state.map;
+    const others = state.maps.filter((x) => x !== m);
+    const name = p.label || entry?.name || 'Esta chincheta';
+    let chosen = null;
+    const body = h('div', { class: 'stack-sm' },
+      h('p', { style: { margin: 0 } }, here ? `«${name}» lleva al mismo mapa que ya está en la mesa (${m.name}).` : `«${name}» aún no lleva a ningún mapa.`,
+        ' Elige a qué mapa tiene que llevar: se guarda y la próxima vez entra directamente.'),
+      others.length
+        ? h('div', { class: 'pin-dest' }, others.map((x) => h('button', { class: 'pin-dest-opt', type: 'button', onclick: () => { chosen = x; close(); } },
+          h('img', { src: x.url, alt: '' }), h('b', {}, x.name))))
+        : h('p', { class: 'small muted', style: { margin: 0 } }, 'Solo tienes este mapa. Sube la imagen del submapa y quedará enlazado aquí.'),
+      entry && h('p', { class: 'tiny muted', style: { margin: 0 } }, `Se guarda en el campo «Mapa» de «${entry.name}» en el compendio.`));
+    const done = modal(`📍 ¿A dónde lleva «${name}»?`, body, [
+      { label: 'Cancelar', value: null },
+      entry && { label: 'Abrir en el Mundo', value: 'wiki' },
+      { label: 'Subir el submapa', value: 'upload', icon: 'upload', class: others.length ? '' : 'primary' },
+    ].filter(Boolean), { iconName: 'pin', wide: others.length > 3 });
+    const close = () => body.closest('.modal-back')?.querySelector('.panel-head [aria-label="Cerrar"]')?.click();
+    const choice = await done;
+    if (choice === 'wiki') { location.hash = `#/mundo/compendio/${entry.id}`; return; }
+    const dest = choice === 'upload' ? await uploadMap() : chosen;
+    if (!dest) return;
+    try {
+      if (entry) { entry.map = dest.id; await api.update('wiki', entry); } else { p.link = `map:${dest.id}`; await api.update('maps', m); }
+      if (state.map !== dest) await setMap(dest);
+      toast(`«${name}» ya lleva a «${dest.name}».`, { kind: 'good', iconName: 'pin' });
+    } catch (err) { toastError(err); }
   }
 
   function setPlayerMode(on) {
@@ -320,6 +350,7 @@ async function mount(root) {
       state.maps.push(m);
       await setMap(m);
       toast(`«${m.name}» está sobre la mesa.`, { kind: 'good', iconName: 'mapas' });
+      return m;
     } catch (e) { toastError(e); }
   }
 

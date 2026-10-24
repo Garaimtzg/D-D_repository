@@ -222,3 +222,7 @@ body.player-mode .mesa-side { top: 14px; max-height: calc(100vh - 28px); }
 .draw-tools { gap: 4px; align-items: center; }
 .pen-sw { all: unset; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0, 0, 0, .45); box-shadow: 0 0 0 1px rgba(255, 255, 255, .25); }
 .pen-sw.on { box-shadow: 0 0 0 2px var(--gold-2); }
+.pin-dest { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.pin-dest-opt { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 10px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); text-align: center; transition: border-color .15s, transform .15s var(--ease); }
+.pin-dest-opt:hover, .pin-dest-opt:focus-visible { border-color: var(--gold); transform: translateY(-2px); }
+.pin-dest-opt img { width: 100%; height: 90px; object-fit: cover; border-radius: 6px; }
