@@ -236,7 +236,7 @@ async function mount(root, [selId]) {
     const spSel = selectEl([['', '— Especie —'], ...ref.species.map((s) => [s.id, s.name])], sp?.id || '', (v) => setSpecies(c, v), { 'aria-label': 'Especie' });
     const linSel = sp?.options && selectEl([['', `— ${sp.options_label} —`], ...sp.options.map(([n]) => [n, n])], c.lineage, (v) => {
       c.lineage = v;
-      if (sp.id === 'elfo') c.speed = v === 'Elfo de los bosques' ? 10.5 : 9;
+      if (sp.lineage_speed) c.speed = sp.lineage_speed[v] ?? sp.speed;
       syncSpecies(c);
       save(c); refresh();
     }, { 'aria-label': sp.options_label });
@@ -813,7 +813,7 @@ async function mount(root, [selId]) {
     const cls = classOf(c);
     const byName = new Map(ref.spells.map((s) => [s.name, s]));
     const mine = c.spellList.map((n) => byName.get(n)).filter(Boolean).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-    const pool = ref.spells.filter((s) => !c.spellList.includes(s.name) && (!cls?.caster || s.classes.includes(cls.name)));
+    const pool = ref.spells.filter((s) => !c.spellList.includes(s.name) && (!cls?.caster || s.classes.includes(cls.spell_list || cls.name)));
     const dc = c.spellAbility ? 8 + profBonus(c) + mod(c.abilities[c.spellAbility]) : null;
     const tier = 1 + [5, 11, 17].filter((l) => (c.level || 1) >= l).length;
     const dice = (s) => {

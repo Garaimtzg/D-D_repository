@@ -96,10 +96,11 @@ class Phb2024Tests(unittest.TestCase):
 
     def test_classes(self):
         classes = self.d["classes"]
-        self.assertEqual(len(classes), 12)
+        self.assertEqual(len(classes), 13)  # las 12 del manual y el artificiero del MCT
         for c in classes:
             self.assertIn(c["hit_die"], (6, 8, 10, 12), c["name"])
-            self.assertEqual(len(c["subclasses"]), 4, c["name"])
+            official = [x for x in c["subclasses"] if c["subclass_source"][x] == "Manual del Jugador 2024"]
+            self.assertEqual(len(official if c["id"] != "artificiero" else c["subclasses"]), 4, c["name"])
             self.assertTrue(c["features"][1], c["name"])
             self.assertEqual(len(c["saves"]), 2)
             self.assertTrue(set(c["skills"]["from"]) <= self.skills, c["name"])
@@ -111,7 +112,7 @@ class Phb2024Tests(unittest.TestCase):
 
     def test_origins(self):
         feats = {f["name"] for f in self.d["feats"]}
-        self.assertEqual(len([s for s in self.d["species"] if s["page"]]), 10)  # y las de Euskal Herria
+        self.assertEqual(len([s for s in self.d["species"] if s.get("page")]), 10)  # y las del MCT y de Euskal Herria
         self.assertEqual(len(self.d["backgrounds"]), 16)
         for b in self.d["backgrounds"]:
             self.assertIn(b["feat"].split(" (")[0], feats, b["name"])
@@ -250,6 +251,59 @@ class EuskalTests(unittest.TestCase):
                 self.assertIn(spell, names, s["id"])
             for name, uses, reset, lvl in s.get("resources", []):
                 self.assertIn(reset, ("corto", "largo"))
+
+
+class MctTests(unittest.TestCase):
+    """Material del «Manual para casi todo» adaptado a 2024 y contenido propio."""
+
+    def test_species_fill_gaps_without_overriding_2024(self):
+        from server import mct, phb2024
+        official = {s["name"].split(" (")[0].lower() for s in phb2024.SPECIES}
+        skills = set(phb2024.ALL_SKILLS)
+        ids = [s["id"] for s in mct.SPECIES]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertTrue({"firbolg", "hada", "genasi", "tabaxi"} <= set(ids))
+        for s in mct.SPECIES:
+            self.assertNotIn(s["name"].split(" (")[0].lower(), official, "2024 prevalece")
+            self.assertEqual(s["speed"] * 2 % 3, 0, s["name"])  # metros: múltiplos de 1,5
+            self.assertIn(s["darkvision"], (0, 18, 36), s["name"])
+            for k in s.get("skills", []) + (s["skill_choice"] if isinstance(s.get("skill_choice"), list) else []):
+                self.assertIn(k, skills, s["name"])
+            for name, uses, reset, lvl in s.get("resources", []) + [r for rs in s.get("lineage_resources", {}).values() for r in rs]:
+                self.assertTrue(uses == "pb" or isinstance(uses, int), s["name"])
+                self.assertIn(reset, ("corto", "largo"))
+            self.assertTrue(set(s.get("lineage_speed", {})) <= {n for n, _ in s.get("options", [])}, s["name"])
+
+    def test_subclasses_and_artificer(self):
+        from server import mct_classes, phb2024
+        d = phb2024.data()
+        for cid, subs in mct_classes.SUBCLASSES.items():
+            for name in subs:
+                self.assertIn(name, mct_classes.SOURCE, name)
+        art = next(c for c in d["classes"] if c["id"] == "artificiero")
+        self.assertEqual((art["caster"], art["spell_ability"], art["hit_die"]), ("half", "int", 8))
+        self.assertGreater(sum("Artificiero" in s["classes"] for s in d["spells"]), 60)
+        cleric = next(c for c in d["classes"] if c["id"] == "clerigo")
+        self.assertIn("Dominio de la tempestad", cleric["subclasses"])
+        self.assertNotIn(8, {l for feats in cleric["subclass_features"].values() for l, _, _ in feats})  # 2024: Golpes benditos
+
+    def test_homebrew_is_normalised(self):
+        from server import homebrew, rules
+        ref = homebrew.merge(rules.reference(), [
+            {"id": "s1", "kind": "species", "name": "Ent", "size": "Gigante", "speed": "rápido", "creature": "Planta",
+             "traits": [{"name": "Corteza", "text": "Dura"}, {"text": "sin nombre"}], "skill_count": 1, "skill_choice": ["naturaleza", "nada"],
+             "spells": [{"level": 3, "name": "Piel robliza", "uses": 1}, {"level": 1, "name": "Inventado"}],
+             "resources": [{"name": "Raíces", "uses": "pb", "reset": "siempre"}]},
+            {"id": "c1", "kind": "class", "name": "Tamborilero", "hit_die": 7, "caster": "half", "spell_ability": "car", "cantrips": 2,
+             "features": [{"level": 1, "name": "Ritmo", "text": "x"}], "subclasses": [{"name": "Bombo", "features": [{"level": 3, "name": "Golpe", "text": "y"}]}]},
+            {"kind": "class"}, "basura"])
+        sp, cl = ref["species"][-1], ref["classes"][-1]
+        self.assertEqual((sp["id"], sp["size"], sp["speed"], sp["traits"][0][0]), ("hb-s1", "Mediano", 9, "Tipo de criatura"))
+        self.assertEqual((sp["spells"], sp["skill_choice"], sp["resources"][0][2]), ([[3, "Piel robliza", 1]], ["naturaleza"], "largo"))
+        self.assertEqual((cl["id"], cl["hit_die"], cl["caster"]), ("hb-c1", 8, "half"))
+        self.assertIn("Subclase de tamborilero", cl["features"][3])
+        self.assertEqual(cl["features"][19], ["Don épico"])
+        self.assertEqual(cl["cantrips"][3], 3)
 
 
 class GauekoTests(unittest.TestCase):
@@ -482,6 +536,13 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 201)
         for col, doc in (("wiki", e), ("sessions", s), ("relations", r), ("bastions", b)):
             self.assertEqual(self.json_call("DELETE", f"/api/{col}/{doc['id']}")[0], 200)
+
+    def test_homebrew_reaches_the_reference(self):
+        status, doc = self.json_call("POST", "/api/homebrew", {"kind": "species", "name": "Gente polilla", "speed": 9, "traits": [{"name": "Alas", "text": "Planeas"}]})
+        self.assertEqual(status, 201)
+        _, ref = self.json_call("GET", "/api/reference")
+        self.assertIn(f"hb-{doc['id']}", [s["id"] for s in ref["species"]])
+        self.assertEqual(self.json_call("DELETE", f"/api/homebrew/{doc['id']}")[0], 200)
 
     def test_night_route(self):
         status, r = self.json_call("POST", "/api/night", {"ctx": {"terrain": "monte", "situation": "viaje", "moon": "nueva"}})

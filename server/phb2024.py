@@ -7,7 +7,7 @@ Las distancias van en metros y las monedas usan las abreviaturas de 2024 (pp = p
 import json
 from pathlib import Path
 
-from . import euskal
+from . import euskal, mct, mct_classes
 from .features2024 import CHOICES, COMMON, EXPERTISE, FEATURES, STYLE_LEVEL, SUBCLASS_PICK, SUBCLASSES, UNARMORED
 
 # Datos de los conjuros (sin su texto) sacados del PDF con tools/extract_spells.py
@@ -310,6 +310,19 @@ CLASSES = [
     },
 ]
 
+# Del «Manual para casi todo» (MCT): el artificiero y las subclases que no tiene 2024 (server/mct_classes.py)
+CLASSES.append(mct_classes.ARTIFICER)
+FEATURES["artificiero"] = mct_classes.ARTIFICER_FEATURES
+SUBCLASS_SOURCE = {}
+for _cid, _subs in mct_classes.SUBCLASSES.items():
+    SUBCLASSES.setdefault(_cid, {}).update({name: [list(f) for f in feats] for name, feats in _subs.items()})
+    _cls = next(c for c in CLASSES if c["id"] == _cid)
+    _cls["subclasses"] = list(dict.fromkeys(_cls["subclasses"] + list(_subs)))
+    SUBCLASS_SOURCE.update({name: mct_classes.SOURCE[name] for name in _subs})
+for _spell in SPELLS:
+    if _spell["name"] in mct_classes.ARTIFICER_SPELLS:
+        _spell["classes"] = [*_spell["classes"], "Artificiero"]
+
 HP_FIXED = {12: 7, 10: 6, 8: 5, 6: 4}  # PG por nivel en vez de tirar (MdJ p. 42)
 
 # ------------------------------------------------------------------ especies
@@ -338,7 +351,7 @@ SPECIES = [
      "options": [["Alto elfo", "Truco prestidigitación (cambiable); detectar magia a nivel 3 y paso brumoso a nivel 5."],
                  ["Drow", "Visión en la oscuridad de 36 m; truco luces danzantes; fuego feérico a nivel 3 y oscuridad a nivel 5."],
                  ["Elfo de los bosques", "Velocidad 10,5 m; truco saber druídico; zancada prodigiosa a nivel 3 y pasar sin rastro a nivel 5."]],
-     "skill_choice": ["percepcion", "perspicacia", "supervivencia"],
+     "skill_choice": ["percepcion", "perspicacia", "supervivencia"], "lineage_speed": {"Elfo de los bosques": 10.5},
      "traits": [["Linaje feérico", "Ventaja en las salvaciones para evitar o terminar el estado de hechizado."],
                 ["Sentidos agudos", "Competencia en Percepción, Perspicacia o Supervivencia."],
                 ["Trance", "No duermes; terminas un descanso largo en 4 horas de meditación."],
@@ -441,6 +454,7 @@ CLASS_KITS = {
     "paladin": [([(1, "Cota de malla"), (1, "Escudo"), (1, "Espada larga"), (6, "Jabalina"), (1, "Símbolo sagrado"), (1, "Paquete de sacerdote")], 9)],
     "picaro": [([(1, "Armadura de cuero"), (2, "Daga"), (1, "Espada corta"), (1, "Arco corto"), (20, "Flechas"), (1, "Aljaba"),
                  (1, "Herramientas de ladrón"), (1, "Paquete de ladrón")], 8)],
+    "artificiero": mct_classes.ARTIFICER_KIT,
 }
 BACKGROUND_KITS = {
     "acolito": ([(1, "Suministros de calígrafo"), (1, "Libro (de oraciones)"), (1, "Símbolo sagrado"), (10, "Hojas de pergamino"), (1, "Túnica")], 8),
@@ -725,7 +739,8 @@ def _class_data(c):
     text = {**COMMON, **FEATURES[c["id"]], f"Subclase de {c['name'].lower()}": SUBCLASS_PICK}
     return {**c, "feature_text": {f: t for f, t in text.items() if f in feats}, "subclass_features": SUBCLASSES[c["id"]],
             "choice": CHOICES.get(c["id"]), "style_level": STYLE_LEVEL.get(c["id"]), "expertise": EXPERTISE.get(c["id"], []),
-            "kits": [_kit(k) for k in CLASS_KITS[c["id"]]], "subclass_unarmored": {s: UNARMORED[s] for s in c["subclasses"] if s in UNARMORED}}
+            "kits": [_kit(k) for k in CLASS_KITS[c["id"]]], "subclass_unarmored": {s: UNARMORED[s] for s in c["subclasses"] if s in UNARMORED},
+            "subclass_source": {s: SUBCLASS_SOURCE.get(s, "Manual del Jugador 2024") for s in c["subclasses"]}}
 
 
 def data() -> dict:
@@ -735,7 +750,7 @@ def data() -> dict:
         "abilities": ABILITIES,
         "skills": [{"key": k, "name": n, "ability": a} for k, n, a in SKILLS],
         "classes": [_class_data(c) for c in CLASSES],
-        "species": SPECIES + euskal.SPECIES,
+        "species": SPECIES + mct.SPECIES + euskal.SPECIES,
         "backgrounds": [{**b, "kit": _kit(BACKGROUND_KITS[b["id"]]), "kit_gold": 50} for b in BACKGROUNDS],
         "feats": FEATS,
         "weapons": WEAPONS,

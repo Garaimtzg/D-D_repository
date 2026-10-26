@@ -1,9 +1,12 @@
 // Asistente para crear un aventurero siguiendo los cinco pasos del Manual del Jugador 2024
 // (MdJ p. 33-41): clase, origen (trasfondo, especie e idiomas), características, detalles y resumen.
-// Las especies de Euskal Herria (material propio) aparecen junto a las del manual.
+// Junto a las del manual aparecen las especies y subclases del «Manual para casi todo» (adaptadas a 2024), las de
+// Euskal Herria (material propio) y las especies y clases que crea cada mesa (editor en homebrew.js).
 import { h, clear, icon, toast } from '../core/dom.js';
+import { editHomebrew } from './homebrew.js';
+import { api } from '../core/api.js';
 import {
-  reference, newCharacter, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, mod, fmtMod, fmtM, maxHpFor, computeAC,
+  reference, reloadReference, newCharacter, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, mod, fmtMod, fmtM, maxHpFor, computeAC,
   slotsFor, classResources, featuresUpTo, profBonus, columnAt, source, speciesResources, speciesSpells, derivedAttacks,
   pendingChoices, weaponAttack, featAbilities, initBonus,
 } from '../core/dnd.js';
@@ -13,20 +16,34 @@ import { sfx } from '../core/sfx.js';
 const STEPS = ['Clase', 'Origen', 'Características', 'Detalles', 'Resumen'];
 const CLASS_ICON = {
   barbaro: '🪓', bardo: '🎻', brujo: '👁️', clerigo: '✨', druida: '🌿', explorador: '🏹',
-  guerrero: '⚔️', hechicero: '🔥', mago: '📖', monje: '👊', paladin: '🛡️', picaro: '🗡️',
+  guerrero: '⚔️', hechicero: '🔥', mago: '📖', monje: '👊', paladin: '🛡️', picaro: '🗡️', artificiero: '🔧',
 };
 export const SPECIES_ICON = {
   aasimar: '😇', draconido: '🐉', elfo: '🧝', enano: '⛏️', gnomo: '⚙️', goliat: '🏔️', humano: '🧑', mediano: '🍀', orco: '💪', tiefling: '😈',
   jentil: '🪨', lamina: '🦆', basajaun: '🌲', iratxo: '🧚',
+  aarakocra: '🦅', osgo: '🐻', centauro: '🐎', cambiaformas: '🐺', cambiante: '🎭', duergar: '⚒️', eladrin: '🍂', elfo_mar: '🐚',
+  firbolg: '🌳', genasi: '🌪️', githyanki: '⚔️', githzerai: '🧘', gnomo_profundidades: '💎', goblin: '👺', hada: '🧚‍♀️', harengon: '🐇',
+  hobgoblin: '🎖️', kenku: '🐦‍⬛', kobold: '🦎', hombre_lagarto: '🐊', minotauro: '🐂', satiro: '🐐', shadar_kai: '🌑', tabaxi: '🐆',
+  tortuga: '🐢', triton: '🔱', yuan_ti: '🐍', buhonido: '🦉', grung: '🐸', locathah: '🐟', verdan: '🧠', semielfo: '🧝‍♂️', semiorco: '🗿',
+  leonido: '🦁', loxodon: '🐘', hibrido_simic: '🧬', vedalken: '🔷', dhampiro: '🧛', sangre_maldita: '🧙‍♀️', renacido: '💀',
 };
+// Grupos de especies en el creador, en este orden, con una nota para los que no son del manual
+const SPECIES_GROUPS = [
+  ['Manual del Jugador (2024)', ''],
+  ['Monstruos del Multiverso', 'Del «Manual para casi todo»: la versión de Monstruos del Multiverso adaptada a 2024 (el trasfondo da los aumentos de característica).'],
+  ['Otros libros', 'Del «Manual para casi todo»: especies de otros libros y de la edición de 2014 adaptadas a 2024.'],
+  ['De Euskal Herria', 'Especies propias de esta app, equilibradas como las del manual.'],
+  ['Personalizadas', 'Creadas en esta mesa: pulsa «Nueva especie» para crear la tuya.'],
+];
+const groupOf = (s) => s.group || (s.page ? 'Manual del Jugador (2024)' : 'De Euskal Herria');
 const COLORS = ['#5b9cff', '#4cc38a', '#e2b456', '#a77bff', '#e0524a', '#ff8a3d', '#2bb3b3', '#e0527f', '#c9d1d9', '#8b5e3c'];
 // Alternativas al estilo de combate que dan el paladín y el explorador
 const STYLE_EXTRA = { paladin: ['Guerrero bendito', 'Dos trucos de clérigo (por ejemplo guía y llama sagrada).'], explorador: ['Guerrero druídico', 'Dos trucos de druida (por ejemplo guía y voluta estelar).'] };
 
 export async function openCreator({ onCreate }) {
-  const R = await reference();
+  let R = await reference();
   const st = {
-    step: 0, classId: '', classSkills: [], classChoice: '', backgroundId: '', speciesId: '', lineage: '', size: '', speciesSkill: '', humanFeat: '',
+    step: 0, classId: '', classSkills: [], classChoice: '', backgroundId: '', speciesId: '', lineage: '', size: '', speciesSkills: [], humanFeat: '',
     languages: ['Común'], method: 'estandar', assign: blank(''), points: blank(8), rolled: [], rolledAssign: blank(''),
     bgMode: '2-1', plus2: '', plus1: '', name: '', player: '', alignment: 'Neutral bueno', level: 1, subclass: '', style: '', asi: {},
     kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)],
@@ -80,7 +97,7 @@ export async function openCreator({ onCreate }) {
       if (!bg()) return 'Elige un trasfondo.';
       if (!sp()) return 'Elige una especie.';
       if (sp().options && !st.lineage) return `Elige ${sp().options_label.toLowerCase()}.`;
-      if (sp().skill_choice && !st.speciesSkill) return 'Elige la habilidad que te da tu especie.';
+      if (st.speciesSkills.length < speciesSkillCount(sp())) return `Elige ${speciesSkillCount(sp())} habilidades de tu especie.`;
       if (sp().origin_feat_choice && !st.humanFeat) return 'Elige la dote de origen de «Versátil».';
       if (st.languages.length !== 3) return 'Elige dos idiomas además del común.';
       if (st.classSkills.length !== c.skills.choose) return 'Te falta una habilidad de clase (tu trasfondo ya te daba alguna).';
@@ -98,6 +115,18 @@ export async function openCreator({ onCreate }) {
     }
     return '';
   }
+
+  // ------------------------------------------------- especies y clases propias
+  async function homebrew(kind, existing = null) {
+    const saved = await editHomebrew(kind, R, existing);
+    if (!saved) return;
+    R = await reloadReference();
+    const id = saved === 'deleted' ? '' : `hb-${saved.id}`;
+    if (kind === 'species') Object.assign(st, { speciesId: id, lineage: '', speciesSkills: [], size: R.species.find((s) => s.id === id)?.size.split(' o ')[0] || '' });
+    else Object.assign(st, { classId: id, classSkills: [], subclass: '', classChoice: '', style: '', asi: {}, kit: 0 });
+    render();
+  }
+  const homebrewDoc = async (kind, x) => (await api.list('homebrew')).find((d) => d.id === x.homebrew_id && d.kind === kind);
 
   // ---------------------------------------------------------- características
   function blank(v) { return Object.fromEntries(ABILITY_KEYS.map((k) => [k, v])); }
@@ -163,12 +192,16 @@ export async function openCreator({ onCreate }) {
       h('div', { class: 'cr-grid' }, R.classes.map((k) => h('button', {
         class: `cr-card ${k.id === st.classId ? 'sel' : ''}`, type: 'button',
         onclick: (e) => { if (st.classId !== k.id) { Object.assign(st, { classId: k.id, classSkills: [], subclass: '', classChoice: '', style: '', asi: {}, kit: 0 }); sfx.click(); } choose(e); },
-      }, h('span', { class: 'cr-emoji' }, CLASS_ICON[k.id]), h('b', {}, k.name),
+      }, h('span', { class: 'cr-emoji' }, CLASS_ICON[k.id] || '🧩'), h('b', {}, k.name),
       h('span', { class: 'small' }, k.summary),
       h('span', { class: 'cr-tags' }, h('span', { class: 'chip' }, `d${k.hit_die}`), h('span', { class: 'chip' }, k.primary.map((a) => ABILITY_SHORT[a]).join(' y ')),
-        h('span', { class: `chip cx-${k.complexity.toLowerCase()}` }, k.complexity))))),
+        h('span', { class: `chip cx-${k.complexity.toLowerCase()}` }, k.complexity)))),
+      h('button', { class: 'cr-card cr-new', type: 'button', onclick: () => homebrew('class') }, h('span', { class: 'cr-emoji' }, '➕'), h('b', {}, 'Nueva clase'),
+        h('span', { class: 'small' }, 'Crea una clase propia con sus rasgos, magia y subclases.'))),
       c && h('section', { class: 'panel cr-detail' },
-        h('div', { class: 'panel-head' }, h('h3', {}, CLASS_ICON[c.id], ' ', c.name), h('span', { class: 'chip' }, source(c))),
+        h('div', { class: 'panel-head' }, h('h3', {}, CLASS_ICON[c.id] || '🧩', ' ', c.name),
+          h('div', { class: 'actions' }, c.homebrew_id && h('button', { class: 'btn xs', type: 'button', onclick: async () => homebrew('class', await homebrewDoc('class', c)) }, icon('edit', 13), 'Editar'),
+            h('span', { class: 'chip' }, source(c)))),
         h('dl', { class: 'cr-dl' },
           h('dt', {}, 'Dado de golpe'), h('dd', {}, `d${c.hit_die} por nivel · ${c.hit_die} + CON en el nivel 1`),
           h('dt', {}, 'Salvaciones'), h('dd', {}, c.saves.map((k) => ABILITY_NAME[k]).join(' y ')),
@@ -207,11 +240,10 @@ export async function openCreator({ onCreate }) {
     const originFeats = R.feats.filter((f) => f.category === 'origen');
     const speciesCard = (k) => h('button', {
       class: `cr-card ${k.id === st.speciesId ? 'sel' : ''} ${k.page ? '' : 'homebrew'}`, type: 'button',
-      onclick: (e) => { if (st.speciesId !== k.id) { Object.assign(st, { speciesId: k.id, lineage: '', speciesSkill: '', humanFeat: '', size: k.size.split(' o ')[0] }); sfx.click(); } choose(e); },
+      onclick: (e) => { if (st.speciesId !== k.id) { Object.assign(st, { speciesId: k.id, lineage: '', speciesSkills: [], humanFeat: '', size: k.size.split(' o ')[0] }); sfx.click(); } choose(e); },
     }, h('span', { class: 'cr-emoji' }, SPECIES_ICON[k.id] || '🧬'), h('b', {}, k.name),
     h('span', { class: 'tiny muted' }, `${k.size} · ${fmtM(k.speed)}${k.darkvision ? ` · visión ${k.darkvision} m` : ''}`));
-    const official = R.species.filter((k) => k.page);
-    const basque = R.species.filter((k) => !k.page);
+    const nSkills = speciesSkillCount(s);
     return h('div', { class: 'stack' },
       h('p', { class: 'cr-intro' }, 'Tu origen es lo que eras antes de la aventura: un trasfondo, una especie y los idiomas que hablas.'),
       h('h3', { class: 'cr-h' }, '1 · Trasfondo'),
@@ -225,21 +257,31 @@ export async function openCreator({ onCreate }) {
         h('div', { class: 'eyebrow', style: { marginTop: 0 } }, `Tu trasfondo ya te da alguna habilidad de clase: elige ${c.skills.choose - st.classSkills.length} más`),
         skillPicker(c.skills.from, st.classSkills, c.skills.choose, b?.skills || [])),
       h('h3', { class: 'cr-h' }, '2 · Especie'),
-      h('div', { class: 'cr-grid small-cards' }, official.map(speciesCard)),
-      h('div', { class: 'eyebrow cr-basque' }, 'De Euskal Herria · especies propias de esta app, equilibradas como las del manual'),
-      h('div', { class: 'cr-grid small-cards' }, basque.map(speciesCard)),
+      SPECIES_GROUPS.map(([g, note], i) => {
+        const list = R.species.filter((k) => groupOf(k) === g);
+        if (!list.length && g !== 'Personalizadas') return null;
+        return [i > 0 && h('div', { class: 'eyebrow cr-basque' }, g, note && ` · ${note}`),
+          h('div', { class: 'cr-grid small-cards' }, list.map(speciesCard),
+            g === 'Personalizadas' && h('button', { class: 'cr-card cr-new', type: 'button', onclick: () => homebrew('species') }, h('span', { class: 'cr-emoji' }, '➕'), h('b', {}, 'Nueva especie'),
+              h('span', { class: 'tiny muted' }, 'Crea la tuya')))];
+      }),
       s && h('section', { class: 'panel cr-detail' },
-        h('div', { class: 'panel-head' }, h('h3', {}, SPECIES_ICON[s.id], ' ', s.name), h('span', { class: 'chip' }, source(s))),
+        h('div', { class: 'panel-head' }, h('h3', {}, SPECIES_ICON[s.id] || '🧬', ' ', s.name),
+          h('div', { class: 'actions' }, s.homebrew_id && h('button', { class: 'btn xs', type: 'button', onclick: async () => homebrew('species', await homebrewDoc('species', s)) }, icon('edit', 13), 'Editar'),
+            h('span', { class: 'chip' }, source(s)))),
+        s.summary && h('p', { class: 'small' }, s.summary),
         h('ul', { class: 'cr-traits' }, s.traits.map(([n, t]) => h('li', {}, h('b', {}, n), ' — ', t))),
+        s.skills?.length > 0 && h('p', { class: 'small' }, h('b', {}, 'Competencias: '), s.skills.map(skillName).join(', ')),
         s.size.includes(' o ') && [h('div', { class: 'eyebrow' }, 'Tamaño'),
           h('div', { class: 'cr-options' }, s.size.split(' o ').map((z) => option(st.size === z, () => { st.size = z; }, z)))],
         s.options && [h('div', { class: 'eyebrow' }, s.options_label),
           h('div', { class: 'cr-options' }, s.options.map(([n, t]) => option(st.lineage === n, () => { st.lineage = n; }, n, t)))],
-        s.skill_choice && [h('div', { class: 'eyebrow' }, s.id === 'elfo' ? 'Sentidos agudos' : 'Diestro: una habilidad'),
-          h('div', { class: 'cr-skills' }, (s.skill_choice === 'any' ? R.skills.map((k) => k.key) : s.skill_choice).map((k) => {
-            const taken = (b?.skills || []).includes(k) || st.classSkills.includes(k);
-            return h('button', { class: `chip pick ${st.speciesSkill === k ? 'on' : ''}`, type: 'button', disabled: taken,
-              onclick: () => { st.speciesSkill = k; refresh(); } }, skillName(k));
+        nSkills > 0 && [h('div', { class: 'eyebrow' }, s.id === 'elfo' ? 'Sentidos agudos' : s.id === 'humano' ? 'Diestro: una habilidad' : `Habilidades de tu especie: elige ${nSkills} (${st.speciesSkills.length}/${nSkills})`),
+          h('div', { class: 'cr-skills' }, (s.skill_choice && s.skill_choice !== 'any' ? s.skill_choice : R.skills.map((k) => k.key)).map((k) => {
+            const on = st.speciesSkills.includes(k);
+            const taken = (b?.skills || []).includes(k) || st.classSkills.includes(k) || (s.skills || []).includes(k);
+            return h('button', { class: `chip pick ${on ? 'on' : ''}`, type: 'button', disabled: taken && !on,
+              onclick: () => { st.speciesSkills = on ? st.speciesSkills.filter((x) => x !== k) : [...st.speciesSkills, k].slice(-nSkills); refresh(); } }, skillName(k));
           }))],
         s.origin_feat_choice && [h('div', { class: 'eyebrow' }, 'Versátil: una dote de origen'),
           h('div', { class: 'cr-options' }, originFeats.map((f) => option(st.humanFeat === f.name, () => { st.humanFeat = f.name; }, f.name, f.summary)))]),
@@ -366,9 +408,10 @@ export async function openCreator({ onCreate }) {
           h('p', { class: 'tiny muted' }, `Empiezas con ${R.level_xp[st.level - 1].toLocaleString('es-ES')} PX. Los PG de cada nivel usan el valor fijo del manual.`)),
         h('div', {}, h('div', { class: 'eyebrow' }, 'Color de la ficha y los dados'),
           h('div', { class: 'row' }, COLORS.map((col) => h('button', { class: `cr-color ${st.color === col ? 'sel' : ''}`, type: 'button', style: { background: col }, 'aria-label': `Color ${col}`, onclick: () => { st.color = col; refresh(); } }))))),
-      c && st.level >= 3 && [h('div', { class: 'eyebrow' }, `Subclase (nivel 3) · ${source(c)}`),
+      c && st.level >= subLevel(c) && c.subclasses.length > 0 && [h('div', { class: 'eyebrow' }, `Subclase (nivel ${subLevel(c)}) · ${source(c)}`),
         h('div', { class: 'cr-options' }, c.subclasses.map((s) => option(st.subclass === s, () => { st.subclass = s; }, s,
-          (c.subclass_features[s] || []).filter(([l]) => l === 3).map(([, n]) => n).join(' · '))))],
+          [c.subclass_source?.[s] && c.subclass_source[s] !== 'Manual del Jugador 2024' ? `[${c.subclass_source[s]}]` : '',
+            (c.subclass_features[s] || []).filter(([l]) => l === subLevel(c)).map(([, n]) => n).join(' · ')].filter(Boolean).join(' '))))],
       styles.length > 0 && [h('div', { class: 'eyebrow' }, `Estilo de combate (nivel ${c.style_level})`),
         h('div', { class: 'cr-options' }, styles.map(([n, t]) => option(st.style === n, () => { st.style = n; }, n, t)))],
       asiLevels().length > 0 && [h('div', { class: 'eyebrow' }, 'Mejoras de característica y dotes de tus niveles'),
@@ -390,12 +433,12 @@ export async function openCreator({ onCreate }) {
     const s = sp();
     const { scores, feats: levelFeats } = withImprovements(finalScores());
     const skills = {};
-    [...st.classSkills, ...(b?.skills || []), st.speciesSkill].filter(Boolean).forEach((k) => { skills[k] = 1; });
+    [...st.classSkills, ...(b?.skills || []), ...(s.skills || []), ...st.speciesSkills].filter(Boolean).forEach((k) => { skills[k] = 1; });
     const lineageText = st.lineage ? ` (${st.lineage.split(' (')[0]})` : '';
     const effects = c.choice?.options.find(([n]) => n === st.classChoice)?.[2] || {};
     const ch = newCharacter('jugador', {
       name: st.name.trim(), player: st.player.trim(), color: st.color, alignment: st.alignment,
-      classId: c.id, cls: c.name, subclass: st.level >= 3 ? st.subclass : '', classChoice: st.classChoice, level: st.level, xp: R.level_xp[st.level - 1],
+      classId: c.id, cls: c.name, subclass: st.level >= subLevel(c) ? st.subclass : '', classChoice: st.classChoice, level: st.level, xp: R.level_xp[st.level - 1],
       speciesId: s.id, race: s.name, lineage: st.lineage, size: st.size || s.size.split(' o ')[0],
       backgroundId: b.id, background: b.name,
       abilities: scores, saves: [...c.saves], skills,
@@ -403,7 +446,7 @@ export async function openCreator({ onCreate }) {
       weaponTraining: [...new Set([...c.weapon_training, ...(effects.weapons || [])])], armorTraining: [...new Set([...c.armor_training, ...(effects.armor || [])])],
       tools: [b.tool, c.tools, s.tool].filter(Boolean).join('; '),
       languages: st.languages.join(', '),
-      speed: st.lineage === 'Elfo de los bosques' ? 10.5 : s.speed,
+      speed: s.lineage_speed?.[st.lineage] ?? s.speed,
       hitDie: `d${c.hit_die}`, hitDiceLeft: st.level,
       spellAbility: c.spell_ability || '', autoSlots: !!c.caster, acMode: 'auto',
       notes: `Especie: ${s.name}${lineageText}. Trasfondo: ${b.name}. Alineamiento: ${st.alignment}.`,
@@ -480,3 +523,7 @@ export async function openCreator({ onCreate }) {
     onCreate(ch);
   }
 }
+
+// Cuántas habilidades elige el jugador por su especie (el humano y el elfo, una; otras, las que digan).
+const speciesSkillCount = (s) => (s ? s.skill_count || (s.skill_choice ? 1 : 0) : 0);
+const subLevel = (c) => c?.subclass_level || 3;

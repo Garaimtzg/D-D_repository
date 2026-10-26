@@ -10,7 +10,7 @@ const ACTION_ICON = {
   Atacar: '⚔️', Ayudar: '🤝', Buscar: '🔎', Correr: '🏃', Destrabarse: '🌀', Esconderse: '🫥', Esquivar: '🛡️',
   Estudiar: '📖', Influir: '🗣️', Magia: '✨', 'Preparar una acción': '⏳', Utilizar: '🧪',
 };
-const CLASS_ICON = { barbaro: '🪓', bardo: '🪕', brujo: '👁️', clerigo: '☀️', druida: '🌿', explorador: '🏹', guerrero: '⚔️', hechicero: '🔥', mago: '📜', monje: '👊', paladin: '🛡️', picaro: '🗡️' };
+const CLASS_ICON = { barbaro: '🪓', bardo: '🪕', brujo: '👁️', clerigo: '☀️', druida: '🌿', explorador: '🏹', guerrero: '⚔️', hechicero: '🔥', mago: '📜', monje: '👊', paladin: '🛡️', picaro: '🗡️', artificiero: '🔧' };
 const DC = [[5, 'Muy fácil'], [10, 'Fácil'], [15, 'Media'], [20, 'Difícil'], [25, 'Muy difícil'], [30, 'Casi imposible']];
 const CASTER = { full: 'Lanzador completo', half: 'Medio lanzador', pact: 'Magia del pacto' };
 const SECTIONS = [['todo', 'Todo'], ['estados', 'Estados'], ['combate', 'Combate'], ['personajes', 'Personajes'], ['conjuros', 'Conjuros'], ['objetos', 'Objetos mágicos'], ['equipo', 'Equipo'], ['tablas', 'Tablas']];
@@ -81,7 +81,7 @@ async function mount(root) {
     if (show('personajes') && classes.length) {
       blocks.push(panel('Clases', 'crown', 'wide', h('div', { class: 'class-grid' }, classes.map((c) => h('details', { class: 'class-card' },
         h('summary', {}, h('span', { class: 'class-ic' }, CLASS_ICON[c.id] || '⚜️'),
-          h('div', { class: 'grow' }, h('b', {}, c.name), h('div', { class: 'tiny muted' }, `d${c.hit_die} · ${c.primary.map((k) => ABILITY_SHORT[k]).join('/')} · ${c.complexity}`)), page(c.page)),
+          h('div', { class: 'grow' }, h('b', {}, c.name), h('div', { class: 'tiny muted' }, `d${c.hit_die} · ${c.primary.map((k) => ABILITY_SHORT[k]).join('/')} · ${c.complexity}`)), page(c.page || c.origin)),
         h('p', { class: 'small' }, c.summary),
         h('dl', { class: 'ref compact' },
           h('dt', {}, 'Salvaciones'), h('dd', {}, c.saves.map((k) => ABILITY_SHORT[k]).join(', ')),
@@ -92,7 +92,7 @@ async function mount(root) {
           h('dt', {}, 'Subclases'), h('dd', {}, c.subclasses.join(' · '))),
         h('ol', { class: 'feat-levels' }, Object.entries(c.features).map(([l, fs]) => h('li', {}, h('span', { class: 'lvl' }, l),
           fs.map((f, i) => [i ? ', ' : '', h('span', { class: c.feature_text?.[f] ? 'has-tip' : '', 'data-tip': c.feature_text?.[f] || null }, f)])))),
-        h('dl', { class: 'ref compact' }, c.subclasses.map((s) => [h('dt', {}, s),
+        h('dl', { class: 'ref compact' }, c.subclasses.map((s) => [h('dt', {}, s, c.subclass_source?.[s] && c.subclass_source[s] !== 'Manual del Jugador 2024' && h('span', { class: 'tiny muted' }, ` · ${c.subclass_source[s]}`)),
           h('dd', {}, (c.subclass_features?.[s] || []).map(([l, n, t], i) => [i ? ' · ' : '', h('span', { class: 'has-tip', 'data-tip': t }, `${n} (${l})`)]))])))))));
     }
     const species = ref.species.filter((s) => match(s.name, s.traits));

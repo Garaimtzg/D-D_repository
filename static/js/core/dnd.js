@@ -29,6 +29,8 @@ export const COINS = [['pc', 'Cobre', '#c27a45'], ['pp', 'Plata', '#c9d1d9'], ['
 let REF = null;
 let refPromise;
 export const reference = () => (refPromise ??= api.get('/api/reference').then((r) => { REF = r; return r; }));
+// Tras crear o editar una especie o clase propia hay que volver a pedir la referencia.
+export const reloadReference = () => { refPromise = null; return reference(); };
 export const ref = () => REF;
 let monstersPromise;
 export const monsters = () => (monstersPromise ??= api.get('/api/monsters'));
@@ -90,8 +92,9 @@ export function computeAC(ch) {
   } else {
     const sets = [[cls?.id, cls?.unarmored], [ch.subclass, cls?.subclass_unarmored?.[ch.subclass]]]
       .filter(([who, set]) => set && !(ch.shield && NO_SHIELD.includes(who)));
-    const natural = speciesOf(ch)?.natural_ac;
-    ac = Math.max(10 + dex, natural ? natural + dex : 0, ...sets.map(([, set]) => 10 + set.reduce((s, k) => s + mod(ch.abilities?.[k]), 0)));
+    const sp = speciesOf(ch); // armadura natural: base + DES (o CON, o fija como el caparazón de la tortuga)
+    const natural = sp?.natural_ac ? sp.natural_ac + (sp.natural_ac_flat ? 0 : mod(ch.abilities?.[sp.natural_ac_ability || 'des'])) : 0;
+    ac = Math.max(10 + dex, natural, ...sets.map(([, set]) => 10 + set.reduce((s, k) => s + mod(ch.abilities?.[k]), 0)));
   }
   if (ch.shield) ac += 2;
   if (armor && hasFeat(ch, 'Defensa')) ac += 1;
@@ -134,6 +137,7 @@ export function classResources(ch, cls = classOf(ch), level = ch.level || 1) {
     let max = r.column ? columnAt(cls, r.column, level) : r.uses;
     if (typeof max === 'string' && max.startsWith('mod:')) max = Math.max(1, mod(ch.abilities?.[max.slice(4)]));
     if (max === 'level*5') max = level * 5;
+    if (max === 'pb') max = profBonus({ ...ch, level });
     let reset = r.reset;
     if (r.reset_from) for (const [lv, rs] of Object.entries(r.reset_from)) if (level >= Number(lv)) reset = rs;
     return max ? { name: r.name, max: Number(max), used: 0, reset, auto: true } : null;
@@ -169,8 +173,8 @@ export function speciesResources(ch, level = ch.level || 1) {
   const sp = speciesOf(ch);
   if (!sp) return [];
   const pb = profBonus({ ...ch, level });
-  const free = speciesSpellEntries(ch).filter(([lvl, , uses]) => uses && level >= lvl).map(([lvl, name, uses]) => [`${name} (gratis)`, uses, 'largo', lvl]);
-  return [...(sp.resources || []), ...free].filter(([, , , min]) => level >= (min || 1))
+  const free = speciesSpellEntries(ch).filter(([lvl, , uses]) => uses && level >= lvl).map(([lvl, name, uses, reset]) => [`${name} (gratis)`, uses, reset || 'largo', lvl]);
+  return [...(sp.resources || []), ...(sp.lineage_resources?.[ch.lineage] || []), ...free].filter(([, , , min]) => level >= (min || 1))
     .map(([name, uses, reset]) => ({ name, max: uses === 'pb' ? pb : uses, used: 0, reset, auto: true, species: true }));
 }
 const speciesSpellEntries = (ch) => { const sp = speciesOf(ch); return [...(sp?.spells || []), ...(sp?.lineage_spells?.[ch.lineage] || [])]; };
@@ -204,7 +208,7 @@ export function pendingChoices(ch) {
   const level = ch.level || 1;
   const out = [];
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  if (cls && level >= 3 && !ch.subclass) out.push('Subclase');
+  if (cls && level >= (cls.subclass_level || 3) && !ch.subclass && cls.subclasses?.length) out.push('Subclase');
   if (cls?.choice && !ch.classChoice) out.push(cls.choice.name);
   if (cls?.style_level && level >= cls.style_level && !(ch.feats || []).some((f) => REF.feats.find((x) => x.name === f)?.category === 'estilo de combate' || /^Guerrero (bendito|druídico)/.test(f))) out.push('Estilo de combate (dote)');
   const masteries = masteryCount(cls, level) - (ch.masteries || []).length;
