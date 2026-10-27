@@ -1,4 +1,6 @@
 """Saca del texto del Manual del Jugador 2024 los datos de cada conjuro (no su descripción).
+Lo que se escribe a mano en el JSON (la descripción básica con palabras propias, los rituales y los conjuros que el
+PDF no deja leer) se conserva al volver a generarlo.
 
 Uso: python extract_spells.py spells_raw.txt salida.json primera_pagina_pdf
 (spells_raw.txt sale de: pdftotext -raw -enc UTF-8 -f 238 -l 345 manual.pdf spells_raw.txt)
@@ -14,7 +16,9 @@ HEAD = re.compile(rf"^(?:(?P<school>{SCHOOLS}) de nivel\s*(?P<lvl>\d)|Truco de (
 ABIL = "Fuerza|Destreza|Constitución|Inteligencia|Sabiduría|Carisma"
 FIXES = {"Escupo": "Escudo", "A los aventureros para la grandeza favor divino": "Favor divino",
          "A una corte vampírica localizar objeto": "Localizar objeto", "As alterar los recuerdos": "Alterar los recuerdos",
-         "Mole sombría arma espiritual": "Arma espiritual", "Una poción mágica calmar emociones": "Calmar emociones"}
+         "Mole sombría arma espiritual": "Arma espiritual", "Una poción mágica calmar emociones": "Calmar emociones",
+         "Ll apariencia": "Apariencia"}
+RANGE_FIX = {"Escudo de fe": "18 m", "Telepatía": "Ilimitado"}  # el alcance sale mezclado con la columna vecina
 PROPER = {"bigby", "leomund", "drawmij", "mordenkainen", "otiluke", "tasha", "evard", "melf", "nystul", "rary", "tenser", "jallarzi", "otto", "yolande", "agathys", "hadar"}
 DAMAGE_TYPES = {"ácido", "contundente", "cortante", "frío", "fuego", "fuerza", "necrótico", "perforante", "psíquico", "radiante", "relámpago", "trueno", "veneno"}
 DAMAGE_FIX = {"Proyectil mágico": "1d4+1 fuerza"}  # en el PDF el dado sale mal reconocido
@@ -109,6 +113,15 @@ def main(src, dst, first):
             "page": page_of(m.start()),
         })
     out += [s for s in MISSING if s["name"] not in {x["name"] for x in out}]
+    try:
+        prev = {s["name"]: s for s in json.load(open(dst, encoding="utf-8"))}
+    except (OSError, ValueError):
+        prev = {}
+    for s in out:
+        s["range"] = RANGE_FIX.get(s["name"], s["range"])
+        s["ritual"] = s["ritual"] or prev.get(s["name"], {}).get("ritual", False)
+        s["summary"] = prev.get(s["name"], {}).get("summary", "")
+    out += [s for name, s in prev.items() if name not in {x["name"] for x in out}]
     out.sort(key=lambda s: s["name"])
     json.dump(out, open(dst, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     print(len(out), "conjuros")

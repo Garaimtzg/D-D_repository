@@ -1,8 +1,9 @@
 // Reglas: referencia rápida del Manual del Jugador 2024 con buscador. Estados, acciones, clases,
 // especies, trasfondos, dotes, armas y armaduras, y las tablas de PX. Cada entrada remite a su página.
-import { h, clear, icon, searchBox, segmented, selectEl, toast } from '../core/dom.js';
+import { h, clear, icon, searchBox, segmented, selectEl, toast, modal } from '../core/dom.js';
 import { roll } from '../core/dice.js';
 import { reference, ABILITY_SHORT, CONDITION_ICON, fmtM } from '../core/dnd.js';
+import { spellTip, spellCard } from './spellui.js';
 
 export default { id: 'reglas', title: 'Reglas', icon: 'reglas', hint: 'Manual del Jugador 2024: estados, acciones, clases y tablas', mount };
 
@@ -134,8 +135,8 @@ async function mount(root) {
           h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: state.ritual, onchange: (e) => { state.ritual = e.target.checked; draw(); } }), 'Ritual')),
         h('div', { class: 'table-scroll' }, h('table', { class: 'ref-table spell-table' },
           h('thead', {}, h('tr', {}, ['Conjuro', 'Nivel', 'Tiempo', 'Alcance', 'Duración', 'Efecto', ''].map((t) => h('th', {}, t)))),
-          h('tbody', {}, list.slice(0, state.section === 'conjuros' ? 400 : 30).map((s) => h('tr', {},
-            h('td', {}, h('b', {}, s.name), s.concentration && h('span', { class: 'chip tiny-chip', 'data-tip': 'Concentración' }, 'C'), s.ritual && h('span', { class: 'chip tiny-chip', 'data-tip': 'Ritual' }, 'R'),
+          h('tbody', {}, list.slice(0, state.section === 'conjuros' ? 400 : 30).map((s) => h('tr', { 'data-tip': spellTip(s) },
+            h('td', {}, h('button', { class: 'spell-name', type: 'button', onclick: () => modal(s.name, spellCard(s), undefined, { iconName: 'wand' }) }, s.name), s.concentration && h('span', { class: 'chip tiny-chip', 'data-tip': 'Concentración' }, 'C'), s.ritual && h('span', { class: 'chip tiny-chip', 'data-tip': 'Ritual' }, 'R'),
               h('div', { class: 'tiny muted' }, `${s.school} · ${s.classes.join(', ')}`)),
             h('td', {}, lvl(s.level)), h('td', {}, s.time), h('td', {}, s.range), h('td', { class: 'small' }, s.duration),
             h('td', { class: 'small' }, [s.save && `Salv. ${ABILITY_SHORT[{ Fuerza: 'fue', Destreza: 'des', 'Constitución': 'con', Inteligencia: 'int', 'Sabiduría': 'sab', Carisma: 'car' }[s.save]]}`,
@@ -143,7 +144,7 @@ async function mount(root) {
               (s.damage || s.heal) && h('button', { class: 'btn xs', type: 'button', onclick: () => roll((s.damage || s.heal).split(' ')[0], { label: `${s.name}: ${s.damage ? 'daño' : 'curación'}` }) },
                 '🎲 ', s.damage || `${s.heal} curación`)),
             h('td', {}, page(s.page))))))),
-        h('p', { class: 'tiny muted' }, 'Datos de cada conjuro del Manual del Jugador 2024; la descripción completa está en la página indicada.')));
+        h('p', { class: 'tiny muted' }, 'Pasa el ratón por un conjuro para ver su descripción básica o pulsa su nombre para ver la carta. Son resúmenes propios; la descripción completa está en la página indicada.')));
     }
 
     // --------------------------------------------------------- objetos mágicos (SRD 5.2.1)

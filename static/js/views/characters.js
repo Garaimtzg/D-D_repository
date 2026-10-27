@@ -11,9 +11,11 @@ import {
   mod, fmtMod, fmtM, profBonus, initBonus, saveBonus, skillBonus, passivePerception, critExpr, xpProgress, d20, effectiveSpeed, exhaustionPenalty,
   newCharacter, migrateCharacter, fromMonster, applyDamage, applyHealing, longRest, shortRest, combatantFrom,
   classOf, speciesOf, backgroundOf, computeAC, maxHpFor, slotsFor, classResources, featuresUpTo, masteryCount, columnAt, weaponAttack, weaponProficient,
-  source, speciesResources, speciesSpells, derivedAttacks, pendingChoices, featAbilities,
+  source, grantResources, derivedAttacks, pendingChoices, featAbilities, castingOf, subclassResourceNames, grantedSpells, spellChoices,
+  spellLists, spellCounts, freeUseFor, featGrants, featBonus,
 } from '../core/dnd.js';
 import { openCreator } from './creator.js';
+import { spellTip, spellMeta, spellCard, pickSpells } from './spellui.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
 import { sortInitiative } from '../core/combat.js';
@@ -152,11 +154,12 @@ async function mount(root, [selId]) {
   async function partyRest(kind) {
     const party = state.chars.filter((c) => c.type === 'jugador');
     if (!party.length) return toast('No hay jugadores todavía.');
-    party.forEach(kind === 'largo' ? longRest : shortRest);
+    const charges = party.flatMap((c) => (kind === 'largo' ? longRest(c) : shortRest(c)) || []);
     if (kind === 'largo') sfx.heal(); else sfx.page();
     await saveAll(party);
-    toast(kind === 'largo' ? 'Descanso largo: PG, espacios de conjuro y recursos recuperados.' : 'Descanso corto: recursos recuperados. Cada uno puede gastar dados de golpe en su ficha.',
-      { kind: 'good', iconName: kind === 'largo' ? 'moon' : 'hourglass' });
+    toast(h('div', {}, kind === 'largo' ? 'Descanso largo: PG, espacios de conjuro y recursos recuperados.' : 'Descanso corto: recursos recuperados. Cada uno puede gastar dados de golpe en su ficha.',
+      charges.length > 0 && h('div', { class: 'small' }, `Al amanecer: ${charges.join(' · ')}`)),
+    { kind: 'good', iconName: kind === 'largo' ? 'moon' : 'hourglass', ms: charges.length ? 8000 : 3800 });
   }
 
   async function awardXp() {
@@ -236,8 +239,8 @@ async function mount(root, [selId]) {
     const spSel = selectEl([['', '— Especie —'], ...ref.species.map((s) => [s.id, s.name])], sp?.id || '', (v) => setSpecies(c, v), { 'aria-label': 'Especie' });
     const linSel = sp?.options && selectEl([['', `— ${sp.options_label} —`], ...sp.options.map(([n]) => [n, n])], c.lineage, (v) => {
       c.lineage = v;
-      if (sp.lineage_speed) c.speed = sp.lineage_speed[v] ?? sp.speed;
-      syncSpecies(c);
+      if (sp.lineage_speed) c.speed = (sp.lineage_speed[v] ?? sp.speed) + featBonus(c, 'speed');
+      syncGrants(c);
       save(c); refresh();
     }, { 'aria-label': sp.options_label });
     let fields;
@@ -248,7 +251,7 @@ async function mount(root, [selId]) {
       const level = c.level || 1;
       const classSel = selectEl([['', '— Clase —'], ...ref.classes.map((k) => [k.id, k.name])], cls?.id || '', (v) => setClass(c, v), { 'aria-label': 'Clase' });
       const subSel = cls && selectEl([['', level < 3 ? 'Desde el nivel 3' : '— Subclase —'], ...cls.subclasses.map((s) => [s, s])], c.subclass,
-        (v) => { c.subclass = v; save(c); refresh(); }, { 'aria-label': 'Subclase', disabled: level < 3 && !c.subclass });
+        (v) => setSubclass(c, v), { 'aria-label': 'Subclase', disabled: level < 3 && !c.subclass });
       const bgSel = selectEl([['', '— Trasfondo —'], ...ref.backgrounds.map((b) => [b.id, b.name])], bg?.id || '', (v) => setBackground(c, v), { 'aria-label': 'Trasfondo' });
       const alSel = selectEl([['', '—'], ...ref.alignments.map((a) => [a, a])], c.alignment, (v) => { c.alignment = v; save(c); }, { 'aria-label': 'Alineamiento' });
       fields = [field('Jugador/a', txt(c, 'player')),
@@ -306,11 +309,11 @@ async function mount(root, [selId]) {
     c.race = sp?.name || '';
     c.lineage = '';
     if (sp) {
-      c.speed = sp.speed;
+      c.speed = sp.speed + featBonus(c, 'speed');
       if (!sp.size.includes(c.size)) c.size = sp.size.split(' o ')[0];
       toast(h('div', {}, h('b', {}, sp.name), h('div', { class: 'small' }, `${sp.traits.map(([n]) => n).join(' · ')} (${source(sp)})`)), { iconName: 'book', ms: 6000 });
     }
-    syncSpecies(c);
+    syncGrants(c);
     if (c.acMode === 'auto') c.ac = computeAC(c);
     save(c); refresh();
   }
@@ -321,7 +324,7 @@ async function mount(root, [selId]) {
     c.background = bg?.name || '';
     if (bg) {
       bg.skills.forEach((k) => { c.skills[k] = Math.max(1, c.skills[k] || 0); });
-      if (!c.feats.includes(bg.feat)) c.feats.push(bg.feat);
+      if (!c.feats.includes(bg.feat)) { c.feats.push(bg.feat); featChanged(c, bg.feat, 1); }
       toast(h('div', {}, h('b', {}, bg.name), h('div', { class: 'small' },
         `Dote ${bg.feat} y competencia en ${bg.skills.map((k) => ref.skills.find((s) => s.key === k)?.name).join(' y ')}. Sus características (+2/+1 o +1/+1/+1): ${bg.abilities.map((k) => ABILITY_SHORT[k]).join(', ')}. (MdJ p. ${bg.page})`)),
       { iconName: 'book', ms: 7000 });
@@ -329,33 +332,55 @@ async function mount(root, [selId]) {
     save(c); refresh();
   }
 
-  // Espacios de conjuro, recursos de clase y CA calculados para el nivel actual.
+  // Espacios de conjuro (de la clase o de la subclase que lanza conjuros), recursos de clase y subclase y CA para el nivel actual.
   function syncClassData(c) {
     const cls = classOf(c);
     const level = c.level || 1;
-    if (cls && c.autoSlots) {
-      const max = slotsFor(cls, level);
+    const cast = castingOf(c, cls);
+    if (cast?.caster && c.autoSlots) {
+      const max = slotsFor(cast, level);
       c.slots = max.map((m, i) => ({ max: m, used: Math.min(c.slots[i]?.used || 0, m) }));
     }
     if (cls) {
-      const names = (cls.resources || []).map((r) => r.name);
+      const names = [...(cls.resources || []).map((r) => r.name), ...subclassResourceNames(cls)];
       const auto = classResources(c, cls, level).map((r) => ({ ...r, used: Math.min(c.resources.find((x) => x.name === r.name)?.used || 0, r.max) }));
       c.resources = [...auto, ...c.resources.filter((r) => !names.includes(r.name))];
     }
-    syncSpecies(c);
+    syncGrants(c);
     if (c.acMode === 'auto') c.ac = computeAC(c);
   }
 
-  // Recursos, ataques (aliento, peñas, golpe sin armas del monje) y conjuros de la especie para el nivel actual.
-  const speciesResNames = new Set(ref.species.flatMap((sp) => (sp.resources || []).map(([n]) => n)));
-  function syncSpecies(c) {
-    const fresh = speciesResources(c);
+  // Recursos de la especie y de las dotes (con los usos gratis de sus conjuros) y ataques que la ficha calcula sola.
+  const grantResNames = new Set([...ref.species.flatMap((sp) => (sp.resources || []).map(([n]) => n)),
+    ...ref.feats.flatMap((f) => (f.grants?.resources || []).map(([n]) => n))]);
+  function syncGrants(c) {
+    const fresh = grantResources(c);
     const usedOf = (name) => c.resources.find((x) => x.name === name)?.used || 0;
-    c.resources = [...c.resources.filter((r) => !r.species && !speciesResNames.has(r.name)), ...fresh.map((r) => ({ ...r, used: Math.min(usedOf(r.name), r.max) }))];
+    c.resources = [...c.resources.filter((r) => !r.grant && !r.species && !grantResNames.has(r.name)), ...fresh.map((r) => ({ ...r, used: Math.min(usedOf(r.name), r.max) }))];
     c.attacks = [...c.attacks.filter((a) => !a.auto), ...derivedAttacks(c)];
-    const known = speciesSpells(c);
-    c.spellList = [...new Set([...(c.spellList || []), ...known])];
-    if (known.length && !c.spellAbility) c.spellAbility = ['int', 'sab', 'car'].reduce((best, k) => (c.abilities[k] > c.abilities[best] ? k : best), 'car');
+    if (grantedSpells(c).length && !c.spellAbility) c.spellAbility = ['int', 'sab', 'car'].reduce((best, k) => (c.abilities[k] > c.abilities[best] ? k : best), 'car');
+  }
+
+  // Subclase: si lanza conjuros (Caballero arcano, Embaucador arcano) se ponen sus espacios y su aptitud.
+  function applySubclass(c) {
+    const sub = classOf(c)?.subclass_casting?.[c.subclass];
+    if (sub) { c.autoSlots = true; if (!c.spellAbility) c.spellAbility = sub.spell_ability; }
+    syncClassData(c);
+  }
+  function setSubclass(c, v) {
+    c.subclass = v;
+    c.subclassOption = '';
+    applySubclass(c);
+    save(c); refresh();
+  }
+
+  // Una dote nueva o quitada: la velocidad y los PG que suma, sus recursos y los conjuros que dejaba elegir.
+  function featChanged(c, name, sign) {
+    const g = featGrants(name);
+    if (g?.speed) c.speed = (Number(c.speed) || 0) + sign * g.speed;
+    if (g?.hp) { c.maxHp = (c.maxHp || 0) + sign * g.hp; c.hp = Math.max(0, Math.min(c.maxHp, (c.hp || 0) + sign * g.hp)); }
+    if (sign < 0 && c.spellPicks) Object.keys(c.spellPicks).filter((k) => k.startsWith(`${name}#`)).forEach((k) => delete c.spellPicks[k]);
+    syncClassData(c);
   }
 
   // Orden divina u Orden primigenia: cambia el entrenamiento con armas y armaduras.
@@ -400,12 +425,16 @@ async function mount(root, [selId]) {
       const a = columnAt(cls, name, from); const b = columnAt(cls, name, to);
       if (a !== b && b != null) changes.push(`${name}: ${a ?? '—'} → ${b}`);
     }
-    if (cls?.caster) {
-      const a = slotsFor(cls, from); const b = slotsFor(cls, to);
+    const cast = castingOf(c, cls);
+    if (cast?.caster) {
+      const a = slotsFor(cast, from); const b = slotsFor(cast, to);
       b.forEach((n, i) => { if (n > a[i]) changes.push(`Espacios de nivel ${i + 1}: ${a[i]} → ${n}`); });
-      if (cls.cantrips && cls.cantrips[to - 1] > cls.cantrips[from - 1]) changes.push(`Trucos conocidos: ${cls.cantrips[to - 1]}`);
-      if (cls.prepared && cls.prepared[to - 1] > cls.prepared[from - 1]) changes.push(`Conjuros preparados: ${cls.prepared[to - 1]}`);
+      if (cast.cantrips && cast.cantrips[to - 1] > cast.cantrips[from - 1]) changes.push(`Trucos conocidos: ${cast.cantrips[to - 1]}`);
+      if (cast.prepared && cast.prepared[to - 1] > cast.prepared[from - 1]) changes.push(`Conjuros preparados: ${cast.prepared[to - 1]}`);
     }
+    const had = new Set(grantedSpells(c).map((g) => g.name));
+    const newSpells = grantedSpells({ ...c, level: to }).filter((g) => !had.has(g.name)).map((g) => g.name);
+    if (newSpells.length) changes.push(`Siempre preparados: ${newSpells.join(', ')}`);
     if (masteryCount(cls, to) > masteryCount(cls, from)) changes.push(`Maestría con armas: ${masteryCount(cls, to)} armas`);
 
     const abilSel = (key) => selectEl([['', '—'], ...ABILITY_KEYS.map((k) => [k, `${ABILITY_NAME[k]} (${c.abilities[k]})`])], st[key], (v) => { st[key] = v; }, { 'aria-label': key === 'p2' ? 'Característica +2 o +1' : 'Característica +1' });
@@ -450,7 +479,7 @@ async function mount(root, [selId]) {
     c.hp = (c.hp || 0) + st.hp;
     c.hitDiceLeft = (c.hitDiceLeft || 0) + 1;
     c.xp = Math.max(c.xp || 0, ref.level_xp[to - 1]);
-    if (needsSub && st.subclass) c.subclass = st.subclass;
+    if (needsSub && st.subclass) { c.subclass = st.subclass; applySubclass(c); }
     if ((asi || epic) && st.choice === 'asi' && st.p2) {
       const cap = 20;
       if (st.p1 && st.p1 !== st.p2) { c.abilities[st.p2] = Math.min(cap, c.abilities[st.p2] + 1); c.abilities[st.p1] = Math.min(cap, c.abilities[st.p1] + 1); }
@@ -458,6 +487,7 @@ async function mount(root, [selId]) {
     } else if ((asi || epic) && st.choice === 'feat' && st.feat) {
       c.feats.push(st.feat);
       if (st.boost) c.abilities[st.boost] = Math.min(epic ? 30 : 20, c.abilities[st.boost] + 1);
+      featChanged(c, st.feat, 1);
     }
     syncClassData(c);
     save(c);
@@ -783,73 +813,172 @@ async function mount(root, [selId]) {
     const dc = ab ? 8 + profBonus(c) + mod(c.abilities[ab]) : null;
     const used = c.slots.some((s) => s.max > 0);
     const cls = classOf(c);
-    const level = c.level || 1;
-    const cantrips = cls?.cantrips?.[level - 1];
-    const prepared = cls?.prepared?.[level - 1];
+    const cast = castingOf(c, cls);
+    const counts = spellCounts(c);
+    const opt = cls?.subclass_spell_options?.[c.subclass];
+    const count = ({ have, max }) => h('b', { class: `big-num ${have > max ? 'over' : ''}` }, `${have}/${max}`);
     return section('Conjuros', 'wand',
       h('div', { class: 'inline-boxes' },
         sbox('Aptitud mágica', selectEl([['', '—'], ...ABILITY_KEYS.map((k) => [k, ABILITY_SHORT[k]])], ab, (v) => { c.spellAbility = v; save(c); refresh(); })),
         ab && sbox('CD salvación', h('b', { class: 'big-num' }, dc), '8 + competencia + modificador de la aptitud mágica'),
         ab && sbox('Ataque', h('button', { class: 'big-num roll-num', type: 'button', onclick: () => test(c, dc - 8, 'Ataque de conjuro', state.attackMode) }, fmtMod(dc - 8))),
-        cantrips != null && sbox('Trucos', h('b', { class: 'big-num' }, cantrips), `Trucos conocidos a nivel ${level}`),
-        prepared != null && sbox('Preparados', h('b', { class: 'big-num' }, prepared), `Conjuros preparados a nivel ${level}`)),
-      cls?.caster && h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: !!c.autoSlots, onchange: (e) => { c.autoSlots = e.target.checked; syncClassData(c); save(c); refresh(); } }),
-        cls.caster === 'pact' ? 'Magia del pacto según el nivel (se recupera en descanso corto)' : 'Espacios según la tabla de la clase'),
+        counts && sbox('Trucos', count(counts.cantrips), `Trucos de la clase a nivel ${c.level || 1}. Los que dan la especie, la subclase o las dotes van aparte.`),
+        counts && sbox('Preparados', count(counts.prepared), `Conjuros preparados a nivel ${c.level || 1}. Los siempre preparados (subclase, dotes…) no cuentan.`)),
+      opt && field(`${opt.label} (${c.subclass})`, selectEl([['', '— Elige —'], ...Object.keys(opt.options).map((k) => [k, k])], c.subclassOption || '',
+        (v) => { c.subclassOption = v; save(c); refresh(); }, { 'aria-label': opt.label })),
+      cast?.caster && h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: !!c.autoSlots, onchange: (e) => { c.autoSlots = e.target.checked; syncClassData(c); save(c); refresh(); } }),
+        cast.caster === 'pact' ? 'Magia del pacto según el nivel (se recupera en descanso corto)' : 'Espacios según la tabla de la clase'),
       h('div', { class: 'slots' }, c.slots.map((s, i) => (used || i < 3) && h('div', { class: 'slot' },
         h('span', { class: 'slot-lvl' }, i + 1),
-        bind(s, 'max', { type: 'number', class: 'inline mini', min: 0, max: 9, onChange: () => save(c), onCommit: refresh, 'aria-label': `Espacios de nivel ${i + 1}`, readonly: !!(cls?.caster && c.autoSlots) }),
+        bind(s, 'max', { type: 'number', class: 'inline mini', min: 0, max: 9, onChange: () => save(c), onCommit: refresh, 'aria-label': `Espacios de nivel ${i + 1}`, readonly: !!(cast?.caster && c.autoSlots) }),
         h('div', { class: 'gems' }, Array.from({ length: s.max || 0 }, (_, j) => h('button', {
           type: 'button', class: `gem ${j < s.used ? 'used' : ''}`, 'aria-label': `Espacio ${j + 1} de nivel ${i + 1}`,
           onclick: () => { s.used = j < s.used ? j : j + 1; save(c); refresh(); },
         })))))),
       spellBook(c),
-      field('Notas de conjuros', bind(c, 'spells', { type: 'textarea', rows: 3, onChange: () => save(c), placeholder: 'Conjuros de objetos, preparados para hoy…' })));
+      field('Notas de conjuros', bind(c, 'spells', { type: 'textarea', rows: 3, onChange: () => save(c), placeholder: 'Invocaciones, libro de conjuros, preparados para hoy…' })));
   }
 
-  // Conjuros del manual en la ficha. «Lanzar» gasta el espacio (o uno mayor), marca la concentración
-  // y tira el ataque y el daño o la curación. Los trucos suben de dados en los niveles 5, 11 y 17.
+  // Conjuros de la ficha por nivel. Los que da la ficha sola (especie, clase, subclase, dotes, extra) llevan su origen
+  // y no cuentan para el máximo. Al pasar el ratón sale la descripción básica; al pulsar el nombre, la carta completa.
   function spellBook(c) {
     c.spellList ||= [];
-    const cls = classOf(c);
     const byName = new Map(ref.spells.map((s) => [s.name, s]));
-    const mine = c.spellList.map((n) => byName.get(n)).filter(Boolean).sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
-    const pool = ref.spells.filter((s) => !c.spellList.includes(s.name) && (!cls?.caster || s.classes.includes(cls.spell_list || cls.name)));
-    const dc = c.spellAbility ? 8 + profBonus(c) + mod(c.abilities[c.spellAbility]) : null;
-    const tier = 1 + [5, 11, 17].filter((l) => (c.level || 1) >= l).length;
-    const dice = (s) => {
-      const [expr] = (s.damage || s.heal).split(' ');
-      return s.level || s.name === 'Descarga sobrenatural' ? expr : expr.replace(/^(\d+)d/, (_, n) => `${Number(n) * tier}d`);
-    };
-    async function cast(s) {
-      if (s.level) {
-        const i = c.slots.findIndex((x, j) => j >= s.level - 1 && (x.used || 0) < (x.max || 0));
-        if (i < 0) return toast(`No te quedan espacios de nivel ${s.level} o superior.`, { iconName: 'wand' });
-        c.slots[i].used = (c.slots[i].used || 0) + 1;
-        if (i + 1 > s.level) toast(`${s.name} con un espacio de nivel ${i + 1}: mira en el manual qué mejora.`, { iconName: 'wand' });
-      }
-      if (s.concentration && !c.conditions.includes('Concentrado')) c.conditions.push('Concentrado');
-      sfx.magic();
-      save(c);
-      refresh();
-      if (s.attack && dc != null) await test(c, dc - 8, `Ataque de ${s.name}`, state.attackMode);
-      if (s.damage || s.heal) await rollAs(c, dice(s), `${s.name}: ${s.damage ? `daño de ${s.damage.split(' ')[1]}` : 'curación'}${s.name === 'Descarga sobrenatural' ? ' (por rayo)' : ''}`);
-      if (s.save) toast(`${s.name}: salvación de ${s.save}${dc != null ? ` CD ${dc}` : ''}.`, { iconName: 'wand', ms: 6000 });
-    }
-    const levelName = (n) => (n ? `Nivel ${n}` : 'Trucos');
+    const granted = new Map(grantedSpells(c).map((g) => [g.name, g]));
+    const entries = [...[...granted.values()].map((g) => [byName.get(g.name), g]), ...c.spellList.filter((n) => !granted.has(n)).map((n) => [byName.get(n), null])]
+      .filter(([s]) => s).sort(([a], [b]) => a.level - b.level || a.name.localeCompare(b.name));
+    const levels = [...new Set(entries.map(([s]) => s.level))];
+    const choices = spellChoices(c).map((x) => ({ ...x, have: (c.spellPicks?.[x.key] || []).length })).filter((x) => x.have < x.count);
     return h('div', { class: 'spellbook' },
-      mine.length ? h('ul', { class: 'spell-list' }, mine.map((s) => h('li', {},
-        h('span', { class: 'slot-lvl', 'data-tip': levelName(s.level) }, s.level || '·'),
-        h('div', { class: 'grow' }, h('b', {}, s.name), s.concentration && h('span', { class: 'tiny-chip chip', 'data-tip': 'Concentración' }, 'C'),
-          h('div', { class: 'tiny muted' }, [s.time, s.range, s.duration, s.save && `salv. ${s.save}`, s.damage || (s.heal && `${s.heal} curación`), `MdJ p. ${s.page}`].filter(Boolean).join(' · '))),
-        h('button', { class: 'btn xs primary', type: 'button', onclick: () => cast(s) }, icon('wand', 13), 'Lanzar'),
-        h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Quitar ${s.name}`, onclick: () => { c.spellList = c.spellList.filter((n) => n !== s.name); save(c); refresh(); } }, icon('close', 13)))))
-        : h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Añade los conjuros que conoce o tiene preparados.'),
-      h('select', { class: 'mini-sel', 'aria-label': 'Añadir conjuro', onchange: (e) => { if (!e.target.value) return; c.spellList.push(e.target.value); sfx.page(); save(c); refresh(); } },
-        h('option', { value: '' }, `+ Añadir conjuro${cls?.caster ? ` de ${cls.name.toLowerCase()}` : ''}…`),
-        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
-          const list = pool.filter((s) => s.level === n);
-          return list.length > 0 && h('optgroup', { label: levelName(n) }, list.map((s) => h('option', { value: s.name }, `${s.name}${s.concentration ? ' (C)' : ''}${s.ritual ? ' (R)' : ''}`)));
-        })));
+      entries.length ? levels.map((n) => h('div', { class: 'spell-group' },
+        h('div', { class: 'spell-group-head' }, n ? `Nivel ${n}` : 'Trucos',
+          n > 0 && c.slots[n - 1]?.max > 0 && h('span', { class: 'tiny muted' }, ` · ${c.slots[n - 1].max - (c.slots[n - 1].used || 0)}/${c.slots[n - 1].max} espacios`)),
+        h('ul', { class: 'spell-list' }, entries.filter(([s]) => s.level === n).map(([s, g]) => spellRow(c, s, g)))))
+        : h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Añade los trucos y conjuros que conoce o tiene preparados.'),
+      choices.map((x) => h('div', { class: 'spell-choice' }, icon('sparkle', 14),
+        h('span', { class: 'small grow' }, h('b', {}, x.label), ` · ${x.from} (${x.have}/${x.count})`),
+        h('button', { class: 'btn xs primary', type: 'button', onclick: () => pickChoice(c, x) }, icon('plus', 13), 'Elegir'))),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn xs', type: 'button', onclick: () => addSpells(c, 'truco') }, icon('plus', 13), 'Truco'),
+        h('button', { class: 'btn xs', type: 'button', onclick: () => addSpells(c, 'conjuro') }, icon('plus', 13), 'Conjuro'),
+        h('button', { class: 'btn xs ghost', type: 'button', 'data-tip': 'De otra fuente (invocación, libro de pactos, objeto, regalo del DM…): no cuenta para tu máximo y puede tener usos gratis',
+          onclick: () => addSpells(c, 'extra') }, icon('sparkle', 13), 'Extra')));
+  }
+
+  function spellRow(c, s, g) {
+    const free = freeUseFor(c, s);
+    const remove = g?.pick ? () => { c.spellPicks[g.pick] = c.spellPicks[g.pick].filter((n) => n !== s.name); syncGrants(c); }
+      : g?.extra ? () => { c.extraSpells = c.extraSpells.filter((x) => x.name !== s.name); c.resources = c.resources.filter((r) => !(r.extra && r.name === `${s.name} (gratis)`)); }
+        : g ? null : () => { c.spellList = c.spellList.filter((n) => n !== s.name); };
+    return h('li', { 'data-tip': spellTip(s) },
+      h('span', { class: 'slot-lvl' }, s.level || '·'),
+      h('div', { class: 'grow' },
+        h('button', { class: 'spell-name', type: 'button', onclick: () => spellDialog(c, s, g) }, s.name),
+        s.concentration && h('span', { class: 'tiny-chip chip' }, 'C'), s.ritual && h('span', { class: 'tiny-chip chip' }, 'R'),
+        g && h('span', { class: 'tiny-chip chip src' }, g.from),
+        h('div', { class: 'tiny muted' }, spellMeta(s))),
+      free && h('button', { class: 'btn xs', type: 'button', 'data-tip': `${free.name}: quedan ${free.max - (free.used || 0)} de ${free.max}`, onclick: () => cast(c, s, { free }) }, 'Gratis'),
+      s.ritual && s.level > 0 && h('button', { class: 'btn xs ghost', type: 'button', 'data-tip': 'Como ritual: tarda 10 minutos más y no gasta espacio', onclick: () => cast(c, s, { ritual: true }) }, 'Ritual'),
+      h('button', { class: 'btn xs primary', type: 'button', onclick: () => cast(c, s) }, icon('wand', 13), 'Lanzar'),
+      remove && h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Quitar ${s.name}`, onclick: () => { remove(); save(c); refresh(); } }, icon('close', 13)));
+  }
+
+  // Dados de daño o curación: los trucos suben en los niveles 5, 11 y 17 y los conjuros con espacio mayor suman
+  // lo que dice su descripción («+1d6 por nivel superior»). Las curaciones «+ tu aptitud» suman el modificador.
+  function spellDice(c, s, slotLevel = s.level) {
+    let [expr] = (s.damage || s.heal).split(' ');
+    const tier = 1 + [5, 11, 17].filter((l) => (c.level || 1) >= l).length;
+    if (!s.level) return s.name === 'Descarga sobrenatural' ? expr : expr.replace(/^(\d+)d/, (_, n) => `${Number(n) * tier}d`);
+    const up = /\+(\d+)d(\d+)[^.]*?por nivel/.exec(s.summary || '');
+    if (up && slotLevel > s.level) expr = expr.replace(new RegExp(`(\\d+)d${up[2]}\\b`), (_, n) => `${Number(n) + Number(up[1]) * (slotLevel - s.level)}d${up[2]}`);
+    if (s.heal && /\+ tu aptitud/.test(s.summary || '') && c.spellAbility) expr += fmtMod(mod(c.abilities[c.spellAbility]));
+    return expr;
+  }
+
+  // Lanzar: con el espacio más bajo que quede (o el elegido), con un uso gratis, como ritual o con el arcanum místico
+  // del brujo. Marca la concentración y tira el ataque y el daño o la curación.
+  async function cast(c, s, how = {}) {
+    const dc = c.spellAbility ? 8 + profBonus(c) + mod(c.abilities[c.spellAbility]) : null;
+    let slotLevel = s.level;
+    if (how.free) how.free.used = (how.free.used || 0) + 1;
+    else if (how.ritual) toast(`${s.name} como ritual: tarda 10 minutos más y no gasta espacio.`, { iconName: 'wand' });
+    else if (s.level) {
+      const i = how.slot ?? c.slots.findIndex((x, j) => j >= s.level - 1 && (x.used || 0) < (x.max || 0));
+      const arcanum = c.resources.find((r) => r.name === `Arcanum místico (nivel ${s.level})` && (r.used || 0) < r.max);
+      if (i >= 0) { c.slots[i].used = (c.slots[i].used || 0) + 1; slotLevel = i + 1; }
+      else if (arcanum) arcanum.used = (arcanum.used || 0) + 1;
+      else return toast(`No te quedan espacios de nivel ${s.level} o superior${freeUseFor(c, s) ? ' (aún tienes un uso gratis)' : ''}.`, { iconName: 'wand' });
+    }
+    if (s.concentration && !c.conditions.includes('Concentrado')) c.conditions.push('Concentrado');
+    sfx.magic();
+    save(c);
+    refresh();
+    if (slotLevel > s.level) toast(`${s.name} con un espacio de nivel ${slotLevel}.`, { iconName: 'wand' });
+    if (s.attack && dc != null) await test(c, dc - 8, `Ataque de ${s.name}`, state.attackMode);
+    if (s.damage || s.heal) await rollAs(c, spellDice(c, s, slotLevel), `${s.name}: ${s.damage ? `daño de ${s.damage.split(' ')[1]}` : 'curación'}${s.name === 'Descarga sobrenatural' ? ' (por rayo)' : ''}`);
+    if (s.save) toast(`${s.name}: salvación de ${s.save}${dc != null ? ` CD ${dc}` : ''}.`, { iconName: 'wand', ms: 6000 });
+  }
+
+  // Carta del conjuro con la descripción y cómo lanzarlo: con qué espacio (para subirlo de nivel), gratis o como ritual.
+  async function spellDialog(c, s, g) {
+    const free = freeUseFor(c, s);
+    const slots = s.level ? c.slots.map((x, i) => [x, i]).filter(([x, i]) => i >= s.level - 1 && (x.max || 0) > (x.used || 0)) : [];
+    const actions = [
+      { label: 'Cerrar', value: null },
+      ...(free ? [{ label: `Gratis (${free.max - (free.used || 0)})`, value: { free } }] : []),
+      ...(s.ritual && s.level ? [{ label: 'Ritual', value: { ritual: true } }] : []),
+      ...(s.level ? slots.map(([x, i]) => ({ label: `Nivel ${i + 1} (${x.max - (x.used || 0)})`, value: { slot: i }, class: 'primary', icon: 'wand' }))
+        : [{ label: 'Lanzar', value: {}, class: 'primary', icon: 'wand' }]),
+      ...(s.level && !slots.length && !free ? [{ label: 'Lanzar', value: {}, class: 'primary', icon: 'wand' }] : []),
+    ];
+    const how = await modal(s.name, spellCard(s, g?.from), actions, { iconName: 'wand' });
+    if (how) cast(c, s, how);
+  }
+
+  // Nivel de conjuro más alto que puede lanzar (por sus espacios o el arcanum místico del brujo).
+  function maxSpellLevel(c) {
+    const fromSlots = c.slots.reduce((m, x, i) => (x.max > 0 ? i + 1 : m), 0);
+    const arcanum = castingOf(c)?.caster === 'pact' ? ([[11, 6], [13, 7], [15, 8], [17, 9]].filter(([l]) => (c.level || 1) >= l).pop()?.[1] || 0) : 0;
+    return Math.max(fromSlots, arcanum) || 9;
+  }
+
+  const hasSpell = (c, s) => c.spellList.includes(s.name) || grantedSpells(c).some((g) => g.name === s.name);
+
+  // Añadir trucos o conjuros de la clase (cuentan para el máximo) o extra de otra fuente, con usos gratis si los tiene.
+  function addSpells(c, mode) {
+    const lists = spellLists(c);
+    if (mode === 'extra') {
+      const ex = { from: '', uses: 0, reset: 'largo' };
+      const extra = h('div', { class: 'row' },
+        field('De dónde sale', bind(ex, 'from', { placeholder: 'Invocación, libro de pactos, objeto, el DM…' }), 'grow'),
+        field('Usos gratis', bind(ex, 'uses', { type: 'number', min: 0, class: 'inline mini' })),
+        field('Se recuperan', selectEl([['largo', 'D. largo'], ['corto', 'D. corto'], ['nunca', 'Nunca']], ex.reset, (v) => { ex.reset = v; }, { class: 'mini-sel' })));
+      return pickSpells({ title: 'Conjuro extra', spells: ref.spells, lists, isTaken: (s) => hasSpell(c, s), extra,
+        note: 'No cuenta para tu máximo de trucos ni de preparados. Si tiene usos gratis, se lanza sin gastar espacio (lo verás en Recursos).',
+        onPick: (s) => {
+          (c.extraSpells ||= []).push({ name: s.name, from: ex.from.trim() || 'Extra' });
+          if (Number(ex.uses) > 0) c.resources.push({ name: `${s.name} (gratis)`, max: Number(ex.uses), used: 0, reset: ex.reset, extra: true });
+          sfx.page(); save(c);
+        } }).then(refresh);
+    }
+    const cantrip = mode === 'truco';
+    const counts = spellCounts(c);
+    const now = counts && (cantrip ? counts.cantrips : counts.prepared);
+    return pickSpells({ title: cantrip ? 'Añadir trucos' : 'Añadir conjuros', spells: ref.spells, lists, isTaken: (s) => hasSpell(c, s),
+      levels: cantrip ? [0] : Array.from({ length: maxSpellLevel(c) }, (_, i) => i + 1),
+      note: now ? `Tienes ${now.have} de ${now.max} ${cantrip ? 'trucos' : 'conjuros preparados'} de tu clase.` : '',
+      onPick: (s) => { c.spellList.push(s.name); sfx.page(); save(c); } }).then(refresh);
+  }
+
+  // Elegir los conjuros que da una dote (Iniciado en la magia, Lanzador ritual…) o una subclase (Descubrimientos mágicos).
+  function pickChoice(c, x) {
+    const picks = ((c.spellPicks ||= {})[x.key] ||= []);
+    const top = maxSpellLevel(c);
+    const pool = ref.spells.filter((s) => (x.level == null ? s.level >= 1 && s.level <= top : s.level === x.level)
+      && (!x.schools || x.schools.includes(s.school)) && (!x.ritual || s.ritual));
+    return pickSpells({ title: `${x.label} · ${x.from}`, spells: pool, lists: x.lists || [], isTaken: (s) => picks.includes(s.name) || picks.length >= x.count,
+      note: `Elige ${x.count}. Quedan siempre preparados${x.free ? ' y cada uno se lanza gratis 1 vez por descanso largo' : ''}.`,
+      onPick: (s) => { picks.push(s.name); syncGrants(c); sfx.page(); save(c); } }).then(refresh);
   }
 
   function resourcesSection(c) {
@@ -875,6 +1004,7 @@ async function mount(root, [selId]) {
       h('ul', { class: 'items' }, c.inventory.map((it, i) => h('li', { class: it.magic ? 'magic' : '' },
         bind(it, 'qty', { type: 'number', class: 'inline mini', min: 0, onChange: () => save(c), 'aria-label': 'Cantidad' }),
         bind(it, 'name', { class: 'grow', onChange: () => save(c), placeholder: 'Objeto', 'aria-label': 'Objeto', 'data-tip': it.magic ? it.notes : null }),
+        it.charges > 0 && chargesEl(c, it),
         it.attune != null && h('label', { class: 'check small attune', 'data-tip': `Sintonizado${it.attune ? ` (solo ${it.attune})` : ''}: como mucho 3 objetos` },
           h('input', { type: 'checkbox', checked: !!it.attuned, onchange: (e) => { it.attuned = e.target.checked; save(c); refresh(); } }), 'S'),
         bind(it, 'notes', { class: 'item-notes', placeholder: 'notas', onChange: () => save(c), 'aria-label': 'Notas' }),
@@ -884,12 +1014,27 @@ async function mount(root, [selId]) {
         h('select', { class: 'mini-sel', 'aria-label': 'Añadir un objeto mágico', onchange: (e) => {
           const m = ref.magic_items.find((x) => x.name === e.target.value);
           if (!m) return;
-          c.inventory.push({ name: m.name, qty: 1, notes: `${m.rarity} · ${m.summary}`, magic: true, attune: m.attune, attuned: false });
+          c.inventory.push({ name: m.name, qty: 1, notes: `${m.rarity} · ${m.summary}`, magic: true, attune: m.attune, attuned: false,
+            ...(m.charges ? { charges: m.charges, used: 0, regain: m.regain } : {}) });
           sfx.magic(); save(c); refresh();
         } }, h('option', { value: '' }, '+ Objeto mágico…'),
         [['Common', 'Comunes'], ['Uncommon', 'Poco comunes'], ['Rare', 'Raros'], ['Very Rare', 'Muy raros'], ['Legendary', 'Legendarios'], ['Rarity Varies', 'Rareza variable'], ['Artifact', 'Artefactos']]
           .map(([k, l]) => h('optgroup', { label: l }, ref.magic_items.filter((m) => m.rarityKey === k).map((m) => h('option', { value: m.name }, `${m.name}${m.attune != null ? ' (S)' : ''}`))))),
         (() => { const n = c.inventory.filter((it) => it.attuned).length; return n > 0 && h('span', { class: `chip ${n > 3 ? 'bad' : ''}`, 'data-tip': 'Objetos sintonizados (máximo 3)' }, `Sintonía ${n}/3`); })()));
+  }
+
+  // Cargas de un objeto mágico: gemas (o un contador si son muchas). Se recuperan al amanecer con el descanso largo.
+  function chargesEl(c, it) {
+    const left = it.charges - (it.used || 0);
+    const tip = `Cargas: ${left} de ${it.charges}${it.regain ? ` · al amanecer recupera ${it.regain === 'todas' ? 'todas' : it.regain}` : ' · no se recargan'}`;
+    const set = (used) => { it.used = Math.max(0, Math.min(it.charges, used)); save(c); refresh(); };
+    return it.charges <= 12
+      ? h('div', { class: 'gems', 'data-tip': tip }, Array.from({ length: it.charges }, (_, j) => h('button', {
+        type: 'button', class: `gem round ${j < left ? '' : 'used'}`, 'aria-label': `Carga ${j + 1}`, onclick: () => set(it.charges - (j < left ? j : j + 1)) })))
+      : h('div', { class: 'row nowrap', 'data-tip': tip },
+        h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': 'Gastar una carga', onclick: () => set((it.used || 0) + 1) }, '−'),
+        h('span', { class: 'small tnum' }, `${left}/${it.charges}`),
+        h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': 'Recuperar una carga', onclick: () => set((it.used || 0) - 1) }, '+'));
   }
 
   function notesSection(c) {
@@ -901,13 +1046,13 @@ async function mount(root, [selId]) {
       const f = featInfo(name);
       return h('li', { class: 'feat-item' },
         h('div', { class: 'row between nowrap' }, h('b', {}, name), f && h('span', { class: 'chip tiny-chip' }, f.category),
-          h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Quitar ${name}`, onclick: () => { c.feats.splice(i, 1); syncClassData(c); save(c); refresh(); } }, icon('close', 13))),
+          h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Quitar ${name}`, onclick: () => { c.feats.splice(i, 1); featChanged(c, name, -1); save(c); refresh(); } }, icon('close', 13))),
         f && h('div', { class: 'tiny muted' }, `${f.summary} (MdJ p. ${f.page})`));
     });
     const featAdd = h('select', { class: 'mini-sel', 'aria-label': 'Añadir dote', onchange: (e) => {
       if (!e.target.value) return;
       c.feats.push(e.target.value);
-      syncClassData(c);
+      featChanged(c, e.target.value, 1);
       save(c); refresh();
     } }, h('option', { value: '' }, '+ Añadir dote…'),
     ['origen', 'general', 'estilo de combate', 'don épico'].map((cat) => h('optgroup', { label: cat[0].toUpperCase() + cat.slice(1) },

@@ -7,9 +7,10 @@ import { editHomebrew } from './homebrew.js';
 import { api } from '../core/api.js';
 import {
   reference, reloadReference, newCharacter, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, mod, fmtMod, fmtM, maxHpFor, computeAC,
-  slotsFor, classResources, featuresUpTo, profBonus, columnAt, source, speciesResources, speciesSpells, derivedAttacks,
-  pendingChoices, weaponAttack, featAbilities, initBonus,
+  slotsFor, classResources, featuresUpTo, profBonus, columnAt, source, grantResources, derivedAttacks,
+  pendingChoices, weaponAttack, featAbilities, initBonus, castingOf, grantedSpells, spellChoices, spellCounts, spellLists, featBonus,
 } from '../core/dnd.js';
+import { pickSpells, spellTip } from './spellui.js';
 import { roll } from '../core/dice.js';
 import { sfx } from '../core/sfx.js';
 
@@ -46,7 +47,7 @@ export async function openCreator({ onCreate }) {
     step: 0, classId: '', classSkills: [], classChoice: '', backgroundId: '', speciesId: '', lineage: '', size: '', speciesSkills: [], humanFeat: '',
     languages: ['Común'], method: 'estandar', assign: blank(''), points: blank(8), rolled: [], rolledAssign: blank(''),
     bgMode: '2-1', plus2: '', plus1: '', name: '', player: '', alignment: 'Neutral bueno', level: 1, subclass: '', style: '', asi: {},
-    kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)], spells: [], picks: {},
   };
   const cls = () => R.classes.find((c) => c.id === st.classId);
   const bg = () => R.backgrounds.find((b) => b.id === st.backgroundId);
@@ -416,6 +417,7 @@ export async function openCreator({ onCreate }) {
         h('div', { class: 'cr-options' }, styles.map(([n, t]) => option(st.style === n, () => { st.style = n; }, n, t)))],
       asiLevels().length > 0 && [h('div', { class: 'eyebrow' }, 'Mejoras de característica y dotes de tus niveles'),
         h('div', { class: 'stack-sm' }, asiLevels().map(asiRow))],
+      spellsPanel(),
       c && b && [h('div', { class: 'eyebrow' }, 'Equipo inicial'),
         h('div', { class: 'grid cols-2' },
           h('div', { class: 'cr-options vertical' }, h('b', { class: 'small' }, `${c.name}`),
@@ -424,6 +426,41 @@ export async function openCreator({ onCreate }) {
           h('div', { class: 'cr-options vertical' }, h('b', { class: 'small' }, b.name),
             option(st.bgKit === 0, () => { st.bgKit = 0; }, 'Opción A', kitText(b.kit.items, b.kit.gold)),
             option(st.bgKit === 1, () => { st.bgKit = 1; }, 'Opción B', `${b.kit_gold} po`)))]);
+  }
+
+  // Trucos y conjuros de la clase y los que dejan elegir las dotes (Iniciado en la magia…). Todo opcional: lo que
+  // falte se puede elegir luego en la ficha.
+  function spellsPanel() {
+    if (!cls() || !bg() || !sp()) return null;
+    const ch = build();
+    const counts = spellCounts(ch);
+    const choices = spellChoices(ch);
+    if (!counts && !choices.length) return null;
+    const lists = spellLists(ch);
+    const top = Math.max(1, ch.slots.reduce((m, x, i) => (x.max > 0 ? i + 1 : m), 0));
+    const taken = (s) => st.spells.includes(s.name) || grantedSpells(ch).some((g) => g.name === s.name);
+    const chips = (names, remove) => names.map((n) => h('span', { class: 'chip', 'data-tip': spellTip(R.spells.find((x) => x.name === n)) }, n,
+      h('button', { type: 'button', class: 'chip-x', 'aria-label': `Quitar ${n}`, onclick: () => { remove(n); refresh(); } }, '✕')));
+    const row = (label, have, max, names, remove, open) => h('div', { class: 'cr-spell-row' },
+      h('b', { class: 'small' }, `${label} (${have}/${max})`), chips(names, remove),
+      h('button', { class: 'btn xs', type: 'button', onclick: open }, icon('plus', 13), 'Elegir'));
+    const classPick = (cantrip) => pickSpells({ title: cantrip ? 'Trucos' : 'Conjuros preparados', spells: R.spells, lists, isTaken: taken,
+      levels: cantrip ? [0] : Array.from({ length: top }, (_, i) => i + 1), onPick: (s) => { st.spells.push(s.name); } }).then(refresh);
+    const ofLevel = (cantrip) => st.spells.filter((n) => !R.spells.find((x) => x.name === n)?.level === cantrip);
+    const granted = grantedSpells(ch).filter((g) => !g.pick);
+    return [h('div', { class: 'eyebrow' }, 'Conjuros'),
+      h('div', { class: 'stack-sm' },
+        counts && counts.cantrips.max > 0 && row('Trucos', counts.cantrips.have, counts.cantrips.max, ofLevel(true), (n) => { st.spells = st.spells.filter((x) => x !== n); }, () => classPick(true)),
+        counts && counts.prepared.max > 0 && row('Conjuros preparados', counts.prepared.have, counts.prepared.max, ofLevel(false), (n) => { st.spells = st.spells.filter((x) => x !== n); }, () => classPick(false)),
+        choices.map((x) => {
+          const picks = (st.picks[x.key] ||= []);
+          const pool = R.spells.filter((s) => (x.level == null ? s.level >= 1 && s.level <= top : s.level === x.level) && (!x.schools || x.schools.includes(s.school)) && (!x.ritual || s.ritual));
+          return row(`${x.label} · ${x.from}`, picks.length, x.count, picks, (n) => { st.picks[x.key] = picks.filter((y) => y !== n); },
+            () => pickSpells({ title: `${x.label} · ${x.from}`, spells: pool, lists: x.lists || [], isTaken: (s) => picks.includes(s.name) || picks.length >= x.count,
+              onPick: (s) => { picks.push(s.name); } }).then(refresh));
+        }),
+        granted.length > 0 && h('p', { class: 'tiny muted' }, 'Siempre preparados (no cuentan): ', granted.map((g) => g.name).join(', ')),
+        h('p', { class: 'tiny muted' }, 'Puedes dejarlo para luego: en la ficha avisa de lo que falte.'))];
   }
 
   // Construye la ficha final.
@@ -448,7 +485,8 @@ export async function openCreator({ onCreate }) {
       languages: st.languages.join(', '),
       speed: s.lineage_speed?.[st.lineage] ?? s.speed,
       hitDie: `d${c.hit_die}`, hitDiceLeft: st.level,
-      spellAbility: c.spell_ability || '', autoSlots: !!c.caster, acMode: 'auto',
+      spellAbility: c.spell_ability || c.subclass_casting?.[st.subclass]?.spell_ability || '', autoSlots: !!(c.caster || c.subclass_casting?.[st.subclass]), acMode: 'auto',
+      spellList: [...st.spells], spellPicks: structuredClone(st.picks),
       notes: `Especie: ${s.name}${lineageText}. Trasfondo: ${b.name}. Alineamiento: ${st.alignment}.`,
     });
     // equipo inicial: armas a la lista de ataques, armadura y escudo a la CA, el resto al inventario
@@ -464,14 +502,13 @@ export async function openCreator({ onCreate }) {
       if (same) same.qty += qty; else ch.inventory.push({ name, qty, notes: '' });
     }
     ch.attacks.push(...derivedAttacks(ch));
-    // magia de la especie (trucos y conjuros de linaje)
-    const known = speciesSpells(ch);
-    ch.spellList = [...new Set(known)];
-    if (known.length && !ch.spellAbility) ch.spellAbility = ['int', 'sab', 'car'].reduce((best, k) => (scores[k] > scores[best] ? k : best), 'car');
+    // magia de la especie, la subclase y las dotes: sin aptitud de clase se usa la mejor mental
+    if (grantedSpells(ch).length && !ch.spellAbility) ch.spellAbility = ['int', 'sab', 'car'].reduce((best, k) => (scores[k] > scores[best] ? k : best), 'car');
+    ch.speed += featBonus(ch, 'speed');
     ch.maxHp = ch.hp = maxHpFor(ch, st.level);
     ch.ac = computeAC(ch);
-    ch.slots = slotsFor(c, st.level).map((max) => ({ max, used: 0 }));
-    ch.resources = [...classResources(ch, c, st.level), ...speciesResources(ch, st.level)];
+    ch.slots = slotsFor(castingOf(ch, c), st.level).map((max) => ({ max, used: 0 }));
+    ch.resources = [...classResources(ch, c, st.level), ...grantResources(ch, st.level)];
     return ch;
   }
 
@@ -506,7 +543,8 @@ export async function openCreator({ onCreate }) {
             s.traits.map(([n, t]) => h('li', { 'data-tip': t }, h('span', { class: 'chip' }, s.name), ' ', n))),
           c.caster && h('p', { class: 'small' }, h('b', {}, 'Magia: '), [cantrips != null && `${cantrips} trucos`, prepared != null && `${prepared} conjuros preparados`,
             `espacios ${ch.slots.map((x, i) => (x.max ? `${x.max}×nv${i + 1}` : null)).filter(Boolean).join(', ')}`].filter(Boolean).join(' · ')),
-          ch.spellList.length > 0 && h('p', { class: 'small' }, h('b', {}, 'Magia de especie: '), ch.spellList.join(', ')))),
+          grantedSpells(ch).length + ch.spellList.length > 0 && h('p', { class: 'small' }, h('b', {}, 'Conjuros: '),
+            [...ch.spellList, ...grantedSpells(ch).map((g) => g.name)].join(', ')))),
       pending.length > 0 && h('div', { class: 'cr-note' }, h('b', {}, 'Te quedará por elegir en la ficha: '), pending.join(' · ')),
       h('p', { class: 'tiny muted center' }, 'Todo queda editable en la ficha.'));
   }

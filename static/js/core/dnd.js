@@ -110,11 +110,15 @@ export function maxHpFor(ch, level = ch.level || 1) {
   let hp = cls.hit_die + con + (level - 1) * Math.max(1, fixed + con);
   if (speciesOf(ch)?.hp_per_level) hp += level * speciesOf(ch).hp_per_level;
   if (hasFeat(ch, 'Duro')) hp += 2 * level;
+  hp += featBonus(ch, 'hp');
   if (ch.subclass === 'Hechicería dracónica' && level >= 3) hp += level; // Resistencia dracónica
   return Math.max(1, hp);
 }
 
-// Espacios de conjuro (máximos por nivel de conjuro) según la clase y el nivel.
+// La magia de la ficha: la de la clase o, si la subclase lanza conjuros (Caballero arcano, Embaucador arcano), la suya.
+export const castingOf = (ch, cls = classOf(ch)) => (cls?.subclass_casting?.[ch.subclass] ? { ...cls, ...cls.subclass_casting[ch.subclass] } : cls);
+
+// Espacios de conjuro (máximos por nivel de conjuro) según la clase (mejor castingOf) y el nivel.
 export function slotsFor(cls, level) {
   const out = Array(9).fill(0);
   if (!cls?.caster || !REF) return out;
@@ -130,13 +134,17 @@ export const columnAt = (cls, name, level) => cls?.columns?.[name]?.[Math.max(1,
 export const masteryCount = (cls, level) => (cls?.masteries ? cls.masteries[Math.max(1, Math.min(20, level)) - 1] || 0 : 0);
 
 // Recursos de clase (furia, canalizar divinidad, puntos de concentración…) para un nivel.
+// Con subclase se suman los suyos (dados de supremacía, Pasos feéricos…). Los usos pueden ir por tramos {nivel: usos}.
+export const subclassResourceNames = (cls) => Object.values(cls?.subclass_resources || {}).flat().map((r) => r.name);
 export function classResources(ch, cls = classOf(ch), level = ch.level || 1) {
   if (!cls) return [];
-  return (cls.resources || []).map((r) => {
+  return [...(cls.resources || []), ...(cls.subclass_resources?.[ch.subclass] || [])].map((r) => {
     if (r.from && level < r.from) return null;
     let max = r.column ? columnAt(cls, r.column, level) : r.uses;
+    if (max && typeof max === 'object') max = Object.entries(max).filter(([l]) => level >= Number(l)).pop()?.[1];
     if (typeof max === 'string' && max.startsWith('mod:')) max = Math.max(1, mod(ch.abilities?.[max.slice(4)]));
     if (max === 'level*5') max = level * 5;
+    if (max === 'level+1') max = level + 1;
     if (max === 'pb') max = profBonus({ ...ch, level });
     let reset = r.reset;
     if (r.reset_from) for (const [lv, rs] of Object.entries(r.reset_from)) if (level >= Number(lv)) reset = rs;
@@ -167,18 +175,75 @@ export function featAbilities(feat) {
   return /^\+1/.test(feat?.summary || '') ? [...ABILITY_KEYS] : [];
 }
 
-// --------------------------------------------------------------- especie
-// Recursos de la especie y usos gratis de sus conjuros, según el nivel.
-export function speciesResources(ch, level = ch.level || 1) {
+// --------------------------------------------------------------- especie y dotes
+// Recursos de la especie y de las dotes, y los usos gratis de los conjuros que dan («X (gratis)»), según el nivel.
+export function grantResources(ch, level = ch.level || 1) {
   const sp = speciesOf(ch);
-  if (!sp) return [];
   const pb = profBonus({ ...ch, level });
   const free = speciesSpellEntries(ch).filter(([lvl, , uses]) => uses && level >= lvl).map(([lvl, name, uses, reset]) => [`${name} (gratis)`, uses, reset || 'largo', lvl]);
-  return [...(sp.resources || []), ...(sp.lineage_resources?.[ch.lineage] || []), ...free].filter(([, , , min]) => level >= (min || 1))
-    .map(([name, uses, reset]) => ({ name, max: uses === 'pb' ? pb : uses, used: 0, reset, auto: true, species: true }));
+  const feats = (ch.feats || []).flatMap((f) => {
+    const g = featGrants(f);
+    const picks = (g?.picks || []).flatMap((p, i) => (p.free ? (ch.spellPicks?.[`${f}#${i}`] || []).map((n) => [`${n} (gratis)`, p.free, 'largo']) : []));
+    return [...(g?.resources || []), ...(g?.spells || []).filter(([, uses]) => uses).map(([n, uses]) => [`${n} (gratis)`, uses, 'largo']), ...picks];
+  });
+  return [...(sp?.resources || []), ...(sp?.lineage_resources?.[ch.lineage] || []), ...free, ...feats].filter(([, , , min]) => level >= (min || 1))
+    .map(([name, uses, reset]) => ({ name, max: uses === 'pb' ? pb : uses, used: 0, reset, auto: true, grant: true }));
 }
 const speciesSpellEntries = (ch) => { const sp = speciesOf(ch); return [...(sp?.spells || []), ...(sp?.lineage_spells?.[ch.lineage] || [])]; };
 export const speciesSpells = (ch, level = ch.level || 1) => speciesSpellEntries(ch).filter(([lvl]) => level >= lvl).map(([, name]) => name);
+
+// Lo que da una dote (por el principio de su nombre: «Iniciado en la magia (clérigo)»).
+export const featGrants = (name) => REF?.feats.find((f) => f.grants && norm(name).startsWith(norm(f.name)))?.grants || null;
+export const featBonus = (ch, key) => (ch.feats || []).reduce((s, f) => s + (featGrants(f)?.[key] || 0), 0);
+
+// Conjuros que la ficha da sola, siempre preparados y sin contar para el máximo: de la especie, de la clase
+// (marca del cazador, castigo divino…), de la subclase (dominios, juramentos, patrones; el Círculo de la tierra
+// según el terreno), de las dotes y los que se eligen por una dote o subclase. Además, los extra que añade el jugador.
+export function grantedSpells(ch) {
+  const cls = classOf(ch);
+  const level = ch.level || 1;
+  const out = new Map();
+  const add = (name, from, extra = {}) => { if (!out.has(name)) out.set(name, { name, from, ...extra }); };
+  const rows = (list, from) => (list || []).forEach(([lv, names]) => { if (level >= lv) names.forEach((n) => add(n, from)); });
+  speciesSpells(ch).forEach((n) => add(n, speciesOf(ch)?.name || 'Especie'));
+  rows(cls?.class_spells, cls?.name);
+  rows(cls?.subclass_spells?.[ch.subclass], ch.subclass);
+  const opt = cls?.subclass_spell_options?.[ch.subclass];
+  if (opt && ch.subclassOption) rows(opt.options[ch.subclassOption], `${ch.subclass} (${ch.subclassOption})`);
+  for (const f of ch.feats || []) (featGrants(f)?.spells || []).forEach(([n]) => add(n, f));
+  for (const choice of spellChoices(ch)) (ch.spellPicks?.[choice.key] || []).forEach((n) => add(n, choice.from, { pick: choice.key }));
+  for (const x of ch.extraSpells || []) add(x.name, x.from || 'Extra', { extra: true });
+  return [...out.values()];
+}
+
+// Conjuros por elegir que dan las dotes (Iniciado en la magia, Influencia feérica…) y algunas subclases.
+// Cada uno: { key, from, label, level (0 = truco; null = cualquiera), count, lists, schools, ritual }.
+export function spellChoices(ch) {
+  const cls = classOf(ch);
+  const level = ch.level || 1;
+  const out = [];
+  for (const f of ch.feats || []) {
+    (featGrants(f)?.picks || []).forEach((p, i) => {
+      const paren = /\(([^)]+)\)/.exec(f)?.[1];
+      const lists = p.lists === 'paren' ? (paren ? [paren[0].toUpperCase() + paren.slice(1)] : ['Clérigo', 'Druida', 'Mago']) : p.lists || null;
+      out.push({ ...p, key: `${f}#${i}`, from: f, lists, count: p.count === 'pb' ? profBonus(ch) : p.count });
+    });
+  }
+  (cls?.subclass_picks?.[ch.subclass] || []).forEach(([lv, count, lists, label], i) => {
+    if (level >= lv) out.push({ key: `${ch.subclass}#${i}`, from: ch.subclass, label, level: null, count, lists });
+  });
+  return out;
+}
+
+// Listas de las que la clase puede preparar conjuros (el bardo suma otras con Secretos mágicos).
+export function spellLists(ch, cast = castingOf(ch)) {
+  if (!cast?.caster) return [];
+  const extra = cast.extra_lists && (ch.level || 1) >= cast.extra_lists[0] ? cast.extra_lists[1] : [];
+  return [cast.spell_list || cast.name, ...extra];
+}
+
+// Recurso que deja lanzar un conjuro sin espacio («Castigo divino (gratis)», «Mapa estelar (saeta guía gratis)»…).
+export const freeUseFor = (ch, spell) => (ch.resources || []).find((r) => /gratis/i.test(r.name) && norm(r.name).includes(norm(spell.name)) && (r.used || 0) < r.max) || null;
 
 // Ataques que la ficha calcula sola: los de la especie (aliento dracónico, peñas del jentil) y el golpe sin armas del monje.
 export function derivedAttacks(ch) {
@@ -215,21 +280,42 @@ export function pendingChoices(ch) {
   if (masteries > 0) out.push(plural(masteries, 'maestría con armas', 'maestrías con armas'));
   const expertise = (cls?.expertise || []).filter(([l]) => level >= l).reduce((s, [, n]) => s + n, 0) - Object.values(ch.skills || {}).filter((v) => v === 2).length;
   if (expertise > 0) out.push(`Pericia en ${plural(expertise, 'habilidad', 'habilidades')} (◆)`);
-  if (cls?.caster) {
-    const own = new Set(speciesSpells(ch));
-    const spells = (ch.spellList || []).filter((n) => !own.has(n)).map((n) => REF.spells.find((s) => s.name === n)).filter(Boolean);
-    const extra = ['Taumaturgo', 'Naturalista'].includes(ch.classChoice) ? 1 : 0;
-    const cantrips = (cls.cantrips?.[level - 1] || 0) + extra - spells.filter((s) => !s.level).length;
-    const prepared = (cls.prepared?.[level - 1] || 0) - spells.filter((s) => s.level).length;
-    if (cantrips > 0) out.push(plural(cantrips, 'truco', 'trucos'));
-    if (prepared > 0) out.push(plural(prepared, 'conjuro preparado', 'conjuros preparados'));
+  const counts = spellCounts(ch);
+  if (counts) {
+    if (counts.cantrips.max > counts.cantrips.have) out.push(plural(counts.cantrips.max - counts.cantrips.have, 'truco', 'trucos'));
+    if (counts.prepared.max > counts.prepared.have) out.push(plural(counts.prepared.max - counts.prepared.have, 'conjuro preparado', 'conjuros preparados'));
+    counts.arcanum.forEach((n) => out.push(`Arcanum místico de nivel ${n}`));
   }
+  for (const choice of spellChoices(ch)) {
+    const left = choice.count - (ch.spellPicks?.[choice.key] || []).length;
+    if (left > 0) out.push(`${choice.label} (${choice.from}): ${left}`);
+  }
+  const opt = cls?.subclass_spell_options?.[ch.subclass];
+  if (opt && !ch.subclassOption) out.push(`${opt.label} de ${ch.subclass}`);
   const armor = REF?.armor.find((a) => a.name === ch.armor);
   if (armor && ch.type === 'jugador') {
     if (armor.str && (ch.abilities?.fue || 0) < armor.str) out.push(`⚠ ${armor.name}: con FUE menor de ${armor.str} tu velocidad baja 3 m`);
     if (ch.armorTraining?.length && !ch.armorTraining.includes(armor.category)) out.push(`⚠ Sin entrenamiento con armadura ${armor.category}: desventaja en FUE y DES y no puedes lanzar conjuros`);
   }
   return out;
+}
+
+// Trucos y conjuros preparados de la clase: cuántos puede tener y cuántos tiene (los que da la ficha sola no cuentan).
+// El brujo prepara de nivel 1 a 5; sus arcanos místicos (6-9) van aparte.
+export function spellCounts(ch) {
+  const cast = castingOf(ch);
+  if (!cast?.caster) return null;
+  const level = ch.level || 1;
+  const granted = new Set(grantedSpells(ch).map((g) => g.name));
+  const spells = (ch.spellList || []).filter((n) => !granted.has(n)).map((n) => REF.spells.find((s) => s.name === n)).filter(Boolean);
+  const extra = ['Taumaturgo', 'Naturalista'].includes(ch.classChoice) ? 1 : 0;
+  const pact = cast.caster === 'pact';
+  const arcanum = pact ? [[11, 6], [13, 7], [15, 8], [17, 9]].filter(([l, n]) => level >= l && !spells.some((s) => s.level === n)).map(([, n]) => n) : [];
+  return {
+    cantrips: { max: (cast.cantrips?.[level - 1] || 0) + extra, have: spells.filter((s) => !s.level).length },
+    prepared: { max: cast.prepared?.[level - 1] || 0, have: spells.filter((s) => s.level && !(pact && s.level > 5)).length },
+    arcanum,
+  };
 }
 
 // ------------------------------------------------------------------ armas
@@ -343,6 +429,24 @@ export function longRest(ch) {
   (ch.slots || []).forEach((s) => { s.used = 0; });
   (ch.resources || []).forEach((r) => { r.used = 0; });
   if (speciesOf(ch)?.id === 'humano') ch.inspiration = true; // Ingenioso
+  return rechargeItems(ch);
+}
+
+// Al amanecer los objetos mágicos recuperan cargas (1d6+1 una varita, por ejemplo). Devuelve qué recuperó cada uno.
+const rollExpr = (expr) => String(expr).split('+').reduce((s, t) => {
+  if (!t.includes('d')) return s + (Number(t) || 0);
+  const [n, d] = t.split('d').map(Number);
+  return s + Array.from({ length: n || 1 }, () => 1 + Math.floor(Math.random() * d)).reduce((a, b) => a + b, 0);
+}, 0);
+export function rechargeItems(ch) {
+  const out = [];
+  for (const it of ch.inventory || []) {
+    if (!it.charges || !it.used || !it.regain) continue;
+    const back = it.regain === 'todas' ? it.used : Math.min(it.used, rollExpr(it.regain));
+    it.used -= back;
+    out.push(`${it.name}: +${back} ${back === 1 ? 'carga' : 'cargas'}`);
+  }
+  return out;
 }
 
 // Descanso corto: recursos de descanso corto (algunos solo recuperan un uso) y la magia del pacto.

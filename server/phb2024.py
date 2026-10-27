@@ -7,7 +7,7 @@ Las distancias van en metros y las monedas usan las abreviaturas de 2024 (pp = p
 import json
 from pathlib import Path
 
-from . import euskal, mct, mct_classes
+from . import euskal, mct, mct_classes, spellcasting
 from .features2024 import CHOICES, COMMON, EXPERTISE, FEATURES, STYLE_LEVEL, SUBCLASS_PICK, SUBCLASSES, UNARMORED
 
 # Datos de los conjuros (sin su texto) sacados del PDF con tools/extract_spells.py
@@ -560,6 +560,8 @@ FEATS = [
     ("Don del viaje dimensional", _B, "Nivel 19+", 211, "+1 (máx. 30); te teletransportas 9 m tras atacar o lanzar un conjuro."),
 ]
 FEATS = [{"name": n, "category": c, "prereq": p, "page": pg, "summary": s} for n, c, p, pg, s in FEATS]
+# conjuros siempre preparados, usos gratis, lanzadores de un tercio, dotes y cargas de objetos (server/spellcasting.py)
+spellcasting.enrich(CLASSES, SUBCLASSES, FEATS, MAGIC_ITEMS, SPELLS)
 
 # ------------------------------------------------------------------ equipo
 MASTERIES = [
@@ -768,7 +770,7 @@ def data() -> dict:
         "hp_fixed": HP_FIXED,
         "alignments": ALIGNMENTS,
         "languages": LANGUAGES,
-        "slots": {"full": FULL_SLOTS, "half": HALF_SLOTS, "pact": PACT_SLOTS},
+        "slots": {"full": FULL_SLOTS, "half": HALF_SLOTS, "pact": PACT_SLOTS, "third": spellcasting.THIRD_SLOTS},
         "xp_budget": XP_BUDGET,
         "spells": SPELLS,
         "magic_items": MAGIC_ITEMS,

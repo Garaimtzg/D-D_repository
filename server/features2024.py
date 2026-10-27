@@ -266,7 +266,7 @@ SUBCLASSES = {
             [6, "Fulgor protector mejorado", "Fulgor protector vuelve en descanso corto y el protegido gana 2d6 + SAB PG temporales."],
             [17, "Halo de luz", "Acción de magia, 1 minuto: luz solar de 18 m y los enemigos en ella tienen desventaja contra tu Resplandor y tus conjuros de fuego o radiantes. SAB veces por descanso largo."]],
         "Dominio de la vida": [
-            [3, "Conjuros del dominio de la vida", "Siempre preparados: ayuda, bendición, curar heridas, restablecimiento menor (y más en niveles 5, 7 y 9)."],
+            [3, "Conjuros del dominio de la vida", "Siempre preparados: auxilio, bendición, curar heridas, restablecimiento menor (y más en niveles 5, 7 y 9)."],
             [3, "Discípulo de la vida", "Tus conjuros de curación con espacio curan 2 + el nivel del espacio extra."],
             [3, "Preservar vida", "Canalizar divinidad: repartes 5 × tu nivel en PG entre criaturas maltrechas a 9 m (sin pasar de la mitad de su máximo)."],
             [6, "Sanador bendito", "Al curar a otros con un espacio, tú recuperas 2 + el nivel del espacio."],
@@ -381,7 +381,7 @@ SUBCLASSES = {
             [14, "Alas de dragón", "Acción adicional: vuelo 18 m durante 1 hora. 1 vez por descanso largo o 3 puntos."],
             [18, "Compañero dragón", "Invocar dragón sin componentes, 1 gratis por descanso largo y sin concentración (1 minuto)."]],
         "Hechicería mecánica": [
-            [3, "Conjuros mecánicos", "Siempre preparados: ayuda, alarma, protección contra el bien y el mal (y más)."],
+            [3, "Conjuros mecánicos", "Siempre preparados: auxilio, alarma, protección contra el bien y el mal (y más)."],
             [3, "Restablecer equilibrio", "Reacción: una tirada a 18 m no tiene ventaja ni desventaja. CAR veces por descanso largo."],
             [6, "Bastión de la ley", "Gastas 1-5 puntos: escudo de tantos d8 que reduce el daño que recibe una criatura a 9 m."],
             [14, "Trance de orden", "Acción adicional, 1 minuto: nadie tiene ventaja contra ti y un 9 o menos en tus d20 cuenta como 10. 1 vez por descanso largo o 5 puntos."],
@@ -453,7 +453,7 @@ SUBCLASSES = {
             [15, "Defensa gloriosa", "Reacción: sumas CAR a la CA de alguien a 3 m contra un ataque y, si falla, atacas al atacante. CAR veces por descanso largo."],
             [20, "Leyenda viviente", "Acción adicional, 10 minutos: ventaja en pruebas de CAR, conviertes un ataque fallado en acierto 1 vez por turno y repites salvaciones fallidas. 1 vez por descanso largo o con un espacio de nivel 5."]],
         "Juramento de los antiguos": [
-            [3, "Conjuros del juramento de los antiguos", "Siempre preparados: golpe atrapador, hablar con los animales (y más en niveles 5, 9, 13 y 17)."],
+            [3, "Conjuros del juramento de los antiguos", "Siempre preparados: golpe apresador, hablar con los animales (y más en niveles 5, 9, 13 y 17)."],
             [3, "Ira de la naturaleza", "Canalizar divinidad: las criaturas que elijas a 4,5 m salvan FUE o quedan apresadas 1 minuto."],
             [7, "Aura de salvaguarda", "Resistencia a necrótico, psíquico y radiante dentro de tu Aura de protección."],
             [15, "Centinela imperecedero", "Si caes a 0 PG, te quedas a 1 y recuperas 3 × tu nivel (1 vez por descanso largo). No envejeces por magia."],

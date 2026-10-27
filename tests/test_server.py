@@ -160,6 +160,35 @@ class SpellTests(unittest.TestCase):
             self.assertTrue(0 <= s["level"] <= 9 and s["time"] and s["range"] and s["duration"], s["name"])
             self.assertLessEqual(set(s["classes"]), classes, s["name"])
             self.assertTrue(239 <= s["page"] <= 343, s["name"])
+            self.assertTrue(20 <= len(s["summary"]) <= 300, s["name"])  # descripción básica (resumen propio)
+        self.assertTrue(spells["Detectar magia"]["ritual"] and not spells["Bola de fuego"]["ritual"])
+        self.assertIn("Apariencia", spells)
+
+    def test_spells_the_sheet_grants(self):
+        from server import phb2024, spellcasting
+        names = {s["name"] for s in phb2024.SPELLS}
+        rows = [r for c in phb2024.CLASSES for r in c["class_spells"] + [x for v in c["subclass_spells"].values() for x in v]]
+        rows += [r for v in spellcasting.LAND_SPELLS.values() for r in v]
+        for lvl, spells in rows:
+            self.assertTrue(1 <= lvl <= 20 and spells)
+            self.assertLessEqual(set(spells), names)
+        for g in spellcasting.FEAT_GRANTS.values():
+            self.assertLessEqual({n for n, _ in g.get("spells", [])}, names)
+        self.assertEqual(set(spellcasting.ALIASES_2014.values()) - names, set())
+        feats = {f["name"] for f in phb2024.FEATS}
+        self.assertLessEqual(set(spellcasting.FEAT_GRANTS), feats)
+        cleric = next(c for c in phb2024.CLASSES if c["id"] == "clerigo")
+        self.assertIn([3, ["Auxilio", "Bendición", "Curar heridas", "Restablecimiento menor"]], cleric["subclass_spells"]["Dominio de la vida"])
+        self.assertTrue(cleric["subclass_spells"]["Dominio de la forja"])  # del MCT, leídos de su rasgo
+        fighter = next(c for c in phb2024.CLASSES if c["id"] == "guerrero")
+        ek = fighter["subclass_casting"]["Caballero arcano"]
+        self.assertEqual((ek["caster"], len(ek["cantrips"]), len(ek["prepared"])), ("third", 20, 20))
+        self.assertEqual(len(spellcasting.THIRD_SLOTS), 20)
+        subs = {s for c in phb2024.CLASSES for s in c["subclasses"]}
+        self.assertLessEqual(set(spellcasting.SUBCLASS_RESOURCES) | set(spellcasting.SUBCLASS_SPELLS), subs)
+        items = {m["name"]: m for m in phb2024.MAGIC_ITEMS}
+        self.assertLessEqual(set(spellcasting.ITEM_CHARGES), set(items))
+        self.assertEqual((items["Varita de bolas de fuego"]["charges"], items["Varita de bolas de fuego"]["regain"]), (7, "1d6+1"))
 
 
 class BestiaryTests(unittest.TestCase):
