@@ -108,7 +108,7 @@ async function mount(root) {
     if (show('personajes') && bgs.length) {
       blocks.push(panel('Trasfondos', 'scroll', '', h('table', { class: 'ref-table' },
         h('thead', {}, h('tr', {}, ['Trasfondo', 'Características', 'Dote', 'Habilidades'].map((t) => h('th', {}, t)))),
-        h('tbody', {}, bgs.map((b) => h('tr', {}, h('td', {}, h('b', {}, b.name), ' ', page(b.page)), h('td', {}, b.abilities.map((k) => ABILITY_SHORT[k]).join(' ')),
+        h('tbody', {}, bgs.map((b) => h('tr', {}, h('td', { 'data-tip': b.summary || null }, h('b', {}, b.name), ' ', page(b.page || b.origin)), h('td', {}, b.abilities.map((k) => ABILITY_SHORT[k]).join(' ')),
           h('td', {}, b.feat), h('td', {}, b.skills.map(skillName).join(', '))))))));
     }
     const feats = ref.feats.filter((f) => match(f.name, f.summary, f.category));

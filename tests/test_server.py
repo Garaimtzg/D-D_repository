@@ -325,8 +325,17 @@ class MctTests(unittest.TestCase):
              "resources": [{"name": "Raíces", "uses": "pb", "reset": "siempre"}]},
             {"id": "c1", "kind": "class", "name": "Tamborilero", "hit_die": 7, "caster": "half", "spell_ability": "car", "cantrips": 2,
              "features": [{"level": 1, "name": "Ritmo", "text": "x"}], "subclasses": [{"name": "Bombo", "features": [{"level": 3, "name": "Golpe", "text": "y"}]}]},
+            {"id": "b1", "kind": "background", "name": "Pastor", "abilities": ["sab", "con", "sab", "fue", "car"], "feat": "Inventada",
+             "skills": ["trato_animales", "supervivencia", "sigilo"], "equipment": "Cayado\n2 Mantas\n\n", "gold": 900},
             {"kind": "class"}, "basura"])
-        sp, cl = ref["species"][-1], ref["classes"][-1]
+        sp, cl, bg = ref["species"][-1], ref["classes"][-1], ref["backgrounds"][-1]
+        self.assertEqual((bg["id"], bg["abilities"], bg["feat"], bg["skills"]), ("hb-b1", ["fue", "con", "sab"], "Habilidoso", ["trato_animales", "supervivencia"]))
+        self.assertEqual((bg["kit"], bg["kit_gold"]), ({"items": [[1, "Cayado"], [2, "Mantas"]], "gold": 50}, 50))
+        from server import phb2024
+        self.assertEqual(len(phb2024.BACKGROUNDS), 16)  # los 16 trasfondos del Manual del Jugador 2024
+        feats = {f["name"] for f in phb2024.FEATS}
+        for b in phb2024.BACKGROUNDS:
+            self.assertIn(b["feat"].split(" (")[0], feats, b["name"])
         self.assertEqual((sp["id"], sp["size"], sp["speed"], sp["traits"][0][0]), ("hb-s1", "Mediano", 9, "Tipo de criatura"))
         self.assertEqual((sp["spells"], sp["skill_choice"], sp["resources"][0][2]), ([[3, "Piel robliza", 1]], ["naturaleza"], "largo"))
         self.assertEqual((cl["id"], cl["hit_die"], cl["caster"]), ("hb-c1", 8, "half"))

@@ -37,6 +37,8 @@ const SPECIES_GROUPS = [
   ['Personalizadas', 'Creadas en esta mesa: pulsa «Nueva especie» para crear la tuya.'],
 ];
 const groupOf = (s) => s.group || (s.page ? 'Manual del Jugador (2024)' : 'De Euskal Herria');
+// Altura orientativa según el tamaño (las especies de 2024 dan solo el tamaño)
+const SIZE_HINT = { 'Pequeño': '0,6-1,2 m', 'Mediano': '1,2-2,1 m', 'Grande': '2,4-3 m' };
 const COLORS = ['#5b9cff', '#4cc38a', '#e2b456', '#a77bff', '#e0524a', '#ff8a3d', '#2bb3b3', '#e0527f', '#c9d1d9', '#8b5e3c'];
 // Alternativas al estilo de combate que dan el paladín y el explorador
 const STYLE_EXTRA = { paladin: ['Guerrero bendito', 'Dos trucos de clérigo (por ejemplo guía y llama sagrada).'], explorador: ['Guerrero druídico', 'Dos trucos de druida (por ejemplo guía y voluta estelar).'] };
@@ -48,6 +50,7 @@ export async function openCreator({ onCreate }) {
     languages: ['Común'], method: 'estandar', assign: blank(''), points: blank(8), rolled: [], rolledAssign: blank(''),
     bgMode: '2-1', plus2: '', plus1: '', name: '', player: '', alignment: 'Neutral bueno', level: 1, subclass: '', style: '', asi: {},
     kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)], spells: [], picks: {},
+    height: '', weight: '', appearance: '', personality: '',
   };
   const cls = () => R.classes.find((c) => c.id === st.classId);
   const bg = () => R.backgrounds.find((b) => b.id === st.backgroundId);
@@ -124,6 +127,7 @@ export async function openCreator({ onCreate }) {
     R = await reloadReference();
     const id = saved === 'deleted' ? '' : `hb-${saved.id}`;
     if (kind === 'species') Object.assign(st, { speciesId: id, lineage: '', speciesSkills: [], size: R.species.find((s) => s.id === id)?.size.split(' o ')[0] || '' });
+    else if (kind === 'background') Object.assign(st, { backgroundId: id, plus2: '', plus1: '', bgKit: 0 });
     else Object.assign(st, { classId: id, classSkills: [], subclass: '', classChoice: '', style: '', asi: {}, kit: 0 });
     render();
   }
@@ -252,8 +256,13 @@ export async function openCreator({ onCreate }) {
         class: `cr-card ${k.id === st.backgroundId ? 'sel' : ''}`, type: 'button',
         onclick: (e) => { st.backgroundId = k.id; st.plus2 = ''; st.plus1 = ''; sfx.click(); choose(e); },
       }, h('b', {}, k.name), h('span', { class: 'cr-tags' }, k.abilities.map((a) => h('span', { class: 'chip' }, ABILITY_SHORT[a]))),
-      h('span', { class: 'tiny' }, `Dote: ${k.feat}`), h('span', { class: 'tiny muted' }, k.skills.map(skillName).join(' · '))))),
-      b && h('div', { class: 'cr-note' }, `${b.name} (${source(b)}): competencias en ${b.skills.map(skillName).join(' y ')}, ${b.tool.toLowerCase()} y la dote ${b.feat}.`),
+      h('span', { class: 'tiny' }, `Dote: ${k.feat}`), h('span', { class: 'tiny muted' }, k.skills.map(skillName).join(' · ')),
+      k.homebrew_id && h('span', { class: 'tiny gold' }, 'Propio'))),
+      h('button', { class: 'cr-card cr-new', type: 'button', onclick: () => homebrew('background') }, h('span', { class: 'cr-emoji' }, '➕'), h('b', {}, 'Nuevo trasfondo'),
+        h('span', { class: 'tiny muted' }, 'Crea el tuyo'))),
+      b && h('div', { class: 'cr-note row between' },
+        h('span', {}, b.summary ? `${b.summary} ` : '', `${b.name} (${source(b)}): competencias en ${b.skills.map(skillName).join(' y ')}, ${b.tool.toLowerCase()} y la dote ${b.feat}.`),
+        b.homebrew_id && h('button', { class: 'btn xs', type: 'button', onclick: async () => homebrew('background', await homebrewDoc('background', b)) }, icon('edit', 13), 'Editar')),
       c && st.classSkills.length < c.skills.choose && h('div', { class: 'panel cr-detail' },
         h('div', { class: 'eyebrow', style: { marginTop: 0 } }, `Tu trasfondo ya te da alguna habilidad de clase: elige ${c.skills.choose - st.classSkills.length} más`),
         skillPicker(c.skills.from, st.classSkills, c.skills.choose, b?.skills || [])),
@@ -393,6 +402,7 @@ export async function openCreator({ onCreate }) {
     const b = bg();
     const nameIn = h('input', { value: st.name, placeholder: 'Nombre del personaje', oninput: (e) => { st.name = e.target.value; hint.textContent = problem(3); } });
     const playerIn = h('input', { value: st.player, placeholder: 'Quién lo juega', oninput: (e) => { st.player = e.target.value; } });
+    const text = (key, attrs) => h(attrs.rows ? 'textarea' : 'input', { value: st[key], oninput: (e) => { st[key] = e.target.value; }, ...attrs });
     const styles = c?.style_level && st.level >= c.style_level
       ? [...R.feats.filter((f) => f.category === 'estilo de combate').map((f) => [f.name, f.summary]), ...(STYLE_EXTRA[c.id] ? [STYLE_EXTRA[c.id]] : [])] : [];
     const letters = 'ABC';
@@ -400,6 +410,13 @@ export async function openCreator({ onCreate }) {
       h('p', { class: 'cr-intro' }, 'Ponle nombre, elige su alineamiento, con qué nivel empieza y su equipo.'),
       h('div', { class: 'grid cols-2' },
         h('label', { class: 'field' }, 'Nombre', nameIn), h('label', { class: 'field' }, 'Jugador/a', playerIn)),
+      h('div', { class: 'eyebrow' }, 'Aspecto y personalidad (opcional)'),
+      h('div', { class: 'grid cols-2' },
+        h('label', { class: 'field' }, 'Altura', text('height', { placeholder: SIZE_HINT[st.size || sp()?.size.split(' o ')[0]] || '1,70 m' })),
+        h('label', { class: 'field' }, 'Peso', text('weight', { placeholder: '70 kg' }))),
+      h('div', { class: 'grid cols-2' },
+        h('label', { class: 'field' }, 'Descripción física', text('appearance', { rows: 3, placeholder: 'Edad, ojos, pelo, piel, cicatrices, cómo viste…' })),
+        h('label', { class: 'field' }, 'Personalidad', text('personality', { rows: 3, placeholder: 'Cómo es, qué valora, a qué o quién se debe, sus defectos…' }))),
       h('div', { class: 'eyebrow' }, 'Alineamiento'),
       h('div', { class: 'cr-align' }, R.alignments.map((a) => option(st.alignment === a, () => { st.alignment = a; }, a))),
       h('div', { class: 'grid cols-2' },
@@ -475,6 +492,7 @@ export async function openCreator({ onCreate }) {
     const effects = c.choice?.options.find(([n]) => n === st.classChoice)?.[2] || {};
     const ch = newCharacter('jugador', {
       name: st.name.trim(), player: st.player.trim(), color: st.color, alignment: st.alignment,
+      height: st.height.trim(), weight: st.weight.trim(), appearance: st.appearance.trim(), personality: st.personality.trim(),
       classId: c.id, cls: c.name, subclass: st.level >= subLevel(c) ? st.subclass : '', classChoice: st.classChoice, level: st.level, xp: R.level_xp[st.level - 1],
       speciesId: s.id, race: s.name, lineage: st.lineage, size: st.size || s.size.split(' o ')[0],
       backgroundId: b.id, background: b.name,

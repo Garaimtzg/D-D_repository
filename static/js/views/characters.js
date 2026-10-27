@@ -297,6 +297,7 @@ async function mount(root, [selId]) {
       c.autoSlots = !!cls.caster;
       c.weaponTraining = [...cls.weapon_training];
       c.armorTraining = [...cls.armor_training];
+      if (c.type !== 'enemigo') { const diff = maxHpFor(c) - c.maxHp; c.maxHp += diff; c.hp = Math.max(0, Math.min(c.maxHp, c.hp + diff)); }
       syncClassData(c);
       toast(h('div', {}, h('b', {}, cls.name), h('div', { class: 'small' }, `${cls.summary} Dado de golpe d${cls.hit_die}. (${source(cls)})`)), { iconName: 'book', ms: 6000 });
     }
@@ -326,7 +327,7 @@ async function mount(root, [selId]) {
       bg.skills.forEach((k) => { c.skills[k] = Math.max(1, c.skills[k] || 0); });
       if (!c.feats.includes(bg.feat)) { c.feats.push(bg.feat); featChanged(c, bg.feat, 1); }
       toast(h('div', {}, h('b', {}, bg.name), h('div', { class: 'small' },
-        `Dote ${bg.feat} y competencia en ${bg.skills.map((k) => ref.skills.find((s) => s.key === k)?.name).join(' y ')}. Sus características (+2/+1 o +1/+1/+1): ${bg.abilities.map((k) => ABILITY_SHORT[k]).join(', ')}. (MdJ p. ${bg.page})`)),
+        `Dote ${bg.feat} y competencia en ${bg.skills.map((k) => ref.skills.find((s) => s.key === k)?.name).join(' y ')}. Sus características (+2/+1 o +1/+1/+1): ${bg.abilities.map((k) => ABILITY_SHORT[k]).join(', ')}. (${source(bg)})`)),
       { iconName: 'book', ms: 7000 });
     }
     save(c); refresh();
@@ -589,13 +590,33 @@ async function mount(root, [selId]) {
   }
 
   function abilitiesCol(c) {
+    const before = { ...c.abilities };
     return h('div', { class: 'abil-col' }, ABILITY_KEYS.map((k) => {
       const name = ref.abilities.find((a) => a.key === k).name;
       return h('div', { class: 'abil' },
         h('span', { class: 'abil-name' }, name),
         h('button', { class: 'abil-mod', type: 'button', 'data-tip': `Prueba de ${name}`, onclick: () => test(c, mod(c.abilities[k]), `Prueba de ${name}`, state.attackMode) }, fmtMod(mod(c.abilities[k]))),
-        bind(c.abilities, k, { type: 'number', class: 'abil-score', min: 1, max: 30, onChange: () => save(c), onCommit: refresh, 'aria-label': `Puntuación de ${name}` }));
+        bind(c.abilities, k, { type: 'number', class: 'abil-score', min: 1, max: 30, onChange: () => save(c), onCommit: () => abilityChanged(c, k, before[k]), 'aria-label': `Puntuación de ${name}` }));
     }));
+  }
+
+  // Al cambiar una característica (MdJ 2024): la CON cambia los PG máximos como si siempre hubiera sido así (por cada
+  // nivel), la DES la CA (con el límite de la armadura) y todos los ataques con armas, los recursos y la CD.
+  function abilityChanged(c, k, before) {
+    const old = { ...c, abilities: { ...c.abilities, [k]: before } };
+    if (k === 'con' && c.type !== 'enemigo') {
+      const diff = classOf(c) ? maxHpFor(c) - maxHpFor(old) : (mod(c.abilities.con) - mod(before)) * (c.level || 1);
+      c.maxHp = Math.max(1, (c.maxHp || 0) + diff);
+      c.hp = Math.max(0, Math.min(c.maxHp, (c.hp || 0) + diff));
+    }
+    if (c.acMode !== 'auto' && c.type !== 'enemigo') c.ac = (Number(c.ac) || 0) + computeAC(c) - computeAC(old); // la CA a mano sigue a la DES
+    for (const a of c.attacks) {
+      const w = a.weapon && ref.weapons.find((x) => x.name === a.weapon);
+      if (w) Object.assign(a, weaponAttack(c, w));
+    }
+    syncClassData(c);
+    save(c);
+    refresh();
   }
 
   function profRow(active, marks, onToggle, bonus, label, onRoll, extra) {
@@ -635,6 +656,17 @@ async function mount(root, [selId]) {
       sbox('Sabiduría (Percepción) pasiva', h('b', { class: 'big-num' }, passivePerception(c))));
   }
 
+  // Cómo salen los PG máximos con los valores fijos del manual: nivel 1, dado de golpe + CON; cada nivel más, valor fijo + CON (mínimo 1).
+  function hpTip(c) {
+    const cls = classOf(c);
+    if (!cls || c.type === 'enemigo') return null;
+    const con = mod(c.abilities.con);
+    const level = c.level || 1;
+    const per = Math.max(1, ref.hp_fixed[cls.hit_die] + con);
+    const extra = maxHpFor(c) - (cls.hit_die + con + (level - 1) * per);
+    return `PG según el manual: ${cls.hit_die} ${fmtMod(con)} CON en el nivel 1${level > 1 ? ` + ${level - 1} × ${per} (${ref.hp_fixed[cls.hit_die]} ${fmtMod(con)} CON)` : ''}${extra ? ` + ${extra} de especie, dotes o subclase` : ''} = ${maxHpFor(c)}`;
+  }
+
   function combatCol(c) {
     const autoAc = c.acMode === 'auto';
     if (autoAc) c.ac = computeAC(c);
@@ -668,7 +700,7 @@ async function mount(root, [selId]) {
       h('div', { class: 'hp-top' },
         h('div', { class: 'hp-cur' }, num(c, 'hp', { class: 'hp-input', onCommit: refresh, 'aria-label': 'PG actuales' }), h('span', { class: 'sbox-label' }, 'PG actuales')),
         h('div', { class: 'hp-sep' }, '/'),
-        h('div', { class: 'hp-max' }, num(c, 'maxHp', { onCommit: refresh, 'aria-label': 'PG máximos' }),
+        h('div', { class: 'hp-max', 'data-tip': hpTip(c) }, num(c, 'maxHp', { onCommit: refresh, 'aria-label': 'PG máximos' }),
           h('span', { class: 'sbox-label' }, 'Máximo',
             c.type === 'jugador' && classOf(c) && maxHpFor(c) !== c.maxHp && h('button', { class: 'mini-link', type: 'button', 'data-tip': `Recalcular con los valores fijos del manual: ${maxHpFor(c)}`,
               onclick: () => { const diff = maxHpFor(c) - c.maxHp; c.maxHp += diff; c.hp = Math.max(0, Math.min(c.maxHp, c.hp + Math.max(0, diff))); save(c); refresh(); } }, '↻'))),
@@ -1076,6 +1108,13 @@ async function mount(root, [selId]) {
         h('div', { class: 'row' },
           field('Idiomas', bind(c, 'languages', { onChange: () => save(c) }), 'grow'),
           field('Herramientas', bind(c, 'tools', { onChange: () => save(c) }), 'grow'))),
+      c.type !== 'enemigo' && section('Aspecto y personalidad', 'user',
+        h('div', { class: 'row' },
+          field('Altura', bind(c, 'height', { onChange: () => save(c), placeholder: '1,70 m' }), 'grow'),
+          field('Peso', bind(c, 'weight', { onChange: () => save(c), placeholder: '70 kg' }), 'grow'),
+          field('Tamaño', h('div', { class: 'static-val' }, c.size || '—'), 'grow')),
+        field('Descripción física', bind(c, 'appearance', { type: 'textarea', rows: 4, onChange: () => save(c), placeholder: 'Edad, ojos, pelo, piel, cicatrices, cómo viste, cómo se mueve…' })),
+        field('Personalidad', bind(c, 'personality', { type: 'textarea', rows: 4, onChange: () => save(c), placeholder: 'Cómo es, qué valora, a qué o quién se debe, sus defectos y manías…' }))),
       section(c.type === 'jugador' ? 'Historia y notas' : 'Notas del máster', 'feather',
         bind(c, 'notes', { type: 'textarea', rows: 8, onChange: () => save(c), placeholder: c.type === 'jugador' ? 'Trasfondo, aliados, objetivos…' : 'Secretos, motivaciones, tácticas…' })),
     ];

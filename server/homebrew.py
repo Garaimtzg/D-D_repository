@@ -1,4 +1,4 @@
-"""Especies y clases propias (colección «homebrew»).
+"""Especies, clases y trasfondos propios (colección «homebrew»).
 
 Se guardan tal cual las escribe el editor y aquí se convierten a la misma forma que las del Manual del Jugador
 (phb2024), así el creador de personajes, la ficha y la subida de nivel las usan sin casos especiales. Todo lo que
@@ -134,8 +134,35 @@ def klass(doc: dict) -> dict:
     }
 
 
+# Dotes de origen que puede dar un trasfondo (Iniciado en la magia con su lista, como en el manual)
+ORIGIN_FEATS = [f["name"] for f in phb2024.FEATS if f["category"] == "origen" and f["name"] != "Iniciado en la magia"] +     [f"Iniciado en la magia ({lst})" for lst in ("clérigo", "druida", "mago")]
+
+
+def background(doc: dict) -> dict:
+    """Trasfondo propio con la misma forma que los de 2024: tres características, una dote de origen, dos habilidades,
+    una herramienta y el equipo (o 50 po)."""
+    abilities = list(dict.fromkeys(a for a in _list(doc.get("abilities")) if a in ABILITIES))[:3]
+    abilities += [a for a in ABILITIES if a not in abilities][:3 - len(abilities)]
+    skills = list(dict.fromkeys(_skills(doc.get("skills"))))[:2]
+    items = []
+    for line in str(doc.get("equipment") or "").splitlines()[:20]:
+        qty, _, name = line.strip().partition(" ")
+        if qty.isdigit() and name.strip():
+            items.append([min(int(qty), 99), _txt(name, 80)])
+        elif line.strip():
+            items.append([1, _txt(line, 80)])
+    return {
+        "id": f"hb-{doc['id']}", "homebrew_id": doc["id"], "name": _txt(doc.get("name"), 60) or "Trasfondo sin nombre",
+        "origin": "Personalizado", "summary": _txt(doc.get("summary"), 300),
+        "abilities": [a for a in ABILITIES if a in abilities],
+        "feat": doc.get("feat") if doc.get("feat") in ORIGIN_FEATS else "Habilidoso",
+        "skills": skills, "tool": _txt(doc.get("tool"), 80) or "Una herramienta a elegir",
+        "kit": {"items": items, "gold": _num(doc.get("gold"), 0, 50, 0)}, "kit_gold": 50,
+    }
+
+
 def merge(reference: dict, docs: list) -> dict:
-    """Añade a la referencia las especies y clases propias guardadas."""
+    """Añade a la referencia las especies, clases y trasfondos propios guardados."""
     for doc in docs:
         if not isinstance(doc, dict) or "id" not in doc:
             continue
@@ -143,4 +170,6 @@ def merge(reference: dict, docs: list) -> dict:
             reference["species"].append(species(doc))
         elif doc.get("kind") == "class":
             reference["classes"].append(klass(doc))
+        elif doc.get("kind") == "background":
+            reference["backgrounds"].append(background(doc))
     return reference

@@ -1,5 +1,5 @@
-// Especies y clases propias: un editor para cada una que guarda en la colección «homebrew». El servidor
-// las convierte a la misma forma que las del manual (server/homebrew.py), así el creador y la ficha las usan igual.
+// Especies, clases y trasfondos propios: un editor para cada uno que guarda en la colección «homebrew». El servidor
+// los convierte a la misma forma que los del manual (server/homebrew.py), así el creador y la ficha los usan igual.
 import { api } from '../core/api.js';
 import { h, clear, icon, bind, field, selectEl, modal, confirmDialog, toast, toastError } from '../core/dom.js';
 import { ABILITY_KEYS, ABILITY_SHORT } from '../core/dnd.js';
@@ -42,20 +42,23 @@ const resourceRow = (row, abilityUses = false) => [bind(row, 'name', { placehold
 
 // Abre el editor. Devuelve el documento guardado, 'deleted' o null si se cancela.
 export async function editHomebrew(kind, R, existing = null) {
-  const doc = structuredClone(existing || (kind === 'species'
-    ? { kind, name: '', summary: '', creature: 'Humanoide', size: 'Mediano', speed: 9, darkvision: 0, natural_ac: 0, hp_per_level: false,
-        traits: [{ name: '', text: '' }], skills: [], skill_count: 0, skill_choice: [], tool: '', spells: [], resources: [] }
-    : { kind, name: '', summary: '', hit_die: 8, primary: ['fue'], saves: ['fue', 'con'], skills_choose: 2, skills_from: [], armor_training: ['ligera'],
-        weapon_training: ['sencilla'], tools: '', masteries: 0, gold: 100, caster: '', spell_ability: 'int', spell_list: '', cantrips: 0, asi: true,
-        features: [{ level: 1, name: '', text: '' }], resources: [], subclass_level: 3, subclasses: [] }));
+  const blank = {
+    species: { kind, name: '', summary: '', creature: 'Humanoide', size: 'Mediano', speed: 9, darkvision: 0, natural_ac: 0, hp_per_level: false,
+      traits: [{ name: '', text: '' }], skills: [], skill_count: 0, skill_choice: [], tool: '', spells: [], resources: [] },
+    class: { kind, name: '', summary: '', hit_die: 8, primary: ['fue'], saves: ['fue', 'con'], skills_choose: 2, skills_from: [], armor_training: ['ligera'],
+      weapon_training: ['sencilla'], tools: '', masteries: 0, gold: 100, caster: '', spell_ability: 'int', spell_list: '', cantrips: 0, asi: true,
+      features: [{ level: 1, name: '', text: '' }], resources: [], subclass_level: 3, subclasses: [] },
+    background: { kind, name: '', summary: '', abilities: [], feat: 'Habilidoso', skills: [], tool: '', equipment: '', gold: 0 },
+  };
+  const doc = structuredClone(existing || blank[kind]);
   const skillOpts = R.skills.map((k) => [k.key, k.name]);
   const abilOpts = ABILITY_KEYS.map((k) => [k, ABILITY_SHORT[k]]);
-  const body = kind === 'species' ? speciesForm(doc, R, skillOpts) : classForm(doc, R, skillOpts, abilOpts);
+  const body = kind === 'species' ? speciesForm(doc, R, skillOpts) : kind === 'class' ? classForm(doc, R, skillOpts, abilOpts) : backgroundForm(doc, R, skillOpts, abilOpts);
   const actions = [{ label: 'Cancelar', value: null },
     ...(existing ? [{ label: 'Eliminar', value: 'delete', class: 'danger', icon: 'trash' }] : []),
     { label: 'Guardar', value: 'save', class: 'primary', icon: 'check' }];
-  const choice = await modal(kind === 'species' ? (existing ? 'Editar especie' : 'Nueva especie') : (existing ? 'Editar clase' : 'Nueva clase'),
-    body, actions, { wide: true, iconName: 'sparkle' });
+  const what = { species: 'especie', class: 'clase', background: 'trasfondo' }[kind];
+  const choice = await modal(`${existing ? 'Editar' : kind === 'background' ? 'Nuevo' : 'Nueva'} ${what}`, body, actions, { wide: true, iconName: 'sparkle' });
   if (choice === 'delete') {
     if (!(await confirmDialog(`Se eliminará «${existing.name}». Las fichas que la usen se quedan con su nombre pero sin sus rasgos.`))) return null;
     await api.remove('homebrew', existing.id).catch(toastError);
@@ -65,7 +68,7 @@ export async function editHomebrew(kind, R, existing = null) {
   if (!doc.name.trim()) { toast('Ponle un nombre.', { kind: 'error' }); return null; }
   try {
     const saved = existing ? await api.update('homebrew', doc) : await api.create('homebrew', doc);
-    toast(`«${saved.name}» guardada: ya aparece al crear personajes.`, { kind: 'good', iconName: 'sparkle' });
+    toast(`«${saved.name}» ${kind === 'background' ? 'guardado' : 'guardada'}: ya aparece al crear personajes.`, { kind: 'good', iconName: 'sparkle' });
     return saved;
   } catch (e) { toastError(e); return null; }
 }
@@ -143,4 +146,26 @@ function classForm(doc, R, skillOpts, abilOpts) {
     h('div', { class: 'row wrap' }, h('div', { class: 'eyebrow grow' }, 'Subclases'),
       field('Se elige en el nivel', selectEl(LEVELS, doc.subclass_level, (v) => { doc.subclass_level = Number(v); }))),
     subBox);
+}
+
+// Trasfondo propio con la forma de los de 2024: tres características, una dote de origen, dos habilidades,
+// una herramienta y su equipo (la otra opción del creador siempre son 50 po).
+function backgroundForm(doc, R, skillOpts, abilOpts) {
+  const feats = [...R.feats.filter((f) => f.category === 'origen' && f.name !== 'Iniciado en la magia').map((f) => f.name),
+    ...['clérigo', 'druida', 'mago'].map((l) => `Iniciado en la magia (${l})`)];
+  const featInfo = h('p', { class: 'tiny muted', style: { margin: 0 } });
+  const showFeat = () => { featInfo.textContent = R.feats.find((f) => doc.feat.startsWith(f.name))?.summary || ''; };
+  showFeat();
+  return h('div', { class: 'stack hb-form' },
+    h('p', { class: 'small muted', style: { margin: 0 } }, 'Como los de 2024: tres características (el creador reparte +2 y +1 o +1 a las tres), una dote de origen, dos habilidades, una herramienta y equipo por unas 50 po; quien lo elija puede tomar 50 po en su lugar.'),
+    h('div', { class: 'row wrap' },
+      field('Nombre', bind(doc, 'name', { placeholder: 'Pastor, contrabandista, monje del monasterio…' }), 'grow'),
+      field('Herramienta', bind(doc, 'tool', { placeholder: 'Útiles de herborista, un instrumento…' }), 'grow')),
+    field('Resumen', bind(doc, 'summary', { placeholder: 'En una línea: qué hacía antes de la aventura' })),
+    h('div', { class: 'eyebrow' }, 'Características (elige 3)'), chips(abilOpts, doc.abilities, { max: 3 }),
+    field('Dote de origen', selectEl(feats, doc.feat, (v) => { doc.feat = v; showFeat(); })), featInfo,
+    h('div', { class: 'eyebrow' }, 'Habilidades (elige 2)'), chips(skillOpts, doc.skills, { max: 2 }),
+    h('div', { class: 'row wrap' },
+      field('Equipo (uno por línea; «2 Dagas» para varios)', bind(doc, 'equipment', { type: 'textarea', rows: 4, placeholder: 'Cayado\n2 Mantas\nRopas de viaje' }), 'grow'),
+      field('Oro además del equipo', bind(doc, 'gold', { type: 'number', min: 0, max: 50 }))));
 }
