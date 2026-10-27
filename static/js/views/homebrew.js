@@ -87,6 +87,7 @@ function speciesForm(doc, R, skillOpts) {
       field('Visión en la oscuridad', selectEl([[0, 'No'], [18, '18 m'], [36, '36 m']], doc.darkvision, (v) => { doc.darkvision = Number(v); })),
       field('CA natural (0 = no)', bind(doc, 'natural_ac', { type: 'number', min: 0, max: 20, 'data-tip': 'CA sin armadura = este valor + DES' })),
       h('label', { class: 'check small' }, bind(doc, 'hp_per_level', { type: 'checkbox' }), '+1 PG por nivel'),
+      h('label', { class: 'check small', 'data-tip': 'Como la Constitución poderosa del goliat' }, bind(doc, 'carry_bigger', { type: 'checkbox' }), 'Un tamaño más para la carga'),
       field('Herramienta', bind(doc, 'tool', { placeholder: 'Opcional' }))),
     h('div', { class: 'eyebrow' }, 'Rasgos'),
     rows(doc.traits, featureRowNoLevel, () => ({ name: '', text: '' }), 'Añadir rasgo'),

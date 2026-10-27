@@ -12,7 +12,7 @@ import {
   newCharacter, migrateCharacter, fromMonster, applyDamage, applyHealing, longRest, shortRest, combatantFrom,
   classOf, speciesOf, backgroundOf, computeAC, maxHpFor, slotsFor, classResources, featuresUpTo, masteryCount, columnAt, weaponAttack, weaponProficient,
   source, grantResources, derivedAttacks, pendingChoices, featAbilities, castingOf, subclassResourceNames, grantedSpells, spellChoices,
-  spellLists, spellCounts, freeUseFor, featGrants, featBonus,
+  spellLists, spellCounts, freeUseFor, featGrants, featBonus, carryCapacity, fmtKg,
 } from '../core/dnd.js';
 import { openCreator } from './creator.js';
 import { spellTip, spellMeta, spellCard, pickSpells } from './spellui.js';
@@ -1033,6 +1033,7 @@ async function mount(root, [selId]) {
     return section('Inventario', 'coins',
       h('div', { class: 'coins' }, COINS.map(([k, l, col]) => h('label', { class: 'coin', 'data-tip': l },
         h('span', { class: 'coin-face', style: { '--coin': col } }, k.toUpperCase()), bind(c.coins, k, { type: 'number', min: 0, onChange: () => save(c), 'aria-label': l })))),
+      carryBox(c),
       h('ul', { class: 'items' }, c.inventory.map((it, i) => h('li', { class: it.magic ? 'magic' : '' },
         bind(it, 'qty', { type: 'number', class: 'inline mini', min: 0, onChange: () => save(c), 'aria-label': 'Cantidad' }),
         bind(it, 'name', { class: 'grow', onChange: () => save(c), placeholder: 'Objeto', 'aria-label': 'Objeto', 'data-tip': it.magic ? it.notes : null }),
@@ -1053,6 +1054,19 @@ async function mount(root, [selId]) {
         [['Common', 'Comunes'], ['Uncommon', 'Poco comunes'], ['Rare', 'Raros'], ['Very Rare', 'Muy raros'], ['Legendary', 'Legendarios'], ['Rarity Varies', 'Rareza variable'], ['Artifact', 'Artefactos']]
           .map(([k, l]) => h('optgroup', { label: l }, ref.magic_items.filter((m) => m.rarityKey === k).map((m) => h('option', { value: m.name }, `${m.name}${m.attune != null ? ' (S)' : ''}`))))),
         (() => { const n = c.inventory.filter((it) => it.attuned).length; return n > 0 && h('span', { class: `chip ${n > 3 ? 'bad' : ''}`, 'data-tip': 'Objetos sintonizados (máximo 3)' }, `Sintonía ${n}/3`); })()));
+  }
+
+  // Capacidad de carga según la FUE y el tamaño, y el peso que lleva (a mano) con lo que supone según el manual.
+  function carryBox(c) {
+    const { carry, push, bigger } = carryCapacity(c);
+    const load = Number(c.carried) || 0;
+    const status = !load ? '' : load <= carry ? 'ok' : load <= push ? 'slow' : 'over';
+    return h('div', { class: `carry-box ${status}` },
+      sbox('Carga máxima', h('b', { class: 'big-num' }, fmtKg(carry)), `FUE ${c.abilities.fue} × ${fmtKg(carry / (c.abilities.fue || 1))} (${c.size || 'Mediano'}${bigger ? ', cuenta un tamaño más' : ''}). MdJ p. 362`),
+      sbox('Arrastrar, levantar o empujar', h('b', { class: 'big-num' }, fmtKg(push)), 'El doble de la carga máxima'),
+      sbox('Lleva (kg)', bind(c, 'carried', { type: 'number', min: 0, step: 0.5, class: 'inline', onChange: () => save(c), onCommit: refresh, 'aria-label': 'Peso que lleva en kilos' }), 'Peso del equipo y lo que transporta'),
+      status === 'slow' && h('p', { class: 'tiny carry-note' }, 'Pesa más de lo que puede llevar: solo puede arrastrarlo, levantarlo o empujarlo, y su velocidad no pasa de 1,5 m.'),
+      status === 'over' && h('p', { class: 'tiny carry-note' }, 'Pesa más del doble de su carga máxima: no puede moverlo.'));
   }
 
   // Cargas de un objeto mágico: gemas (o un contador si son muchas). Se recuperan al amanecer con el descanso largo.

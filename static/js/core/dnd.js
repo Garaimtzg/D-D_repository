@@ -101,6 +101,18 @@ export function computeAC(ch) {
   return ac;
 }
 
+// Capacidad de carga (MdJ p. 362): FUE × 7,5 kg para Pequeño o Mediano, la mitad para Diminuto y el doble por cada
+// tamaño por encima; arrastrar, levantar o empujar, el doble de eso. Constitución poderosa y parecidos cuentan un tamaño más.
+const CARRY_SIZES = ['Diminuto', 'Pequeño', 'Mediano', 'Grande', 'Enorme', 'Gargantuesco'];
+const CARRY_KG = [3.75, 7.5, 7.5, 15, 30, 60];
+export function carryCapacity(ch) {
+  const size = CARRY_SIZES.indexOf(ch.size);
+  const i = Math.min(CARRY_SIZES.length - 1, (size < 0 ? 2 : size) + (speciesOf(ch)?.carry_bigger ? 1 : 0));
+  const carry = (Number(ch.abilities?.fue) || 0) * CARRY_KG[i];
+  return { carry, push: carry * 2, bigger: !!speciesOf(ch)?.carry_bigger };
+}
+export const fmtKg = (kg) => `${String(Math.round((Number(kg) || 0) * 100) / 100).replace('.', ',')} kg`;
+
 // PG máximos con los valores fijos por nivel del manual (o la media si se prefiere no tirar).
 export function maxHpFor(ch, level = ch.level || 1) {
   const cls = classOf(ch);

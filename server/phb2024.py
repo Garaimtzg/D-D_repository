@@ -324,6 +324,8 @@ for _spell in SPELLS:
         _spell["classes"] = [*_spell["classes"], "Artificiero"]
 
 HP_FIXED = {12: 7, 10: 6, 8: 5, 6: 4}  # PG por nivel en vez de tirar (MdJ p. 42)
+# Especies que cuentan como una categoría de tamaño mayor para la carga (Constitución poderosa y parecidos)
+CARRY_BIGGER = {"goliat", "osgo", "centauro", "firbolg", "loxodon", "jentil"}
 
 # ------------------------------------------------------------------ especies
 SPECIES = [
@@ -701,6 +703,8 @@ ACTIONS = [
 ]
 
 QUICK_RULES = [
+    ("Capacidad de carga", "Puedes llevar FUE × 7,5 kg (Pequeño o Mediano) y arrastrar, levantar o empujar el doble. Diminuto: la mitad; "
+     "Grande ×2, Enorme ×4, Gargantuesco ×8. Si arrastras, levantas o empujas más de lo que puedes llevar, tu velocidad no pasa de 1,5 m. (MdJ p. 362)"),
     ("Clases de dificultad", "5 muy fácil · 10 fácil · 15 media · 20 difícil · 25 muy difícil · 30 casi imposible."),
     ("Ventaja y desventaja", "Tira 2d20 y quédate con el mayor o el menor. No se acumulan y una anula a la otra."),
     ("Inspiración heroica", "Gástala para repetir cualquier dado justo después de tirarlo. No se acumula: si ya la tienes, puedes dársela a otro jugador."),
@@ -752,7 +756,7 @@ def data() -> dict:
         "abilities": ABILITIES,
         "skills": [{"key": k, "name": n, "ability": a} for k, n, a in SKILLS],
         "classes": [_class_data(c) for c in CLASSES],
-        "species": SPECIES + mct.SPECIES + euskal.SPECIES,
+        "species": [{**s, "carry_bigger": True} if s["id"] in CARRY_BIGGER else s for s in SPECIES + mct.SPECIES + euskal.SPECIES],
         "backgrounds": [{**b, "kit": _kit(BACKGROUND_KITS[b["id"]]), "kit_gold": 50} for b in BACKGROUNDS],
         "feats": FEATS,
         "weapons": WEAPONS,

@@ -73,6 +73,8 @@ def species(doc: dict) -> dict:
         out["natural_ac"] = _num(doc.get("natural_ac"), 10, 20, 13)
     if doc.get("hp_per_level"):
         out["hp_per_level"] = 1
+    if doc.get("carry_bigger"):
+        out["carry_bigger"] = True
     return out
 
 

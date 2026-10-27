@@ -369,6 +369,11 @@ input.mini { width: 54px; padding: 4px; }
 .parchment .chip.src { text-transform: none; letter-spacing: 0; color: #5b3a07; background: rgba(226, 180, 86, .35); border-color: rgba(176, 124, 30, .5); }
 .spell-choice { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1.5px dashed rgba(110, 36, 20, .45); border-radius: 9px; }
 .big-num.over { color: #b3261e; }
+.carry-box { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.carry-box .sbox { flex: 1 1 90px; }
+.carry-box .big-num { font-size: 1.05rem; }
+.carry-box.slow .sbox:last-of-type, .carry-box.over .sbox:last-of-type { box-shadow: inset 0 0 0 2px #b3261e; }
+.carry-note { flex-basis: 100%; margin: 0; color: #8a1f17; font-weight: 600; }
 /* carta y buscador de conjuros (ventanas) */
 .spell-summary { margin: 0; font-size: 1rem; line-height: 1.45; }
 .spell-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 14px; margin: 0; }

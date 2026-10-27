@@ -332,6 +332,9 @@ class MctTests(unittest.TestCase):
         self.assertEqual((bg["id"], bg["abilities"], bg["feat"], bg["skills"]), ("hb-b1", ["fue", "con", "sab"], "Habilidoso", ["trato_animales", "supervivencia"]))
         self.assertEqual((bg["kit"], bg["kit_gold"]), ({"items": [[1, "Cayado"], [2, "Mantas"]], "gold": 50}, 50))
         from server import phb2024
+        bigger = {s["id"] for s in ref["species"] if s.get("carry_bigger")}  # cuentan un tamaño más para la carga
+        self.assertTrue({"goliat", "firbolg", "osgo"} <= bigger and "humano" not in bigger)
+        self.assertIn("Capacidad de carga", {r["name"] for r in ref["rules"]})
         self.assertEqual(len(phb2024.BACKGROUNDS), 16)  # los 16 trasfondos del Manual del Jugador 2024
         feats = {f["name"] for f in phb2024.FEATS}
         for b in phb2024.BACKGROUNDS:
