@@ -12,10 +12,15 @@ Todo se guarda en local, en la carpeta `data/`.
 
 1. Instala Python 3.10 o posterior desde [python.org](https://www.python.org/downloads/)
    (en Windows, marca **«Add python.exe to PATH»**).
-2. **Windows:** doble clic en `Iniciar Mesa DnD.bat`. **macOS / Linux:** `sh iniciar.sh`.
+2. **Windows:** doble clic en **`Mesa DnD.vbs`**: se abre el navegador y la mesa funciona por detrás, sin ventana.
+   Para cerrarla, `Cerrar Mesa DnD.bat` (o apaga el ordenador; lo guardado no se pierde).
+   Si prefieres ver la ventana con los mensajes, `Iniciar Mesa DnD.bat` (la mesa se cierra al cerrar la ventana).
+   **macOS / Linux:** `sh iniciar.sh`.
 
-Se abre el navegador en `http://localhost:8000` (si el puerto está ocupado, usa el siguiente libre).
-Para cerrar la mesa, cierra la ventana negra de la consola.
+Se abre el navegador en `http://localhost:8000` (si el puerto está ocupado, usa el siguiente libre). Si la mesa ya estaba
+abierta, volver a arrancarla solo abre el navegador. Sin ventana, los mensajes quedan en `data/mesa.log`.
+Para que arranque sola al encender el ordenador, copia `Mesa DnD.vbs` en la carpeta de Inicio de Windows
+(Win + R y escribe `shell:startup`).
 
 ## Cómo se juega
 
@@ -141,7 +146,8 @@ Las fuentes decorativas se cargan de Google Fonts; sin internet se usan las del 
 
 ```
 app.py                     arranque
-Iniciar Mesa DnD.bat       arranque con doble clic en Windows (iniciar.sh en macOS / Linux)
+Mesa DnD.vbs               arranque sin ventana en Windows (Cerrar Mesa DnD.bat la cierra)
+Iniciar Mesa DnD.bat       arranque con la ventana de mensajes en Windows (iniciar.sh en macOS / Linux)
 server/                    servidor HTTP, API JSON, almacén, copias .zip, dados, reglas, generadores, bestiario
   phb2024.py               datos del Manual del Jugador 2024 (clases, especies, trasfondos, dotes, equipo inicial…)
   features2024.py          qué hace cada rasgo de clase y de subclase (resúmenes propios)

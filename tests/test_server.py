@@ -545,6 +545,15 @@ class ApiTests(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, e.read()
 
+    def test_second_launch_finds_the_open_table(self):
+        import socket
+        import app
+        self.assertTrue(app.running_mesa(self.server.server_address[1]))
+        with socket.socket() as s:  # un puerto libre: ahí no hay ninguna mesa
+            s.bind(("127.0.0.1", 0))
+            free = s.getsockname()[1]
+        self.assertFalse(app.running_mesa(free))
+
     def json_call(self, *args, **kw):
         status, data = self.call(*args, **kw)
         return status, json.loads(data)
