@@ -80,6 +80,15 @@
 .tk-hp { display: flex; flex-direction: column; gap: 4px; }
 .tk-hp .temp { color: #9ccfff; }
 
+/* volver al mapa padre */
+.board-back {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 4; display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 999px; font: 700 .85rem var(--font); color: #f6ecd3; cursor: pointer;
+  background: rgba(8, 6, 4, .72); border: 1px solid rgba(255, 212, 121, .45); backdrop-filter: blur(6px);
+}
+.board-back:hover, .board-back:focus-visible { background: rgba(40, 28, 12, .9); border-color: #ffd479; }
+.board-back[hidden] { display: none; }
+
 /* reloj y narración */
 .board-clock {
   position: absolute; top: 12px; left: 12px; z-index: 4; display: flex; align-items: center; gap: 8px;

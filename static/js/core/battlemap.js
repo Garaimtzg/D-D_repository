@@ -990,6 +990,47 @@ export function sceneThumb(sc, cat, maxW = 320, maxH = 200) {
   return cv;
 }
 
+// Imagen grande de un escenario para descargar (imprimir o usar en otra mesa virtual): terreno, objetos y luz con
+// `px` píxeles por casilla y, si se pide, las letras y números de las casillas en el borde. Sin `dm` no salen los
+// objetos ocultos (trampas, puertas secretas). Si no cabe en el lienzo del navegador, baja los píxeles por casilla.
+export const MAX_IMAGE_PX = 60e6;
+export const imagePx = (sc, px) => Math.max(8, Math.min(px, Math.floor(16000 / Math.max(sc.cols, sc.rows) / 1.1),
+  Math.floor(Math.sqrt(MAX_IMAGE_PX / ((sc.cols + 1) * (sc.rows + 1))))));
+export async function sceneImage(sc, cat, { px = 150, dm = false, labels = true } = {}) {
+  const s = imagePx(sc, px);
+  const m = labels ? Math.round(s * 0.5) : 0; // margen para las coordenadas
+  const W = sc.cols * s; const H = sc.rows * s;
+  const cv = document.createElement('canvas');
+  cv.width = W + 2 * m;
+  cv.height = H + 2 * m;
+  const ctx = cv.getContext('2d');
+  const bg = sc.bg ? await new Promise((ok) => { const img = new Image(); img.onload = () => ok(img); img.onerror = () => ok(null); img.src = sc.bg; }) : null;
+  if (labels) {
+    ctx.fillStyle = '#1b140d';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = '#f1e4c6';
+    ctx.font = `700 ${Math.round(s * 0.26)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let c = 0; c < sc.cols; c++) for (const y of [m / 2, m + H + m / 2]) ctx.fillText(colName(c), m + c * s + s / 2, y);
+    for (let r = 0; r < sc.rows; r++) for (const x of [m / 2, m + W + m / 2]) ctx.fillText(String(r + 1), x, m + r * s + s / 2);
+  }
+  ctx.translate(m, m);
+  drawScene(ctx, sc, cat, { s, dm, bg });
+  // la luz es un degradado suave: se calcula a un cuarto de tamaño y se estira, como en el tablero
+  const q = s / 4;
+  const lc = document.createElement('canvas');
+  const gc = document.createElement('canvas');
+  lc.width = gc.width = Math.ceil(sc.cols * q);
+  lc.height = gc.height = Math.ceil(sc.rows * q);
+  drawLight(lc.getContext('2d'), gc.getContext('2d'), sc, cat, q);
+  ctx.drawImage(lc, 0, 0, W, H);
+  ctx.globalCompositeOperation = 'screen';
+  ctx.drawImage(gc, 0, 0, W, H);
+  ctx.globalCompositeOperation = 'source-over';
+  return cv;
+}
+
 // ================================================================ reglas del tablero
 // Coste de entrar en cada casilla: 1, 2 (terreno difícil) o Infinity (muro, abismo, lava, objeto que bloquea).
 // Con «open» (las puertas abiertas), las puertas cerradas tampoco se pueden cruzar.

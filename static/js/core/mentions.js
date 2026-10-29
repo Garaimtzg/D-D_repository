@@ -7,6 +7,14 @@ export const MENTION = /@\[([^\]\n]+)\]/g;
 // El mapa de un lugar del compendio: el elegido en su entrada o, si no, un mapa que se llame igual.
 export const placeMap = (entry, maps) => entry && (maps.find((m) => m.id === entry.map)
   || maps.find((m) => m.name.localeCompare(entry.name, 'es', { sensitivity: 'base' }) === 0)) || null;
+// A qué mapa lleva una chincheta: otro mapa o el mapa de un lugar del compendio.
+export function pinTarget(p, maps, wiki = []) {
+  const [kind, id] = String(p.link || '').split(':');
+  if (kind === 'map') return maps.find((m) => m.id === id) || null;
+  return kind === 'wiki' ? placeMap(wiki.find((e) => e.id === id), maps) : null;
+}
+// El mapa del que cuelga un submapa: el que tiene una chincheta que lleva a él.
+export const parentMap = (m, maps, wiki = []) => (m && maps.find((x) => x !== m && (x.pins || []).some((p) => pinTarget(p, maps, wiki) === m))) || null;
 const KIND_ICON = { wiki: '📖', char: '👤', map: '🗺️', quest: '📌' };
 
 // Todo lo que se puede enlazar y adónde lleva.

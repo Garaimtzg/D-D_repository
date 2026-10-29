@@ -14,7 +14,7 @@ import { sfx } from '../core/sfx.js';
 import { roll, onRoll, describe } from '../core/dice.js';
 import { createBattleMap } from '../core/battlemap.js';
 import { nightDialog, announceNight } from './night.js';
-import { placeMap } from '../core/mentions.js';
+import { placeMap, parentMap } from '../core/mentions.js';
 import { groupCheck, partyScreen } from '../core/party.js';
 import { calendarOf, worldDate, moonOf } from '../core/calendar.js';
 import { loadScenes, findScene, ensureBoard, boardTokens, autoPlace, placeNear } from '../core/board.js';
@@ -38,6 +38,7 @@ async function mount(root) {
     map: maps.find((m) => m.id === (settings.tableMap || settings.shownMap)) || null,
     who: prefs.get('mesa.who', ''), mode: '', mod: 0, player: false, view: prefs.get('mesa.view', 'tablero'),
     draw: null, pen: prefs.get('mesa.pen', '#e0524a'), // dibujo a mano alzada sobre el mapa: 'pen', 'erase' o nada
+    trail: [], // mapas de los que se entró por una chincheta, para volver por el mismo camino
   };
   const view = { scale: 1, x: 0, y: 0 };
   const cleanups = [];
@@ -59,9 +60,10 @@ async function mount(root) {
   const emptyEl = h('div', { class: 'board-empty' });
   const narration = h('div', { class: 'narration' });
   const clockEl = h('div', { class: 'board-clock' });
+  const backBtn = h('button', { class: 'board-back', type: 'button', hidden: true, onclick: () => goBack() });
   const popEl = h('div', { class: 'tk-pop', hidden: true });
   const weatherCv = h('canvas', { class: 'board-weather', 'aria-hidden': 'true' });
-  const board = h('div', { class: 'board', 'data-dice-area': '' }, layer, weatherCv, emptyEl, clockEl, narration, popEl);
+  const board = h('div', { class: 'board', 'data-dice-area': '' }, layer, weatherCv, emptyEl, clockEl, backBtn, narration, popEl);
   const weather = createWeather(weatherCv, { onLightning: () => setTimeout(() => sfx.thunder(), 250 + Math.random() * 1400) });
   // sonidos de ambiente que acompañan a cada clima
   const WEATHER_SOUND = { lluvia: ['lluvia'], tormenta: ['lluvia', 'viento'], nieve: ['viento'], niebla: ['viento'], brasas: ['hoguera'] };
@@ -207,7 +209,26 @@ async function mount(root) {
   }
 
   // ------------------------------------------------------------------ barra superior
+  // Volver al mapa padre: por el camino de chinchetas por el que se entró o, si no, al mapa que tiene una chincheta
+  // hacia este. El botón está sobre el tablero, también en el modo jugadores.
+  const upMap = () => {
+    const back = state.trail.at(-1);
+    return back && back !== state.map && state.maps.includes(back) ? back : parentMap(state.map, state.maps, wiki);
+  };
+  function renderBack() {
+    const up = !inBattle() && upMap();
+    backBtn.hidden = !up;
+    if (up) clear(backBtn, icon('back', 15), `Volver a «${up.name}»`);
+  }
+  function goBack() {
+    const up = upMap();
+    if (!up) return;
+    if (state.trail.at(-1) === up) state.trail.pop();
+    setMap(up, 'back');
+  }
+
   function renderBar() {
+    renderBack();
     const mapSel = selectEl([['', '— Sin mapa —'], ...state.maps.map((m) => [m.id, m.name])], state.map?.id || '', (id) => setMap(state.maps.find((m) => m.id === id) || null),
       { 'aria-label': 'Mapa sobre la mesa', class: 'map-select' });
     const sizeInput = h('input', { type: 'range', min: 12, max: 260, value: tokenSize(), 'aria-label': 'Tamaño de las fichas',
@@ -276,7 +297,7 @@ async function mount(root) {
           // la Mesa no se abandona: un mapa (o el mapa del lugar del compendio) se pone en el tablero, también en el
           // modo jugadores. Si no lleva a otro mapa, el máster elige a cuál y queda guardado.
           const goTo = kind === 'map' ? target : kind === 'wiki' ? placeMap(target, state.maps) : null;
-          if (goTo && goTo !== m) return setMap(goTo);
+          if (goTo && goTo !== m) return setMap(goTo, 'enter');
           if (state.player) return;
           if (kind === 'char' && target) {
             return toast(h('span', {}, h('b', {}, target.name), ' ', h('button', { class: 'btn xs', type: 'button', onclick: () => { location.hash = `#/personajes/${id}`; } }, 'Abrir la ficha')), { iconName: 'pin' });
@@ -313,7 +334,7 @@ async function mount(root) {
     if (!dest) return;
     try {
       if (entry) { entry.map = dest.id; await api.update('wiki', entry); } else { p.link = `map:${dest.id}`; await api.update('maps', m); }
-      if (state.map !== dest) await setMap(dest);
+      if (state.map !== dest) await setMap(dest, 'enter');
       toast(`«${name}» ya lleva a «${dest.name}».`, { kind: 'good', iconName: 'pin' });
     } catch (err) { toastError(err); }
   }
@@ -332,7 +353,10 @@ async function mount(root) {
   document.addEventListener('keydown', onKey);
   cleanups.push(() => { document.removeEventListener('fullscreenchange', onFs); document.removeEventListener('keydown', onKey); document.body.classList.remove('player-mode'); });
 
-  async function setMap(m) {
+  // how: 'enter' (por una chincheta: se recuerda de dónde se vino), 'back' (volviendo) o nada (elegido arriba).
+  async function setMap(m, how = '') {
+    if (how === 'enter' && state.map) state.trail.push(state.map);
+    else if (how !== 'back') state.trail = [];
     state.map = m;
     if (m) sfx.unroll();
     state.settings = await api.saveSettings({ tableMap: m ? m.id : null }).catch((e) => { toastError(e); return state.settings; });
@@ -497,7 +521,7 @@ async function mount(root) {
   let stroke = null; // trazo que se está dibujando
   board.addEventListener('pointerdown', (e) => {
     if (inBattle()) return;
-    if (!state.map || e.target.closest('.mtoken, .mpin, .tk-pop, .narration, .board-clock, .board-empty button')) return;
+    if (!state.map || e.target.closest('.mtoken, .mpin, .tk-pop, .narration, .board-clock, .board-back, .board-empty button')) return;
     if (e.shiftKey) { ping(e); return; }
     if (state.draw === 'erase' && e.target.tagName === 'polyline') {
       state.map.drawings.splice(Number(e.target.dataset.i), 1);

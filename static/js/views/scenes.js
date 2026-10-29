@@ -3,7 +3,7 @@
 // marcar las zonas de inicio, cambiar la luz o usar una imagen de fondo.
 import { api, debounced } from '../core/api.js';
 import { h, clear, icon, field, selectEl, segmented, modal, confirmDialog, toast, toastError, pickFiles, fmtDate } from '../core/dom.js';
-import { createBattleMap, sceneCatalog, sceneThumb, drawScene, blankScene, resizeScene, fmtMeters } from '../core/battlemap.js';
+import { createBattleMap, sceneCatalog, sceneThumb, drawScene, blankScene, resizeScene, fmtMeters, sceneImage, imagePx } from '../core/battlemap.js';
 import { autoPlace, ensureBoard } from '../core/board.js';
 import { newCombat } from '../core/combat.js';
 import { sfx } from '../core/sfx.js';
@@ -185,6 +185,44 @@ async function mount(root, [sceneId]) {
     else if (v === 'use') useInCombat(sc);
   }
 
+  // Descargar el escenario como una imagen grande (PNG) para imprimirlo o usarlo en otra mesa virtual.
+  async function downloadDialog(sc) {
+    const st = { px: 150, dm: false, labels: true };
+    const info = h('p', { class: 'small muted', style: { margin: 0 } });
+    const update = () => {
+      const s = imagePx(sc, st.px);
+      const m = st.labels ? Math.round(s * 0.5) : 0;
+      info.textContent = `Saldrá de ${sc.cols * s + 2 * m} × ${sc.rows * s + 2 * m} píxeles (${s} por casilla)`
+        + (s < st.px ? '; el escenario es tan grande que se reduce para que el navegador pueda crearla.' : '.')
+        + (s === 300 ? ' Impresa a 300 ppp, cada casilla mide 2,54 cm, el tamaño de las miniaturas.' : '');
+    };
+    const body = h('div', { class: 'stack' },
+      field('Calidad', segmented([[96, 'Pantalla'], [150, 'Alta'], [300, 'Para imprimir']], st.px, (v) => { st.px = v; update(); })),
+      field('Versión', segmented([[false, 'Para los jugadores'], [true, 'Del máster']], st.dm, (v) => { st.dm = v; })),
+      h('p', { class: 'tiny muted', style: { margin: 0 } }, 'La del máster incluye lo oculto (trampas y puertas secretas); la de los jugadores, no.'),
+      h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: st.labels, onchange: (e) => { st.labels = e.target.checked; update(); } }),
+        'Letras y números de las casillas en el borde (A1, B2…)'),
+      info);
+    update();
+    const ok = await modal(`Descargar «${sc.name}»`, body,
+      [{ label: 'Cancelar', value: false }, { label: 'Descargar PNG', value: true, class: 'primary', icon: 'download' }], { iconName: 'download' });
+    if (!ok) return;
+    try {
+      const cv = await sceneImage(sc, cat, st);
+      const blob = await new Promise((done) => cv.toBlob(done, 'image/png'));
+      if (!blob) throw new Error('El navegador no ha podido crear una imagen tan grande: prueba con menos calidad.');
+      const file = `${sc.name.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Escenario'}${st.dm ? ' (máster)' : ''}.png`;
+      const a = h('a', { href: URL.createObjectURL(blob), download: file });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      toast(`«${file}» descargado (${cv.width} × ${cv.height} px).`, { kind: 'good', iconName: 'download' });
+    } catch (e) { toastError(e); }
+  }
+  const downloadBtn = (sc, cls = 'btn sm icon') => h('button', { class: cls, type: 'button', 'aria-label': 'Descargar imagen', 'data-tip': 'Descargar como imagen de alta resolución',
+    onclick: () => downloadDialog(sc) }, icon('download', 14), !cls.includes('icon') && 'Descargar imagen');
+
   // =================================================================== galería
   function card(sc) {
     const users = state.combats.filter((c) => c.board?.scene === sc.id && c.status !== 'finished').length;
@@ -200,8 +238,10 @@ async function mount(root, [sceneId]) {
           h('button', { class: 'btn sm primary', type: 'button', onclick: () => useInCombat(sc) }, icon('combate', 14), 'Usar en combate'),
           sc.preset
             ? [h('button', { class: 'btn sm', type: 'button', onclick: () => preview(sc) }, icon('eye', 14), 'Ver'),
-              h('button', { class: 'btn sm', type: 'button', onclick: () => duplicate(sc), 'data-tip': 'Haz tu propia versión editable' }, icon('edit', 14), 'Personalizar')]
+              h('button', { class: 'btn sm', type: 'button', onclick: () => duplicate(sc), 'data-tip': 'Haz tu propia versión editable' }, icon('edit', 14), 'Personalizar'),
+              downloadBtn(sc)]
             : [h('a', { class: 'btn sm', href: `#/escenarios/${sc.id}` }, icon('edit', 14), 'Editar'),
+              downloadBtn(sc),
               h('button', { class: 'btn sm icon', type: 'button', 'aria-label': 'Duplicar', 'data-tip': 'Duplicar', onclick: () => duplicate(sc, false) }, icon('copy', 14)),
               h('button', { class: 'btn sm icon ghost', type: 'button', 'aria-label': 'Eliminar', 'data-tip': 'Eliminar', onclick: async () => { if (await remove(sc)) renderGallery(); } }, icon('trash', 14))])));
   }
@@ -325,6 +365,7 @@ async function mount(root, [sceneId]) {
         h('input', { class: 'title-input', value: sc.name, 'aria-label': 'Nombre del escenario', oninput: (e) => { sc.name = e.target.value; save(); } }),
         h('span', { class: 'tiny muted' }, 'Se guarda solo'),
         h('button', { class: 'btn', type: 'button', onclick: () => duplicate(sc, false) }, icon('copy', 15), 'Duplicar'),
+        downloadBtn(sc, 'btn'),
         h('button', { class: 'btn ghost danger', type: 'button', onclick: async () => { if (await remove(sc)) location.hash = '#/escenarios'; } }, icon('trash', 15), 'Eliminar'),
         h('button', { class: 'btn primary', type: 'button', onclick: async () => { if (save.pending) await save.flush(); useInCombat(sc); } }, icon('combate', 15), 'Usar en combate')),
       h('div', { class: 'editor' }, side, stage)));
@@ -352,6 +393,7 @@ async function mount(root, [sceneId]) {
         h('a', { class: 'btn', href: '#/escenarios' }, icon('back', 16), 'Escenarios'),
         h('div', { class: 'grow' }, h('h2', { style: { margin: 0 } }, sc.name), h('div', { class: 'small muted' }, sc.description)),
         h('button', { class: 'btn', type: 'button', onclick: () => duplicate(sc) }, icon('edit', 15), 'Personalizar'),
+        downloadBtn(sc, 'btn'),
         h('button', { class: 'btn primary', type: 'button', onclick: () => useInCombat(sc) }, icon('combate', 15), 'Usar en combate')),
       stage));
     requestAnimationFrame(() => bm.setScene(sc));

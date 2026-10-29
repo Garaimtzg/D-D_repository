@@ -4,7 +4,7 @@
 import { sfx } from '../core/sfx.js';
 import { api, debounced } from '../core/api.js';
 import { h, clear, icon, bind, modal, confirmDialog, toast, toastError, pickFiles, dropZone, fmtDate, selectEl, segmented, field } from '../core/dom.js';
-import { placeMap } from '../core/mentions.js';
+import { placeMap, parentMap } from '../core/mentions.js';
 
 const PIN_ICONS = ['📍', '🏰', '🏠', '🏛️', '⛪', '🍺', '⚔️', '💀', '🐉', '💎', '🗝️', '🌲', '⛰️', '🏕️', '⚓', '🌊', '🕳️', '❓', '⭐', '🔥'];
 const WIKI_ICON = { lugar: '🏰', faccion: '⚜️', objeto: '💎', deidad: '✨', historia: '📜', otro: '📌' };
@@ -130,9 +130,13 @@ async function mount(root, [openId]) {
         save(m);
         draw();
       });
+      const up = trail.length === 1 && parentMap(m, state.maps, state.wiki); // abierto directamente un submapa
       clear(wrap,
         h('div', { class: 'row between pin-bar' },
-          h('div', { class: 'row nowrap crumbs' }, trail.map((x, i) => [i > 0 && h('span', { class: 'muted' }, '›'),
+          h('div', { class: 'row nowrap crumbs' },
+            up && h('button', { class: 'btn xs', type: 'button', 'data-tip': 'Volver al mapa del que cuelga', onclick: () => { trail.splice(0, 1, up); ui.sel = null; sfx.unroll(); draw(); } },
+              icon('back', 13), `Volver a «${up.name}»`),
+            trail.map((x, i) => [i > 0 && h('span', { class: 'muted' }, '›'),
             h('button', { class: 'btn xs ghost', type: 'button', disabled: i === trail.length - 1, onclick: () => { trail.length = i + 1; ui.sel = null; draw(); } }, x.name)])),
           h('div', { class: 'row' },
             segmented([['ver', 'Ver'], ['colocar', '📍 Colocar']], ui.mode, (v) => { ui.mode = v; draw(); }),
