@@ -545,6 +545,21 @@ class ApiTests(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, e.read()
 
+    def test_client_that_leaves_does_not_log_errors(self):
+        import contextlib
+        import socket
+        import struct
+        import time
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            for _ in range(3):  # el navegador corta la conexión sin esperar la respuesta
+                with socket.create_connection(("127.0.0.1", self.server.server_address[1])) as s:
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                    s.sendall(b"GET /api/reference HTTP/1.1\r\nHost: x\r\n\r\n")
+            time.sleep(0.5)
+        self.assertEqual(err.getvalue(), "")
+        self.assertEqual(self.call("GET", "/api/settings")[0], 200)
+
     def test_second_launch_finds_the_open_table(self):
         import socket
         import app

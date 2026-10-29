@@ -3,6 +3,7 @@ import json
 import mimetypes
 import os
 import shutil
+import sys
 import tempfile
 import time
 from functools import partial
@@ -70,6 +71,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(status, data)
         except api.ApiError as e:
             self._json(e.status, {"error": str(e)})
+        except ConnectionError:  # el navegador se fue antes de recibir la respuesta: no hay a quién contestar
+            self.close_connection = True
         except Exception as e:  # noqa: BLE001 - que el servidor no se caiga
             self.log_error("Error en %s %s: %r", method, path, e)
             self._json(500, {"error": "Error interno del servidor"})
@@ -148,6 +151,10 @@ class Server(ThreadingHTTPServer):
     # En Windows SO_REUSEADDR deja que dos servidores compartan puerto sin avisar.
     allow_reuse_address = os.name != "nt"
     daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        if not isinstance(sys.exc_info()[1], ConnectionError):  # un navegador que cierra la conexión no es un error
+            super().handle_error(request, client_address)
 
 
 def make_server(host, port, data_dir=config.DATA_DIR):
