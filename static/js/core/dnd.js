@@ -51,6 +51,11 @@ export const classOf = (ch) => REF?.classes.find((c) => c.id === ch.classId) || 
 export const speciesOf = (ch) => REF?.species.find((s) => s.id === ch.speciesId) || REF?.species.find((s) => norm(s.name) === norm(ch.race)) || null;
 export const backgroundOf = (ch) => REF?.backgrounds.find((b) => b.id === ch.backgroundId) || REF?.backgrounds.find((b) => norm(b.name) === norm(ch.background)) || null;
 export const hasFeat = (ch, name) => (ch.feats || []).some((f) => norm(f).startsWith(norm(name)));
+// Género del personaje: los habituales y «Otro…», que deja escribirlo.
+export const GENDERS = [['', '—'], ['masculino', 'Masculino'], ['femenino', 'Femenino'], ['no binario', 'No binario'], ['otro', 'Otro…']];
+export const genderLabel = (ch) => (ch.gender === 'otro' ? (ch.genderOther || '').trim() : GENDERS.find(([k]) => k && k === ch.gender)?.[1] || '');
+// Datos generales de una especie para la ficha: altura típica y esperanza de vida.
+export const speciesFacts = (sp) => [sp?.height && `Altura: ${sp.height}`, sp?.lifespan && `Esperanza de vida: ${sp.lifespan}`].filter(Boolean).join(' · ');
 // Dónde mirar una regla: la página del manual o el origen del material propio (Euskal Herria).
 export const source = (x) => (x?.page ? `MdJ p. ${x.page}` : x?.origin || '');
 
@@ -372,7 +377,7 @@ export function newCharacter(type = 'jugador', extra = {}) {
     saves: [], skills: {}, feats: [], masteries: [], weaponTraining: [], armorTraining: [], tools: '',
     attacks: [], spellList: [], spellAbility: '', autoSlots: false, slots: Array.from({ length: 9 }, () => ({ max: 0, used: 0 })), spells: '',
     resources: [], inventory: [], coins: { pc: 0, pp: 0, pe: 0, po: 0, ppt: 0 },
-    features: '', notes: '', languages: '', height: '', weight: '', appearance: '', personality: '',
+    features: '', notes: '', languages: '', height: '', weight: '', appearance: '', personality: '', age: '', gender: '', genderOther: '',
     conditions: [], exhaustion: 0, inspiration: false, deathSaves: { ok: 0, ko: 0 },
     look: type === 'enemigo' ? null : randomLook(false), // cara sencilla; los complementos se eligen en la ficha
     ...extra,

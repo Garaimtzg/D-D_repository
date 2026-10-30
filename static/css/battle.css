@@ -43,6 +43,9 @@
   font: 700 12px var(--font); color: #fff; background: rgba(12, 9, 6, .82); padding: 1px 8px; border-radius: 9px;
   border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
 }
+.bm-token.tiny .bm-name { font-size: 9px; padding: 0 5px; max-width: 90px; }
+.bm-token.tiny.shared .bm-name { display: none; } /* varios diminutos en una casilla: el nombre al pasar el ratón o al elegirlo */
+.bm-token.tiny.shared:hover .bm-name, .bm-token.tiny.shared.selected .bm-name { display: block; z-index: 5; }
 .bm-token.jugador .bm-name { border-color: rgba(91, 156, 255, .7); }
 .bm-token.pnj .bm-name { border-color: rgba(226, 180, 86, .7); }
 .bm-token.enemigo .bm-name { border-color: rgba(224, 82, 74, .75); }
@@ -132,6 +135,11 @@
 .swatch:hover { border-color: var(--line-2); }
 .swatch[aria-pressed="true"] { border-color: var(--gold); background: rgba(226, 180, 86, .14); color: var(--gold-2); }
 .ed-group-title { margin: 6px 0 2px; font: 800 .62rem var(--font); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+details.ed-group > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+details.ed-group > summary::-webkit-details-marker { display: none; }
+details.ed-group > summary::before { content: '▸'; transition: transform .15s; }
+details.ed-group[open] > summary::before { transform: rotate(90deg); }
+details.ed-group > summary:hover { color: var(--gold-2); }
 .ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .ed-row .seg button { padding: 4px 10px; }
 .ed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }

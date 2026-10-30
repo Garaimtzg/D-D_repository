@@ -9,6 +9,7 @@ import {
   reference, reloadReference, newCharacter, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, mod, fmtMod, fmtM, maxHpFor, computeAC,
   slotsFor, classResources, featuresUpTo, profBonus, columnAt, source, grantResources, derivedAttacks,
   pendingChoices, weaponAttack, featAbilities, initBonus, castingOf, grantedSpells, spellChoices, spellCounts, spellLists, featBonus,
+  GENDERS, genderLabel, speciesFacts,
 } from '../core/dnd.js';
 import { pickSpells, spellTip } from './spellui.js';
 import { roll } from '../core/dice.js';
@@ -50,7 +51,7 @@ export async function openCreator({ onCreate }) {
     languages: ['Común'], method: 'estandar', assign: blank(''), points: blank(8), rolled: [], rolledAssign: blank(''),
     bgMode: '2-1', plus2: '', plus1: '', name: '', player: '', alignment: 'Neutral bueno', level: 1, subclass: '', style: '', asi: {},
     kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)], spells: [], picks: {},
-    height: '', weight: '', appearance: '', personality: '',
+    height: '', weight: '', appearance: '', personality: '', age: '', gender: '', genderOther: '',
   };
   const cls = () => R.classes.find((c) => c.id === st.classId);
   const bg = () => R.backgrounds.find((b) => b.id === st.backgroundId);
@@ -244,7 +245,7 @@ export async function openCreator({ onCreate }) {
     if (b) st.classSkills = st.classSkills.filter((k) => !b.skills.includes(k));
     const originFeats = R.feats.filter((f) => f.category === 'origen');
     const speciesCard = (k) => h('button', {
-      class: `cr-card ${k.id === st.speciesId ? 'sel' : ''} ${k.page ? '' : 'homebrew'}`, type: 'button',
+      class: `cr-card ${k.id === st.speciesId ? 'sel' : ''} ${k.page ? '' : 'homebrew'}`, type: 'button', 'data-tip': k.lore || k.summary || null,
       onclick: (e) => { if (st.speciesId !== k.id) { Object.assign(st, { speciesId: k.id, lineage: '', speciesSkills: [], humanFeat: '', size: k.size.split(' o ')[0] }); sfx.click(); } choose(e); },
     }, h('span', { class: 'cr-emoji' }, SPECIES_ICON[k.id] || '🧬'), h('b', {}, k.name),
     h('span', { class: 'tiny muted' }, `${k.size} · ${fmtM(k.speed)}${k.darkvision ? ` · visión ${k.darkvision} m` : ''}`));
@@ -279,7 +280,8 @@ export async function openCreator({ onCreate }) {
         h('div', { class: 'panel-head' }, h('h3', {}, SPECIES_ICON[s.id] || '🧬', ' ', s.name),
           h('div', { class: 'actions' }, s.homebrew_id && h('button', { class: 'btn xs', type: 'button', onclick: async () => homebrew('species', await homebrewDoc('species', s)) }, icon('edit', 13), 'Editar'),
             h('span', { class: 'chip' }, source(s)))),
-        s.summary && h('p', { class: 'small' }, s.summary),
+        (s.lore || s.summary) && h('p', { class: 'small' }, s.lore || s.summary),
+        speciesFacts(s) && h('p', { class: 'tiny muted', style: { marginTop: 0 } }, speciesFacts(s)),
         h('ul', { class: 'cr-traits' }, s.traits.map(([n, t]) => h('li', {}, h('b', {}, n), ' — ', t))),
         s.skills?.length > 0 && h('p', { class: 'small' }, h('b', {}, 'Competencias: '), s.skills.map(skillName).join(', ')),
         s.size.includes(' o ') && [h('div', { class: 'eyebrow' }, 'Tamaño'),
@@ -412,6 +414,12 @@ export async function openCreator({ onCreate }) {
         h('label', { class: 'field' }, 'Nombre', nameIn), h('label', { class: 'field' }, 'Jugador/a', playerIn)),
       h('div', { class: 'eyebrow' }, 'Aspecto y personalidad (opcional)'),
       h('div', { class: 'grid cols-2' },
+        h('label', { class: 'field' }, 'Edad', text('age', { placeholder: '25 años' })),
+        h('div', { class: 'field' }, 'Género', h('div', { class: 'row nowrap' },
+          h('select', { 'aria-label': 'Género', onchange: (e) => { st.gender = e.target.value; refresh(); } },
+            GENDERS.map(([k, l]) => h('option', { value: k, selected: st.gender === k }, l))),
+          st.gender === 'otro' && text('genderOther', { placeholder: '¿Cuál?', 'aria-label': 'Otro género' })))),
+      h('div', { class: 'grid cols-2' },
         h('label', { class: 'field' }, 'Altura', text('height', { placeholder: SIZE_HINT[st.size || sp()?.size.split(' o ')[0]] || '1,70 m' })),
         h('label', { class: 'field' }, 'Peso', text('weight', { placeholder: '70 kg' }))),
       h('div', { class: 'grid cols-2' },
@@ -493,6 +501,7 @@ export async function openCreator({ onCreate }) {
     const ch = newCharacter('jugador', {
       name: st.name.trim(), player: st.player.trim(), color: st.color, alignment: st.alignment,
       height: st.height.trim(), weight: st.weight.trim(), appearance: st.appearance.trim(), personality: st.personality.trim(),
+      age: st.age.trim(), gender: st.gender, genderOther: st.gender === 'otro' ? st.genderOther.trim() : '',
       classId: c.id, cls: c.name, subclass: st.level >= subLevel(c) ? st.subclass : '', classChoice: st.classChoice, level: st.level, xp: R.level_xp[st.level - 1],
       speciesId: s.id, race: s.name, lineage: st.lineage, size: st.size || s.size.split(' o ')[0],
       backgroundId: b.id, background: b.name,
@@ -543,7 +552,7 @@ export async function openCreator({ onCreate }) {
       h('div', { class: 'cr-sum-head' },
         h('span', { class: 'cr-avatar', style: { background: ch.color } }, CLASS_ICON[c.id]),
         h('div', {}, h('h2', {}, ch.name),
-          h('div', { class: 'muted' }, `${ch.cls}${ch.subclass ? ` (${ch.subclass})` : ''} de nivel ${ch.level} · ${s.name}${st.lineage ? ` (${st.lineage.split(' (')[0]})` : ''} · ${ch.size} · ${ch.background} · ${ch.alignment}`))),
+          h('div', { class: 'muted' }, `${[genderLabel(ch), ch.age && `${ch.age}${/^\d+$/.test(ch.age) ? ' años' : ''}`].filter(Boolean).map((x) => `${x} · `).join('')}${ch.cls}${ch.subclass ? ` (${ch.subclass})` : ''} de nivel ${ch.level} · ${s.name}${st.lineage ? ` (${st.lineage.split(' (')[0]})` : ''} · ${ch.size} · ${ch.background} · ${ch.alignment}`))),
       h('div', { class: 'cr-sum-stats' },
         [['PG', ch.maxHp], ['CA', ch.ac], ['Velocidad', fmtM(ch.speed)], ['Iniciativa', fmtMod(initBonus(ch))],
           ['Competencia', fmtMod(pb)], ['Dados de golpe', `${ch.level}${ch.hitDie}`]].map(([l, v]) => h('div', { class: 'cr-stat' }, h('b', {}, v), h('span', {}, l)))),

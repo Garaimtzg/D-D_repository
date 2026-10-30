@@ -256,6 +256,7 @@ input.mini { width: 54px; padding: 4px; }
 .cr-traits { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
 .cr-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
 .cr-spell-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.species-lore { margin: 6px 0 2px; font-style: italic; line-height: 1.45; }
 .chip-x { all: unset; cursor: pointer; margin-left: 5px; opacity: .6; }
 .chip-x:hover { opacity: 1; }
 .cr-option { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line-2); background: rgba(0, 0, 0, .2); transition: border-color .15s; }

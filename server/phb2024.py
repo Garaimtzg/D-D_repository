@@ -7,7 +7,7 @@ Las distancias van en metros y las monedas usan las abreviaturas de 2024 (pp = p
 import json
 from pathlib import Path
 
-from . import euskal, mct, mct_classes, spellcasting
+from . import euskal, lore, mct, mct_classes, spellcasting
 from .features2024 import CHOICES, COMMON, EXPERTISE, FEATURES, STYLE_LEVEL, SUBCLASS_PICK, SUBCLASSES, UNARMORED
 
 # Datos de los conjuros (sin su texto) sacados del PDF con tools/extract_spells.py
@@ -749,6 +749,12 @@ def _class_data(c):
             "subclass_source": {s: SUBCLASS_SOURCE.get(s, "Manual del Jugador 2024") for s in c["subclasses"]}}
 
 
+def _species(s):
+    """La especie con su descripción (server/lore.py) y si cuenta un tamaño más para la carga."""
+    text, height, lifespan = lore.SPECIES_LORE.get(s["id"], ("", "", ""))
+    return {**s, "lore": text, "height": height, "lifespan": lifespan, **({"carry_bigger": True} if s["id"] in CARRY_BIGGER else {})}
+
+
 def data() -> dict:
     """Todo lo que la interfaz necesita para basarse en el Manual del Jugador 2024."""
     return {
@@ -756,7 +762,7 @@ def data() -> dict:
         "abilities": ABILITIES,
         "skills": [{"key": k, "name": n, "ability": a} for k, n, a in SKILLS],
         "classes": [_class_data(c) for c in CLASSES],
-        "species": [{**s, "carry_bigger": True} if s["id"] in CARRY_BIGGER else s for s in SPECIES + mct.SPECIES + euskal.SPECIES],
+        "species": [_species(s) for s in SPECIES + mct.SPECIES + euskal.SPECIES],
         "backgrounds": [{**b, "kit": _kit(BACKGROUND_KITS[b["id"]]), "kit_gold": 50} for b in BACKGROUNDS],
         "feats": FEATS,
         "weapons": WEAPONS,

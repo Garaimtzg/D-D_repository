@@ -332,6 +332,8 @@ class MctTests(unittest.TestCase):
         self.assertEqual((bg["id"], bg["abilities"], bg["feat"], bg["skills"]), ("hb-b1", ["fue", "con", "sab"], "Habilidoso", ["trato_animales", "supervivencia"]))
         self.assertEqual((bg["kit"], bg["kit_gold"]), ({"items": [[1, "Cayado"], [2, "Mantas"]], "gold": 50}, 50))
         from server import phb2024
+        for s in ref["species"][:-1]:  # todas las del manual, el MCT y Euskal Herria tienen su descripción (la propia usa su resumen)
+            self.assertTrue(len(s["lore"]) > 60 and s["height"] and s["lifespan"], s["id"])
         bigger = {s["id"] for s in ref["species"] if s.get("carry_bigger")}  # cuentan un tamaño más para la carga
         self.assertTrue({"goliat", "firbolg", "osgo"} <= bigger and "humano" not in bigger)
         self.assertIn("Capacidad de carga", {r["name"] for r in ref["rules"]})
@@ -559,6 +561,18 @@ class ApiTests(unittest.TestCase):
             time.sleep(0.5)
         self.assertEqual(err.getvalue(), "")
         self.assertEqual(self.call("GET", "/api/settings")[0], 200)
+
+    def test_every_scene_piece_has_a_painter(self):
+        # cada terreno y objeto del catálogo tiene su pintor en el tablero, y al revés
+        from server import scenes
+        js = (Path(__file__).resolve().parents[1] / "static" / "js" / "core" / "battlemap.js").read_text(encoding="utf-8")
+        painters = set(re.findall(r"^\s+(\w+)\(ctx, x, y, w, hh, s[\w, ]*\) \{", js, re.M))
+        tiles = {a or b for a, b in re.findall(r"^\s+(?:'([^']+)'|(\w)): \{ base", js, re.M)}
+        self.assertEqual(painters, scenes.PROP_CODES)
+        self.assertEqual(tiles, scenes.TERRAIN_CODES)
+        _, cat = self.json_call("GET", "/api/scene-catalog")
+        self.assertEqual(set(cat["prop_groups"]), {p["group"] for p in cat["props"]})
+        self.assertGreater(len(cat["props"]), 100)
 
     def test_second_launch_finds_the_open_table(self):
         import socket

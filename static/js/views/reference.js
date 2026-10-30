@@ -101,6 +101,8 @@ async function mount(root) {
       blocks.push(panel('Especies', 'personajes', '', h('div', { class: 'stack-sm' }, species.map((s) => h('details', { class: 'class-card' },
         h('summary', {}, h('div', { class: 'grow' }, h('b', {}, s.name), h('div', { class: 'tiny muted' },
           `${s.size} · ${fmtM(s.speed)}${s.darkvision ? ` · visión en la oscuridad ${s.darkvision} m` : ''}`)), page(s.page || s.origin)),
+        (s.lore || s.summary) && h('p', { class: 'small' }, s.lore || s.summary),
+        (s.height || s.lifespan) && h('p', { class: 'tiny muted' }, [s.height && `Altura: ${s.height}`, s.lifespan && `Esperanza de vida: ${s.lifespan}`].filter(Boolean).join(' · ')),
         h('dl', { class: 'ref compact' }, s.traits.map(([n, t]) => [h('dt', {}, n), h('dd', {}, t)])),
         s.options && h('p', { class: 'tiny muted' }, `${s.options_label}: ${s.options.map(([n]) => n).join(', ')}`))))));
     }

@@ -1,7 +1,7 @@
 // Puente entre un combate y su tablero: qué escenario usa, dónde está cada participante,
 // cómo se ven sus fichas (con lo que ocultar a los jugadores) y la colocación automática.
 import { api } from './api.js';
-import { sceneCatalog, costGrid, sizeCells } from './battlemap.js';
+import { sceneCatalog, costGrid, sizeCells, spaceFree } from './battlemap.js';
 import { current } from './combat.js';
 
 const NO_SPEED = ['Agarrado', 'Apresado', 'Inconsciente', 'Paralizado', 'Petrificado'];
@@ -55,19 +55,18 @@ export function autoPlace(c, scene, cat, only = null) {
   const board = ensureBoard(c);
   const costs = costGrid(scene, cat);
   const { cols, rows } = scene;
-  const busy = new Set();
-  const mark = (x, col, row) => { const n = sizeCells(x.size); for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) busy.add((row + j) * cols + col + i); };
-  for (const x of c.combatants) if (board.pos[x.cid]) mark(x, ...board.pos[x.cid]);
-  const fits = (n, col, row) => {
+  const placed = c.combatants.filter((x) => board.pos[x.cid]).map((x) => ({ c: board.pos[x.cid][0], r: board.pos[x.cid][1], size: x.size }));
+  const fits = (x, col, row) => {
+    const n = sizeCells(x.size);
     if (col < 0 || row < 0 || col + n > cols || row + n > rows) return false;
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const k = (row + j) * cols + col + i; if (costs[k] === Infinity || busy.has(k)) return false; }
-    return true;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (costs[(row + j) * cols + col + i] === Infinity) return false;
+    return spaceFree(x, col, row, placed); // hasta cuatro diminutos por casilla
   };
-  const near = (n, col, row) => {
+  const near = (x, col, row) => {
     for (let rad = 0; rad < Math.max(cols, rows); rad++) {
       for (let dy = -rad; dy <= rad; dy++) {
         for (let dx = -rad; dx <= rad; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) === rad && fits(n, col + dx, row + dy)) return [col + dx, row + dy];
+          if (Math.max(Math.abs(dx), Math.abs(dy)) === rad && fits(x, col + dx, row + dy)) return [col + dx, row + dy];
         }
       }
     }
@@ -77,23 +76,22 @@ export function autoPlace(c, scene, cat, only = null) {
     party: [...(scene.spawns?.party || [])], enemies: [...(scene.spawns?.enemies || [])],
   };
   const fallback = { party: [Math.floor(cols * 0.12), Math.floor(rows / 2)], enemies: [Math.floor(cols * 0.82), Math.floor(rows / 2)] };
-  let placed = 0;
+  let count = 0;
   for (const x of c.combatants) {
     if (board.pos[x.cid] || (only && !only.includes(x.cid))) continue;
     const side = x.type === 'enemigo' ? 'enemies' : 'party';
-    const n = sizeCells(x.size);
     let spot = null;
     while (spawns[side].length && !spot) {
       const [col, row] = spawns[side].shift();
-      if (fits(n, col, row)) spot = [col, row];
+      if (fits(x, col, row)) spot = [col, row];
     }
-    spot ||= near(n, ...(scene.spawns?.[side]?.[0] || fallback[side]));
+    spot ||= near(x, ...(scene.spawns?.[side]?.[0] || fallback[side]));
     if (!spot) continue;
     board.pos[x.cid] = spot;
-    mark(x, ...spot);
-    placed++;
+    placed.push({ c: spot[0], r: spot[1], size: x.size });
+    count++;
   }
-  return placed;
+  return count;
 }
 
 // Coloca a un participante en la casilla libre más cercana a (col, row).
@@ -102,17 +100,12 @@ export function placeNear(c, scene, cat, x, col, row) {
   delete board.pos[x.cid];
   const costs = costGrid(scene, cat);
   const { cols, rows } = scene;
-  const busy = new Set();
-  for (const y of c.combatants) {
-    if (!board.pos[y.cid]) continue;
-    const m = sizeCells(y.size);
-    for (let i = 0; i < m; i++) for (let j = 0; j < m; j++) busy.add((board.pos[y.cid][1] + j) * cols + board.pos[y.cid][0] + i);
-  }
+  const others = c.combatants.filter((y) => board.pos[y.cid]).map((y) => ({ c: board.pos[y.cid][0], r: board.pos[y.cid][1], size: y.size }));
   const n = sizeCells(x.size);
   const fits = (a, b) => {
     if (a < 0 || b < 0 || a + n > cols || b + n > rows) return false;
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const k = (b + j) * cols + a + i; if (costs[k] === Infinity || busy.has(k)) return false; }
-    return true;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (costs[(b + j) * cols + a + i] === Infinity) return false;
+    return spaceFree(x, a, b, others); // hasta cuatro diminutos por casilla
   };
   for (let rad = 0; rad < Math.max(cols, rows); rad++) {
     for (let dy = -rad; dy <= rad; dy++) {

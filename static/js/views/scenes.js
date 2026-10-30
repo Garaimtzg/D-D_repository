@@ -13,10 +13,6 @@ export default { id: 'escenarios', title: 'Escenarios', icon: 'grid', hint: 'Tab
 const KIND_GROUPS = [
   ['suelo', 'Suelos'], ['natural', 'Naturaleza'], ['agua', 'Agua'], ['peligro', 'Peligros'], ['vacio', 'Abismos'], ['muro', 'Muros'],
 ];
-const PROP_GROUPS = [
-  ['Naturaleza', 'TPbxrMQ'], ['Mobiliario', 'tzhqkBCSKX'], ['Piedra y templo', 'OEYZGjy'], ['Fuego y luz', 'FLa'],
-  ['Exteriores', 'fouVgnAe'], ['Secretos', 'N'],
-];
 const TOOLS = [
   ['paint', 'brush', 'Pincel'], ['rect', 'grid', 'Rectángulo'], ['fill', 'bucket', 'Rellenar'], ['prop', 'gem', 'Objeto'],
   ['erase', 'eraser', 'Borrar objeto'], ['spawn-party', 'crown', 'Inicio grupo'], ['spawn-enemies', 'skull', 'Inicio enemigos'], ['pan', 'hand', 'Mover vista'],
@@ -275,7 +271,7 @@ async function mount(root, [sceneId]) {
     if (sc.preset) return renderPresetPage(sc);
     const save = debounced(() => api.update('scenes', sc).then((d) => { sc.updated = d.updated; }).catch(toastError), 500);
     const stage = h('div', { class: 'editor-stage' });
-    const ed = { tool: 'paint', terrain: sc.bg ? '_' : ',', prop: 'T', w: 1, h: 1, brush: 1, hidden: false };
+    const ed = { tool: 'paint', terrain: sc.bg ? '_' : ',', prop: 'T', w: 1, h: 1, brush: 1, hidden: false, open: new Set() };
     const bm = createBattleMap({ catalog: cat, editable: true, dm: true, onChange: () => save() });
     stage.append(bm.el);
     const side = h('aside', { class: 'editor-side' });
@@ -316,8 +312,13 @@ async function mount(root, [sceneId]) {
           })),
         h('div', { class: 'panel stack', style: { order: propsFirst ? 1 : 2 } },
           h('h3', { style: { margin: 0 } }, icon('gem', 16), ' Objetos'),
-          PROP_GROUPS.map(([label, codes]) => [h('div', { class: 'ed-group-title' }, label),
-            h('div', { class: 'swatches' }, [...codes].map((k) => cat.P[k]).filter(Boolean).map(propSw))])),
+          // muchos objetos: cada grupo se pliega; se abre el del objeto elegido y los que abras tú
+          cat.prop_groups.map((label) => {
+            const list = cat.props.filter((p) => p.group === label);
+            const open = ed.open.has(label) || list.some((p) => p.code === ed.prop);
+            return h('details', { class: 'ed-group', open, ontoggle: (e) => { if (e.target.open) ed.open.add(label); else ed.open.delete(label); } },
+              h('summary', { class: 'ed-group-title' }, `${label} (${list.length})`), h('div', { class: 'swatches' }, list.map(propSw)));
+          })),
         h('div', { class: 'panel stack', style: { order: 3 } },
           h('h3', { style: { margin: 0 } }, icon('grid', 16), ' Escenario'),
           field('Luz', selectEl(cat.lights.map((l) => [l.key, `${LIGHT_ICON[l.key]} ${l.name}`]), sc.light, (v) => { sc.light = v; bm.redraw(); save(); })),

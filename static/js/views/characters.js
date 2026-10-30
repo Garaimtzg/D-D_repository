@@ -12,7 +12,7 @@ import {
   newCharacter, migrateCharacter, fromMonster, applyDamage, applyHealing, longRest, shortRest, combatantFrom,
   classOf, speciesOf, backgroundOf, computeAC, maxHpFor, slotsFor, classResources, featuresUpTo, masteryCount, columnAt, weaponAttack, weaponProficient,
   source, grantResources, derivedAttacks, pendingChoices, featAbilities, castingOf, subclassResourceNames, grantedSpells, spellChoices,
-  spellLists, spellCounts, freeUseFor, featGrants, featBonus, carryCapacity, fmtKg,
+  spellLists, spellCounts, freeUseFor, featGrants, featBonus, carryCapacity, fmtKg, GENDERS, speciesFacts,
 } from '../core/dnd.js';
 import { openCreator } from './creator.js';
 import { spellTip, spellMeta, spellCard, pickSpells } from './spellui.js';
@@ -1114,6 +1114,8 @@ async function mount(root, [selId]) {
             h('span', { class: 'lvl' }, l), h('b', {}, f), t && h('span', { class: 'tiny muted' }, ` — ${t}`))))),
         sp && h('div', { class: 'traits-block' },
           h('div', { class: 'row between' }, h('b', {}, sp.name, c.lineage ? ` · ${c.lineage}` : ''), h('span', { class: 'tiny muted' }, source(sp))),
+          (sp.lore || sp.summary) && h('p', { class: 'small species-lore' }, sp.lore || sp.summary),
+          speciesFacts(sp) && h('div', { class: 'tiny muted' }, speciesFacts(sp)),
           h('ul', { class: 'trait-list' }, sp.traits.map(([n, t]) => h('li', {}, h('b', {}, n), h('span', { class: 'tiny muted' }, ` — ${t}`))),
             c.lineage && sp.options && h('li', {}, h('b', {}, c.lineage), h('span', { class: 'tiny muted' }, ` — ${sp.options.find(([n]) => n === c.lineage)?.[1] || ''}`)))),
         h('div', { class: 'traits-block' }, h('b', {}, 'Dotes'), h('ul', { class: 'feat-list' }, ownFeats), featAdd)),
@@ -1124,7 +1126,12 @@ async function mount(root, [selId]) {
           field('Herramientas', bind(c, 'tools', { onChange: () => save(c) }), 'grow'))),
       c.type !== 'enemigo' && section('Aspecto y personalidad', 'user',
         h('div', { class: 'row' },
-          field('Altura', bind(c, 'height', { onChange: () => save(c), placeholder: '1,70 m' }), 'grow'),
+          field('Edad', bind(c, 'age', { onChange: () => save(c), placeholder: '25 años' }), 'grow'),
+          field('Género', h('div', { class: 'row nowrap' },
+            selectEl(GENDERS, c.gender || '', (v) => { c.gender = v; save(c); refresh(); }, { 'aria-label': 'Género' }),
+            c.gender === 'otro' && bind(c, 'genderOther', { onChange: () => save(c), placeholder: '¿Cuál?', 'aria-label': 'Otro género' })), 'grow')),
+        h('div', { class: 'row' },
+          field('Altura', bind(c, 'height', { onChange: () => save(c), placeholder: speciesOf(c)?.height || '1,70 m' }), 'grow'),
           field('Peso', bind(c, 'weight', { onChange: () => save(c), placeholder: '70 kg' }), 'grow'),
           field('Tamaño', h('div', { class: 'static-val' }, c.size || '—'), 'grow')),
         field('Descripción física', bind(c, 'appearance', { type: 'textarea', rows: 4, onChange: () => save(c), placeholder: 'Edad, ojos, pelo, piel, cicatrices, cómo viste, cómo se mueve…' })),
