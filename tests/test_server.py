@@ -489,6 +489,30 @@ class SceneTests(unittest.TestCase):
         self.assertTrue({".", ",", "#", "~", "v", "_"} <= codes)
         self.assertTrue(any(p["light"] for p in cat["props"]))
 
+    def test_presets_have_a_finish(self):
+        # acabado de los prediseñados: adornos automáticos, ambiente, viñeta y cuadrícula válidos
+        levels = {k for k, _ in scenes.DECOR_LEVELS}
+        moods = {k for k, _ in scenes.MOODS}
+        grids = {k for k, _ in scenes.GRIDS}
+        for sc in scenes.PRESETS:
+            with self.subTest(sc["id"]):
+                self.assertIn(sc["autoDecor"], levels)
+                self.assertIn(sc["mood"], moods)
+                self.assertIn(sc["grid"], grids)
+                self.assertIsInstance(sc["vignette"], bool)
+                for d in sc["decals"]:
+                    self.assertIn(d["k"], scenes.DECAL_CODES)
+        self.assertGreater(len({sc["mood"] for sc in scenes.PRESETS}), 4)
+
+    def test_catalog_lists_the_decoration(self):
+        cat = scenes.catalog()
+        self.assertGreaterEqual(len(cat["decals"]), 40)
+        self.assertEqual(len({d["code"] for d in cat["decals"]}), len(cat["decals"]))
+        self.assertEqual(set(cat["decal_groups"]), {d["group"] for d in cat["decals"]})
+        self.assertEqual([lv["key"] for lv in cat["decor_levels"]], ["ninguna", "sutil", "normal", "recargada"])
+        self.assertIn("natural", [m["key"] for m in cat["moods"]])
+        self.assertEqual(cat["grids"][0]["key"], "linea")
+
 
 class MobilePageTests(unittest.TestCase):
     def test_mobile_page_is_up_to_date(self):
@@ -570,6 +594,15 @@ class ApiTests(unittest.TestCase):
         tiles = {a or b for a, b in re.findall(r"^\s+(?:'([^']+)'|(\w)): \{ base", js, re.M)}
         self.assertEqual(painters, scenes.PROP_CODES)
         self.assertEqual(tiles, scenes.TERRAIN_CODES)
+        # adornos y ambientes: cada uno del catálogo tiene su pintor en decor.js, y al revés
+        decor = (Path(__file__).resolve().parents[1] / "static" / "js" / "core" / "decor.js").read_text(encoding="utf-8")
+        decal_painters = set(re.findall(r"^  (\w+)\(ctx, s(?:, rand)?\) \{", decor, re.M))
+        self.assertEqual(decal_painters, scenes.DECAL_CODES)
+        moods = decor[decor.index("export const MOODS = {"):]
+        moods = set(re.findall(r"^  (\w+): ", moods[:moods.index("};")], re.M))
+        self.assertEqual(moods, {k for k, _ in scenes.MOODS})
+        levels = re.search(r"export const DECOR_LEVEL = \{([^}]*)\}", decor).group(1)
+        self.assertEqual(set(re.findall(r"(\w+):", levels)), {k for k, _ in scenes.DECOR_LEVELS})
         _, cat = self.json_call("GET", "/api/scene-catalog")
         self.assertEqual(set(cat["prop_groups"]), {p["group"] for p in cat["props"]})
         self.assertGreater(len(cat["props"]), 100)
