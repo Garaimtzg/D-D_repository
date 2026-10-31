@@ -15,10 +15,14 @@ const KIND_GROUPS = [
   ['suelo', 'Suelos'], ['natural', 'Naturaleza'], ['agua', 'Agua'], ['peligro', 'Peligros'], ['vacio', 'Abismos'], ['muro', 'Muros'],
 ];
 const TOOLS = [
-  ['paint', 'brush', 'Pincel'], ['rect', 'grid', 'Rectángulo'], ['fill', 'bucket', 'Rellenar'], ['prop', 'gem', 'Objeto'],
-  ['decor', 'sparkle', 'Adornos'], ['select', 'target', 'Elegir y mover'], ['erase', 'eraser', 'Borrar'], ['pan', 'hand', 'Mover vista'],
-  ['spawn-party', 'crown', 'Inicio grupo'], ['spawn-enemies', 'skull', 'Inicio enemigos'],
+  ['paint', 'brush', 'Pincel'], ['line', 'feather', 'Trazo'], ['rect', 'grid', 'Rectángulo'], ['fill', 'bucket', 'Rellenar'],
+  ['room', 'tavern', 'Sala'], ['prop', 'gem', 'Objeto'], ['scatter', 'wand', 'Dispersar'], ['decor', 'sparkle', 'Adornos'],
+  ['select', 'target', 'Elegir y mover'], ['erase', 'eraser', 'Borrar'], ['pan', 'hand', 'Mover vista'], ['spawn-party', 'crown', 'Inicio grupo'],
+  ['spawn-enemies', 'skull', 'Inicio enemigos'],
 ];
+const TERRAIN_TOOLS = ['paint', 'line', 'rect', 'fill', 'room'];
+const SCATTER_SETS = [['bosque', '🌳 Bosque'], ['matorral', '🌿 Matorral'], ['rocas', '🪨 Rocas'], ['cueva', '🍄 Cueva'], ['ruinas', '🏛️ Ruinas'],
+  ['cementerio', '🪦 Cementerio'], ['desierto', '🌵 Desierto'], ['cienaga', '🥀 Ciénaga'], ['agua', '🪷 Agua'], ['objeto', '◆ El objeto elegido']];
 const ROTATIONS = [[0, '0°'], [90, '90°'], [180, '180°'], [270, '270°']];
 // Fondo liso de la muestra de cada grupo de adornos (para que el adorno se vea bien en pequeño)
 const DECAL_GROUND = { Suelo: ['#8a857c', '#5f5a52'], 'Mazmorra y hogar': ['#8b5a31', '#5a3a1e'], Naturaleza: ['#5d8f45', '#3f6a2c'], Agua: ['#4a93b5', '#25607f'], 'Nieve y fuego': ['#8f9aa6', '#4a4f57'], Magia: ['#3d3550', '#1c1828'] };
@@ -118,9 +122,10 @@ async function mount(root, [sceneId]) {
     } catch (e) { toastError(e); }
   }
 
-  // Mazmorra o cueva al azar (como donjon o el «One Page Dungeon» de watabou): se ve antes de guardarla.
+  // Escenario al azar: mazmorra o cueva (como donjon o el «One Page Dungeon» de watabou) o un exterior (bosque, río,
+  // ciénaga, desierto, nieve, costa, ruinas, volcán). Se ve antes de guardarlo.
   async function dungeonDialog() {
-    const s = { size: 'mediana', kind: 'mazmorra', seed: '' };
+    const s = { size: 'mediana', kind: 'bosque', seed: '' };
     const stage = h('div', { class: 'preview-stage' });
     const keyEl = h('pre', { class: 'dungeon-key' });
     const bm = createBattleMap({ catalog: cat, dm: true, range: false });
@@ -137,15 +142,19 @@ async function mount(root, [sceneId]) {
         sfx.unroll();
       } catch (e) { toastError(e); }
     };
+    const kinds = cat.random_kinds || [{ key: 'mazmorra', name: 'Mazmorra', group: 'Interior' }, { key: 'cueva', name: 'Cueva', group: 'Interior' }];
+    const kindSel = h('select', { 'aria-label': 'Tipo de escenario', onchange: (e) => { s.kind = e.target.value; make(); } },
+      [...new Set(kinds.map((k) => k.group))].map((g) => h('optgroup', { label: g === 'Interior' ? 'Interiores' : 'Exteriores' },
+        kinds.filter((k) => k.group === g).map((k) => h('option', { value: k.key, selected: k.key === s.kind }, k.name)))));
     const seedIn = h('input', { class: 'inline', type: 'number', min: 1, 'aria-label': 'Semilla', onchange: (e) => make(e.target.value) });
-    const done = modal('Mazmorra al azar', h('div', { class: 'stack' },
+    const done = modal('Escenario al azar', h('div', { class: 'stack' },
       h('div', { class: 'row' },
-        segmented([['mazmorra', '🏰 Mazmorra'], ['cueva', '🕳️ Cueva']], s.kind, (v) => { s.kind = v; make(); }),
-        segmented([['pequena', 'Pequeña'], ['mediana', 'Mediana'], ['grande', 'Grande']], s.size, (v) => { s.size = v; make(); }),
-        h('button', { class: 'btn', type: 'button', onclick: () => make() }, '🎲 Otra'),
+        field('Tipo', kindSel),
+        segmented([['pequena', 'Pequeño'], ['mediana', 'Mediano'], ['grande', 'Grande']], s.size, (v) => { s.size = v; make(); }),
+        h('button', { class: 'btn', type: 'button', onclick: () => make() }, '🎲 Otro'),
         field('Semilla', seedIn)),
       h('div', { class: 'dungeon-layout' }, stage, keyEl),
-      h('p', { class: 'tiny muted' }, 'Las puertas empiezan cerradas: en combate se abren con un clic. Con la misma semilla sale la misma mazmorra.')),
+      h('p', { class: 'tiny muted' }, 'Siempre hay un camino del grupo a los enemigos. Las puertas empiezan cerradas: en combate se abren con un clic. Con la misma semilla sale el mismo mapa; al guardarlo puedes retocarlo en el editor.')),
     [{ label: 'Cancelar', value: false }, { label: 'Guardar como escenario', value: true, class: 'primary', icon: 'save' }], { wide: true, iconName: 'grid' });
     requestAnimationFrame(() => make());
     const ok = await done;
@@ -154,7 +163,7 @@ async function mount(root, [sceneId]) {
     try {
       const saved = await api.create('scenes', sc);
       state.custom.push(saved);
-      toast(`«${saved.name}» guardada en tus escenarios.`, { kind: 'good', iconName: 'grid' });
+      toast(`«${saved.name}» guardado en tus escenarios.`, { kind: 'good', iconName: 'grid' });
       renderGallery();
     } catch (e) { toastError(e); }
   }
@@ -252,7 +261,7 @@ async function mount(root, [sceneId]) {
       h('div', { class: 'panel ornate row' },
         h('div', { class: 'grow' }, h('h2', { style: { margin: 0 } }, 'Escenarios de combate'),
           h('p', { class: 'muted', style: { margin: '4px 0 0' } }, 'Tableros con cuadrícula de 1,5 m por casilla. Usa uno prediseñado tal cual, personalízalo o crea el tuyo pintando el terreno y colocando objetos.')),
-        h('button', { class: 'btn', type: 'button', onclick: dungeonDialog, 'data-tip': 'Salas, pasillos, puertas y la clave de cada sala' }, '🎲 Mazmorra al azar'),
+        h('button', { class: 'btn', type: 'button', onclick: dungeonDialog, 'data-tip': 'Mazmorras, cuevas y exteriores (bosque, río, ciénaga, desierto, nieve, costa, ruinas, volcán) con su clave para el máster' }, '🎲 Escenario al azar'),
         h('button', { class: 'btn', type: 'button', onclick: fromImage, 'data-tip': 'Sube un mapa de batalla y ponle cuadrícula encima' }, icon('image', 16), 'Desde una imagen'),
         h('button', { class: 'btn primary lg', type: 'button', onclick: () => newSceneDialog() }, icon('plus', 18), 'Nuevo escenario')),
       h('section', { class: 'stack' },
@@ -295,6 +304,7 @@ async function mount(root, [sceneId]) {
     const ed = {
       tool: 'paint', terrain: sc.bg ? '_' : ',', prop: 'T', w: 1, h: 1, rot: 0, brush: 1, hidden: false, open: new Set(), q: '',
       decal: 'auto', decalBrush: 'uno', decalScale: 1, decalSpin: true, decalOpen: new Set(),
+      wall: '#', scatterSet: 'bosque', density: 'normal',
     };
     const look = () => ({ ...DECOR_DEFAULTS, ...sc });
     const bm = createBattleMap({
@@ -307,12 +317,13 @@ async function mount(root, [sceneId]) {
     const applyEdit = () => {
       bm.setTool(ed.tool);
       bm.setEdit({ terrain: ed.terrain, prop: ed.prop, w: ed.w, h: ed.h, rot: ed.rot, brush: ed.brush, hidden: ed.hidden,
-        decal: ed.decal, decalBrush: ed.decalBrush, decalScale: ed.decalScale, decalSpin: ed.decalSpin });
+        decal: ed.decal, decalBrush: ed.decalBrush, decalScale: ed.decalScale, decalSpin: ed.decalSpin,
+        wall: ed.wall, scatterSet: ed.scatterSet, density: ed.density });
     };
     const toolBtn = ([k, ic, l]) => h('button', { class: 'ed-tool', type: 'button', 'aria-pressed': String(ed.tool === k), onclick: () => { ed.tool = k; applyEdit(); drawSide(); } },
       h('span', { class: 'ic' }, icon(ic, 18)), l);
-    const terrainSw = (t) => h('button', { class: 'swatch', type: 'button', 'aria-pressed': String(ed.terrain === t.code && ['paint', 'rect', 'fill'].includes(ed.tool)), 'data-tip': `${t.name}${t.cost === 2 ? ' · terreno difícil' : t.cost == null ? ' · no se puede pisar' : ''}${t.hazard ? ' · peligroso' : ''}`,
-      onclick: () => { ed.terrain = t.code; if (!['paint', 'rect', 'fill'].includes(ed.tool)) ed.tool = 'paint'; applyEdit(); drawSide(); } }, swatch(t.code, 'terrain'), t.name);
+    const terrainSw = (t) => h('button', { class: 'swatch', type: 'button', 'aria-pressed': String(ed.terrain === t.code && TERRAIN_TOOLS.includes(ed.tool)), 'data-tip': `${t.name}${t.cost === 2 ? ' · terreno difícil' : t.cost == null ? ' · no se puede pisar' : ''}${t.hazard ? ' · peligroso' : ''}`,
+      onclick: () => { ed.terrain = t.code; if (!TERRAIN_TOOLS.includes(ed.tool)) ed.tool = 'paint'; applyEdit(); drawSide(); } }, swatch(t.code, 'terrain'), t.name);
     const propSw = (p) => h('button', { class: 'swatch', type: 'button', 'aria-pressed': String(ed.prop === p.code && ed.tool === 'prop'),
       'data-tip': `${p.name}${p.effect === 'bloquea' ? ' · bloquea el paso' : p.effect === 'dificil' ? ' · terreno difícil' : p.effect === 'peligro' ? ' · peligroso' : ''}${p.cover ? ` · cobertura ${p.cover}` : ''}${p.light ? ` · da luz (${fmtMeters(p.light * 1.5)})` : ''}`,
       onclick: () => { ed.prop = p.code; ed.tool = 'prop'; applyEdit(); drawSide(); } }, swatch(p.code, 'prop'), p.name);
@@ -346,7 +357,7 @@ async function mount(root, [sceneId]) {
         h('h3', { style: { margin: 0 } }, icon('sparkle', 16), ' Acabado y ambiente'),
         field('Adornos automáticos', segmented(cat.decor_levels.map((l) => [l.key, l.name]), L.autoDecor, (v) => set({ autoDecor: v }))),
         h('div', { class: 'ed-row' },
-          h('button', { class: 'btn sm', type: 'button', disabled: L.autoDecor === 'ninguna', onclick: () => set({ decorSeed: (L.decorSeed | 0) + 1 }), 'data-tip': 'Otra colocación de los adornos automáticos' }, '🎲 Otra variación'),
+          h('button', { class: 'btn sm', type: 'button', disabled: L.autoDecor === 'ninguna', onclick: () => set({ decorSeed: (L.decorSeed | 0) + 1 }), 'data-tip': 'Otra colocación de los adornos automáticos y otras ondulaciones en las orillas' }, '🎲 Otra variación'),
           h('span', { class: 'tiny muted' }, 'Salen solos según el terreno y se adaptan al repintar.')),
         h('div', { class: 'ed-row size-inputs' },
           field('Ambiente', selectEl(cat.moods.map((m) => [m.key, m.name]), L.mood, (v) => set({ mood: v }))),
@@ -381,13 +392,22 @@ async function mount(root, [sceneId]) {
     const size = { cols: sc.cols, rows: sc.rows };
     function drawSide() {
       drawLists();
-      const showTerrain = ['paint', 'rect', 'fill'].includes(ed.tool);
+      const showTerrain = TERRAIN_TOOLS.includes(ed.tool);
       const propsFirst = ed.tool === 'prop' || ed.tool === 'erase';
       clear(side,
         h('div', { class: 'panel stack' },
           h('div', { class: 'ed-tools' }, TOOLS.map(toolBtn)),
           ed.tool === 'paint' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Pincel'),
             segmented([[1, '1×1'], [2, '2×2'], [3, '3×3']], ed.brush, (v) => { ed.brush = v; applyEdit(); })),
+          ed.tool === 'line' && [h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Ancho'),
+            segmented([[1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5']], ed.brush, (v) => { ed.brush = v; applyEdit(); })),
+          h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Arrastra de un punto a otro: ríos, caminos, pasillos o grietas de lava. Con el agua, la hierba o la tierra, la orilla sale curva sola.')],
+          ed.tool === 'room' && [field('Muro', selectEl(cat.terrain.filter((t) => t.kind === 'muro').map((t) => [t.code, t.name]), ed.wall, (v) => { ed.wall = v; applyEdit(); })),
+            h('p', { class: 'tiny muted', style: { margin: 0 } }, `Arrastra un rectángulo: el borde será ${cat.terrain.find((t) => t.code === ed.wall)?.name.toLowerCase() || 'muro'} y el interior, el suelo elegido abajo (${cat.terrain.find((t) => t.code === ed.terrain)?.name.toLowerCase() || ''}). Las salas con el mismo suelo se unen al solaparse; luego pinta una puerta en el muro.`)],
+          ed.tool === 'scatter' && [field('Conjunto', selectEl(SCATTER_SETS, ed.scatterSet, (v) => { ed.scatterSet = v; applyEdit(); })),
+            h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Densidad'),
+              segmented([['pocos', 'Pocos'], ['normal', 'Normal'], ['muchos', 'Muchos']], ed.density, (v) => { ed.density = v; applyEdit(); })),
+            h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Arrastra un rectángulo y se siembran los objetos con separación, sin tapar las zonas de inicio ni caer en muros o peligros. Si no te gusta, Ctrl + Z y otra vez.')],
           ed.tool === 'prop' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Giro'),
             segmented(ROTATIONS, ed.rot, (v) => { ed.rot = v; applyEdit(); }), h('span', { class: 'tiny muted' }, 'o la tecla R')),
           ed.tool === 'prop' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Tamaño'),

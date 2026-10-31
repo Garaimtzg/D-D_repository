@@ -478,6 +478,29 @@ class SceneTests(unittest.TestCase):
                             self.assertGreaterEqual(len(seen & free) / len(free), 0.95)
         self.assertEqual(dungeon.generate(5)["tiles"], dungeon.generate(5)["tiles"])
 
+    def test_random_outdoor_scenes_are_playable(self):
+        # cada bioma (bosque, río, ciénaga, desierto, nieve, costa, ruinas, volcán) y tamaño: válido, con su clave
+        # para el máster y un camino a pie desde el grupo hasta cada casilla de inicio de los enemigos
+        from server import dungeon, wilds
+        self.assertGreaterEqual(len(wilds.KINDS), 8)
+        self.assertEqual({k["key"] for k in dungeon.kinds()}, {"mazmorra", "cueva"} | set(wilds.KINDS))
+        moods = {k for k, _ in scenes.MOODS}
+        for kind in wilds.KINDS:
+            for size in wilds.SIZES:
+                for seed in range(1, 6):
+                    with self.subTest(kind=kind, size=size, seed=seed):
+                        sc = dungeon.generate(seed, size, kind)
+                        self.assertEqual(len(sc["tiles"]), sc["cols"] * sc["rows"])
+                        self.assertLessEqual(set(sc["tiles"]), scenes.TERRAIN_CODES)
+                        self.assertIn(sc["mood"], moods)
+                        self.assertIn("Lo que acecha", sc["description"])
+                        for p in sc["props"]:
+                            self.assertIn(p["k"], scenes.PROP_CODES)
+                        self.assertGreaterEqual(len(sc["spawns"]["party"]), 4)
+                        self.assertGreaterEqual(len(sc["spawns"]["enemies"]), 3)
+                        self.assert_reachable(sc)
+            self.assertEqual(dungeon.generate(9, "mediana", kind), dungeon.generate(9, "mediana", kind))
+
     def test_presets_are_deterministic(self):
         self.assertEqual(scenes._bosque(), scenes._bosque())
         self.assertEqual(scenes._cueva(), scenes._cueva())

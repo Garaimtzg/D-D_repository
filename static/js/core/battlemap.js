@@ -7,6 +7,7 @@ import { h, clear, icon, token } from './dom.js';
 import { condLabel } from './dnd.js';
 import { sfx } from './sfx.js';
 import { cellRand, shade, circle, ellipse, seg, rrect, dots, emoji, withShadow } from './paint.js';
+import { softTerrain, rockShade, RIM_STYLE } from './terrain.js';
 import { DECOR_DEFAULTS, DECOR_LEVEL, MAX_DECALS, tintLayer, cellDecals, paintDecal, decalFor, decalLights, finishScene, drawGrid, foliage } from './decor.js';
 
 export const CELL = 64; // píxeles por casilla en el lienzo base
@@ -125,6 +126,12 @@ Object.assign(TS, {
   F: { base: '#5a3b1f', wall: true, draw: palisade },
   h: { base: '#1f4a22', wall: true, draw: hedge },
 });
+// Terrenos que se dibujan con contorno suave (agua, hierba, tierra, lava…). El abismo y los suelos construidos, no.
+const isSoft = (code) => !!TS[code]?.organic && code !== 'v';
+// Terrenos duros que redondean las esquinas de lo blando de al lado (sin invadir nunca su casilla).
+const MIXERS = new Set(['.', 'c', 'e', '%', 'R']);
+const isMixer = (code) => MIXERS.has(code);
+const SHORE_DECALS = new Set(['juncos', 'espuma']); // adornos de orilla: pueden caer al otro lado de la curva
 export const TERRAIN_SWATCH = Object.fromEntries(Object.entries(TS).map(([k, v]) => [k, v.base]));
 
 function specks({ ctx, x, y, s, rand }, colors, n) { dots(ctx, x, y, s, rand, n, colors, 0.012, 0.03); }
@@ -1657,6 +1664,20 @@ Object.assign(PP, {
     emoji(ctx, '🚪', x + w / 2, y + hh / 2, s * 0.38);
   },
 });
+// Conjuntos de la herramienta Dispersar: [objeto, peso]
+const SCATTER_SETS = {
+  bosque: [['T', 5], ['P', 2], ['arbol_otono', 1], ['b', 3], ['tocon', 1]],
+  matorral: [['b', 4], ['helecho', 3], ['piedras', 1], ['setas', 1]],
+  rocas: [['r', 3], ['piedras', 3]],
+  cueva: [['estalagmita', 3], ['piedras', 2], ['setas', 2], ['M', 1]],
+  ruinas: [['columna_rota', 2], ['r', 2], ['piedras', 2], ['O', 1]],
+  cementerio: [['G', 4], ['urna', 1], ['arbol_muerto', 1], ['j', 1]],
+  desierto: [['cactus', 3], ['r', 2], ['palmera', 1]],
+  cienaga: [['arbol_muerto', 2], ['x', 1], ['M', 1]],
+  agua: [['nenufares', 3], ['r', 1]],
+};
+const WATER_PROPS = new Set(['nenufares', 'barca']); // solo en el agua
+const ANY_GROUND = new Set(['r', 'piedras']); // en el agua o en tierra
 // Objetos que van en el suelo: se dibujan debajo de los demás y pueden compartir casilla con ellos.
 export const FLOOR_PROPS = new Set(['alfombra', 'sangre', 'charco', 'runas', 'placa', 'trampilla', 'N', 'flores', 'nenufares', 'puerta_secreta', 'cadenas']);
 // Color de la luz de los objetos mágicos (el resto da luz de llama).
@@ -1694,8 +1715,9 @@ export function paintProp(ctx, p, s, env, alpha = 1) {
 }
 
 // Dibuja un escenario completo (o solo una región) en un contexto con casillas de `s` píxeles.
-// Capas: color de base → bordes orgánicos → texturas → manchas de color → adornos automáticos → sombras junto a los
-// muros → muros con su contorno → cuadrícula → objetos del suelo → adornos a mano → objetos → ambiente y viñeta.
+// Capas: color de base → texturas → contornos suaves del terreno natural y orillas (terrain.js) → manchas de color →
+// adornos automáticos → sombras junto a los muros → muros, sombra de la roca y contorno de tinta → cuadrícula →
+// objetos del suelo → adornos a mano → objetos → ambiente y viñeta. La luz y sus sombras van aparte (drawLight).
 export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg = null, open = null } = {}) {
   const { cols, rows } = sc;
   const t = sc.tiles;
@@ -1739,76 +1761,68 @@ export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg
     ctx.fillStyle = st.base;
     ctx.fillRect(c * s, r * s, s + 0.5, s + 0.5);
   });
-  // 2. bordes orgánicos: la hierba, el agua o la lava invaden un poco la casilla vecina con un borde irregular
-  each((c, r, code) => {
-    const st = TS[code];
-    if (!st?.organic) return;
-    const rand = cellRand(c, r, 9);
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (!dc && !dr) continue;
-        const nb = TS[at(c + dc, r + dr)];
-        if (!nb?.organic || nb.organic >= st.organic) continue;
-        if (dc && dr && at(c + dc, r) !== code && at(c, r + dr) !== code) continue; // esquina convexa: se redondea aparte
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect((c + dc) * s, (r + dr) * s, s, s);
-        ctx.clip();
-        ctx.fillStyle = st.base;
-        const n = dc && dr ? 2 : 5;
-        for (let i = 0; i < n; i++) {
-          const along = (i + 0.5) / n - 0.5 + (rand() - 0.5) * 0.15;
-          // junto a una esquina convexa no se invade: así queda redonda
-          if (!(dc && dr) && ((along < -0.15 && at(c - !!dr, r - !!dc) !== code) || (along > 0.15 && at(c + !!dr, r + !!dc) !== code))) continue;
-          const px = (c + 0.5 + dc * 0.5) * s + (dc ? (rand() - 0.5) * s * 0.12 : along * s);
-          const py = (r + 0.5 + dr * 0.5) * s + (dr ? (rand() - 0.5) * s * 0.12 : along * s);
-          circle(ctx, px, py, s * (dc && dr ? 0.16 + rand() * 0.12 : 0.12 + rand() * 0.14));
-        }
-        ctx.restore();
-      }
-    }
-  });
-  // 3. texturas
+  // 2. texturas de cada casilla
   each((c, r, code) => {
     const st = TS[code];
     if (st?.draw && !st.wall) st.draw(env(c, r, 1));
   });
-  // esquinas convexas redondeadas: una mancha de agua, hierba o lava no acaba en pico de casilla
+  // 3. terreno natural con contornos suaves (static/js/core/terrain.js): donde otro terreno blando gana la orilla
+  //    dentro de una casilla, se pinta ese terreno recortado por la curva; luego, las orillas (espuma, lava…)
+  const field = softTerrain(sc, isSoft, look.decorSeed | 0, isMixer);
+  const P = s >= 160 ? 12 : s >= 40 ? 8 : s >= 16 ? 5 : 3;
+  const rims = {};
+  const edge = (u) => (u <= 0 ? -0.015 : u >= 1 ? 1.015 : u); // solapa un pelo con la vecina: sin rendijas
   each((c, r, code) => {
-    if (!TS[code]?.organic) return;
-    const R = s * 0.42;
-    for (const [dc, dr] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-      const other = at(c + dc, r);
-      if (other == null || other === code || other !== at(c, r + dr) || other !== at(c + dc, r + dr)) continue;
-      const st = TS[other];
-      if (!st?.base || st.wall) continue;
-      const kx = c * s + (dc > 0 ? s : 0); const ky = r * s + (dr > 0 ? s : 0);
+    const sh = isSoft(code) && field.cellShapes(c, r, P);
+    if (!sh) return;
+    for (const [X, polys] of sh.overlays) {
+      const st = TS[X];
       ctx.save();
       ctx.beginPath();
-      ctx.rect(Math.min(kx, kx - dc * R), Math.min(ky, ky - dr * R), R, R);
+      for (const poly of polys) {
+        poly.forEach(([u, v], k) => (k ? ctx.lineTo : ctx.moveTo).call(ctx, (c + edge(u)) * s, (r + edge(v)) * s));
+        ctx.closePath();
+      }
       ctx.clip();
-      ctx.beginPath();
-      ctx.rect(Math.min(kx, kx - dc * R), Math.min(ky, ky - dr * R), R, R);
-      ctx.arc(kx - dc * R, ky - dr * R, R, 0, Math.PI * 2);
       ctx.fillStyle = st.base;
-      ctx.fill('evenodd');
+      ctx.fillRect(c * s - 1, r * s - 1, s + 2, s + 2);
+      st.draw?.({ ...env(c, r, 1), code: X });
       ctx.restore();
     }
+    for (const [g, segs] of sh.rims) (rims[g] ||= []).push([c, r, segs]);
   });
-  // 4. manchas de color a gran escala: rompen la repetición de las casillas
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [g, list] of Object.entries(rims)) {
+    for (const [color, width, glow] of RIM_STYLE[g] || []) {
+      ctx.beginPath();
+      for (const [c, r, segs] of list) for (const [x0, y0, x1, y1] of segs) { ctx.moveTo((c + x0) * s, (r + y0) * s); ctx.lineTo((c + x1) * s, (r + y1) * s); }
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(0.6, width * s);
+      if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = s * 0.18; } else ctx.shadowBlur = 0;
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+  // 4. manchas de color a gran escala: rompen la repetición de las casillas (siguen las mismas orillas)
   if (s >= 6) {
-    const tint = tintLayer(sc, (code) => !!TS[code]?.wall || code === 'v' || code === '_');
+    const tint = tintLayer(sc, (code) => !!TS[code]?.wall || code === 'v' || code === '_', field.winnerAt);
     ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(tint, 0, 0, cols * s, rows * s);
     ctx.restore();
   }
-  // 5. adornos automáticos según el terreno (debajo de los objetos; no salen donde hay uno)
+  // 5. adornos automáticos según el terreno (debajo de los objetos; no salen donde hay uno ni al otro lado de la orilla)
   if (s >= 8 && DECOR_LEVEL[look.autoDecor]) {
     each((c, r, code) => {
       if (!code || TS[code]?.wall || code === 'v' || code === '_' || floorAt.has(`${c},${r}`)) return;
-      for (const d of cellDecals(c, r, code, (dc, dr) => at(c + dc, r + dr), (dc, dr) => wallAt(c + dc, r + dr), look.decorSeed | 0, look.autoDecor)) paintDecal(ctx, d, s);
+      const soft = isSoft(code);
+      for (const d of cellDecals(c, r, code, (dc, dr) => at(c + dc, r + dr), (dc, dr) => wallAt(c + dc, r + dr), look.decorSeed | 0, look.autoDecor)) {
+        if (soft && !SHORE_DECALS.has(d.k) && field.winnerAt(d.x, d.y) !== code) continue;
+        paintDecal(ctx, d, s);
+      }
     });
   }
   // 6. oclusión ambiental: sombra junto a los muros (más fuerte arriba, de donde viene la luz) y en las esquinas
@@ -1839,6 +1853,7 @@ export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg
   each((c, r, code) => {
     const st = TS[code];
     if (!st?.wall) return;
+    if (code === 'R') { st.draw(env(c, r, 2)); return; } // roca de cueva: sin escalones; la sombra va después
     let inner = true;
     for (let dr = -1; dr <= 1 && inner; dr++) for (let dc = -1; dc <= 1; dc++) if (!solid(c + dc, r + dr)) { inner = false; break; }
     if (inner) { // roca maciza: oscura para que las salas resalten
@@ -1860,11 +1875,20 @@ export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg
       ctx.fillRect(c * s, r * s, s, Math.max(1, s * 0.04));
     }
   });
+  // la roca de cueva se oscurece poco a poco al alejarse del suelo
+  if (sc.tiles.includes('R')) {
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(rockShade(sc, (k) => k === 'R', (k) => k != null && !TS[k]?.wall), 0, 0, cols * s, rows * s);
+    ctx.restore();
+  }
   // contorno de tinta entre muro y suelo: el muro se lee de un vistazo, como en los mapas impresos
   ctx.beginPath();
   each((c, r, code) => {
     if (!TS[code]?.wall) return;
-    const open = (dc, dr) => { const n = at(c + dc, r + dr); return n != null && !TS[n]?.wall; };
+    // la roca de cueva junto a terreno blando ya lleva su contorno curvo (orilla «roca»)
+    const open = (dc, dr) => { const n = at(c + dc, r + dr); return n != null && !TS[n]?.wall && !(code === 'R' && isSoft(n)); };
     if (open(0, -1)) { ctx.moveTo(c * s, r * s); ctx.lineTo(c * s + s, r * s); }
     if (open(0, 1)) { ctx.moveTo(c * s, r * s + s); ctx.lineTo(c * s + s, r * s + s); }
     if (open(-1, 0)) { ctx.moveTo(c * s, r * s); ctx.lineTo(c * s, r * s + s); }
@@ -1902,12 +1926,13 @@ export function drawScene(ctx, sc, cat, { s = CELL, dm = true, region = null, bg
   ctx.restore();
 }
 
-// Fuentes de luz del escenario: objetos con luz, la lava, el ácido y los adornos mágicos.
+// Fuentes de luz del escenario: objetos con luz, la lava, el ácido y los adornos mágicos. Las de los objetos proyectan
+// sombras (shadow); las difusas (lava, ácido, glifos), no.
 function lightSources(sc, cat) {
   const out = [];
   for (const p of sc.props || []) {
     const info = cat.P[p.k];
-    if (info?.light) out.push({ x: p.c + (p.w || 1) / 2, y: p.r + (p.h || 1) / 2, r: info.light, color: LIGHT_COLOR[p.k] || '255,160,70' });
+    if (info?.light) out.push({ x: p.c + (p.w || 1) / 2, y: p.r + (p.h || 1) / 2, r: info.light, color: LIGHT_COLOR[p.k] || '255,160,70', shadow: true });
   }
   for (let i = 0; i < sc.tiles.length; i++) {
     if (sc.tiles[i] === 'l') out.push({ x: (i % sc.cols) + 0.5, y: Math.floor(i / sc.cols) + 0.5, r: 1.8, color: '255,110,40', soft: true });
@@ -1916,31 +1941,100 @@ function lightSources(sc, cat) {
   return out.concat(decalLights(sc)); // glifos y cristales puestos a mano
 }
 
-export function drawLight(ctx, glow, sc, cat, s) {
+// Casillas que tapan la luz: muros, puertas cerradas (si se sabe cuáles están abiertas) y objetos de cobertura total
+// (columnas, obeliscos, mástiles, tiendas…). Fuera del escenario, todo tapa.
+export function opacityGrid(sc, cat, open = null) {
+  const { cols, rows } = sc;
+  const out = new Uint8Array(cols * rows);
+  for (let i = 0; i < out.length; i++) {
+    const code = sc.tiles[i];
+    if (cat.T[code]?.kind === 'muro' || (open && code === 'D' && !open.has(i))) out[i] = 1;
+  }
+  for (const p of sc.props || []) {
+    if (cat.P[p.k]?.cover !== 'total') continue;
+    for (let i = 0; i < (p.w || 1); i++) for (let j = 0; j < (p.h || 1); j++) if (p.c + i < cols && p.r + j < rows) out[(p.r + j) * cols + p.c + i] = 1;
+  }
+  return out;
+}
+// Polígono de lo que alumbra una luz en (x0, y0) con radio R (en casillas): rayos en todas direcciones que avanzan
+// casilla a casilla (DDA) hasta topar con algo opaco. La casilla de la propia luz no cuenta (una antorcha en el muro
+// alumbra la sala). Los rayos entran un poco en el muro para que se ilumine su cara.
+export function lightPolygon(x0, y0, R, opaque, cols, rows) {
+  const blocked = (c, r) => c < 0 || r < 0 || c >= cols || r >= rows || opaque[r * cols + c] === 1;
+  const n = Math.max(96, Math.round(R * 56));
+  const pts = [];
+  const c0 = Math.floor(x0); const r0 = Math.floor(y0);
+  for (let i = 0; i < n; i++) {
+    const a = ((i + 0.5) / n) * Math.PI * 2;
+    const dx = Math.cos(a); const dy = Math.sin(a);
+    const sc = dx > 0 ? 1 : -1; const sr = dy > 0 ? 1 : -1;
+    const tdx = Math.abs(1 / dx); const tdy = Math.abs(1 / dy);
+    let tx = (dx > 0 ? c0 + 1 - x0 : x0 - c0) * tdx; let ty = (dy > 0 ? r0 + 1 - y0 : y0 - r0) * tdy;
+    let c = c0; let r = r0; let t = R;
+    for (;;) {
+      let step;
+      if (tx < ty) { step = tx; tx += tdx; c += sc; } else { step = ty; ty += tdy; r += sr; }
+      if (step >= R) break;
+      if (blocked(c, r)) { t = Math.min(R, step + 0.22); break; }
+    }
+    pts.push(x0 + dx * t, y0 + dy * t);
+  }
+  return pts;
+}
+function lightClip(ctx, L, s, opaque, cols, rows) {
+  if (!L.shadow || !opaque) return;
+  const pts = L.poly ||= lightPolygon(L.x, L.y, L.r, opaque, cols, rows);
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i += 2) (i ? ctx.lineTo : ctx.moveTo).call(ctx, pts[i] * s, pts[i + 1] * s);
+  ctx.closePath();
+  ctx.clip();
+}
+
+// Oscuridad y resplandor del escenario. Con `opaque` (opacityGrid), las luces de los objetos proyectan sombras.
+export function drawLight(ctx, glow, sc, cat, s, open = null) {
   const W = sc.cols * s; const H = sc.rows * s;
   ctx.clearRect(0, 0, W, H);
   glow?.clearRect(0, 0, W, H);
   const alpha = LIGHT_ALPHA[sc.light] || 0;
   const sources = lightSources(sc, cat);
+  const opaque = sources.some((L) => L.shadow) ? opacityGrid(sc, cat, open) : null;
+  // una luz colgada en el muro (antorcha, farol…) sale por la cara del muro que da a la sala, no desde dentro de la piedra
+  if (opaque) {
+    for (const L of sources) {
+      const c = Math.floor(L.x); const r = Math.floor(L.y);
+      if (!L.shadow || !opaque[r * sc.cols + c]) continue;
+      const side = [[0, 1], [0, -1], [1, 0], [-1, 0]].find(([dc, dr]) => {
+        const x = c + dc; const y = r + dr;
+        return x >= 0 && y >= 0 && x < sc.cols && y < sc.rows && !opaque[y * sc.cols + x];
+      });
+      if (side) { L.x = c + 0.5 + side[0] * 0.52; L.y = r + 0.5 + side[1] * 0.52; }
+    }
+  }
   if (alpha) {
     ctx.fillStyle = `rgba(6,8,24,${alpha})`;
     ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'destination-out';
     for (const L of sources) {
+      ctx.save();
+      lightClip(ctx, L, s, opaque, sc.cols, sc.rows);
       const g = ctx.createRadialGradient(L.x * s, L.y * s, 0, L.x * s, L.y * s, L.r * s);
       g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.5, 'rgba(0,0,0,.8)'); g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.fillRect(L.x * s - L.r * s, L.y * s - L.r * s, L.r * s * 2, L.r * s * 2);
+      ctx.restore();
     }
     ctx.globalCompositeOperation = 'source-over';
   }
   if (glow) {
     for (const L of sources) {
-      const R = L.r * s * (L.soft ? 0.8 : 0.65);
+      const R = L.r * s * (L.soft ? 0.8 : 0.7);
+      glow.save();
+      lightClip(glow, L, s, opaque, sc.cols, sc.rows);
       const g = glow.createRadialGradient(L.x * s, L.y * s, 0, L.x * s, L.y * s, R);
-      g.addColorStop(0, `rgba(${L.color},${L.soft ? 0.18 : 0.32})`); g.addColorStop(1, `rgba(${L.color},0)`);
+      g.addColorStop(0, `rgba(${L.color},${L.soft ? 0.18 : 0.34})`); g.addColorStop(1, `rgba(${L.color},0)`);
       glow.fillStyle = g;
       glow.fillRect(L.x * s - R, L.y * s - R, R * 2, R * 2);
+      glow.restore();
     }
   }
 }
@@ -2176,6 +2270,8 @@ export function createBattleMap(opts = {}) {
   const edit = {
     terrain: ',', prop: 'T', w: 1, h: 1, rot: 0, brush: 1, hidden: false, rect: null, stroke: null,
     decal: 'auto', decalBrush: 'uno', decalScale: 1, decalSpin: true, // pincel de adornos
+    wall: '#', // muro de la herramienta Sala
+    scatterSet: 'bosque', density: 'normal', line: null, // Dispersar y Trazo
   };
   let sel = null; // en el editor: { type: 'prop' | 'decal', item } elegido con la herramienta de selección
   let move = null; // arrastre de lo elegido
@@ -2269,7 +2365,7 @@ export function createBattleMap(opts = {}) {
     const gctx = glowCv.getContext('2d');
     lctx.setTransform(0.25, 0, 0, 0.25, 0, 0);
     gctx.setTransform(0.25, 0, 0, 0.25, 0, 0);
-    drawLight(lctx, gctx, scene, cat, S);
+    drawLight(lctx, gctx, scene, cat, S, doorsOn ? openDoors : null);
     drawFog();
     renderTokens();
     drawOverlay();
@@ -2479,14 +2575,29 @@ export function createBattleMap(opts = {}) {
         else { ctx.beginPath(); ctx.arc(sel.item.x * S, sel.item.y * S, (0.32 * (sel.item.s || 1) + 0.12) * S, 0, Math.PI * 2); ctx.stroke(); }
         ctx.setLineDash([]);
       }
-      if (edit.rect) {
-        const { a, b } = edit.rect;
-        ctx.fillStyle = 'rgba(226,180,86,.25)';
-        ctx.strokeStyle = '#e2b456';
+      if (edit.line) {
+        ctx.fillStyle = 'rgba(226,180,86,.3)';
+        for (const [c, r] of thickLine(edit.line.a, edit.line.b, edit.brush)) if (inside(c, r)) ctx.fillRect(c * S, r * S, S, S);
+        ctx.strokeStyle = '#ffe9a8';
         ctx.lineWidth = 2 * inv;
+        ctx.setLineDash([8 * inv, 5 * inv]);
+        seg(ctx, (edit.line.a.c + 0.5) * S, (edit.line.a.r + 0.5) * S, (edit.line.b.c + 0.5) * S, (edit.line.b.r + 0.5) * S);
+        ctx.setLineDash([]);
+      } else if (edit.rect) {
+        const { a, b } = edit.rect;
         const x0 = Math.min(a.c, b.c); const y0 = Math.min(a.r, b.r);
-        ctx.fillRect(x0 * S, y0 * S, (Math.abs(a.c - b.c) + 1) * S, (Math.abs(a.r - b.r) + 1) * S);
-        ctx.strokeRect(x0 * S, y0 * S, (Math.abs(a.c - b.c) + 1) * S, (Math.abs(a.r - b.r) + 1) * S);
+        const w = Math.abs(a.c - b.c) + 1; const hh = Math.abs(a.r - b.r) + 1;
+        ctx.fillStyle = tool === 'scatter' ? 'rgba(120,200,110,.22)' : 'rgba(226,180,86,.25)';
+        ctx.strokeStyle = tool === 'scatter' ? '#8fd47e' : '#e2b456';
+        ctx.lineWidth = 2 * inv;
+        ctx.fillRect(x0 * S, y0 * S, w * S, hh * S);
+        ctx.strokeRect(x0 * S, y0 * S, w * S, hh * S);
+        if (tool === 'room' && w > 2 && hh > 2) { // el muro de la sala, más marcado
+          ctx.lineWidth = S * 0.9;
+          ctx.strokeStyle = 'rgba(40,30,20,.45)';
+          ctx.strokeRect((x0 + 0.5) * S, (y0 + 0.5) * S, (w - 1) * S, (hh - 1) * S);
+        }
+        label(ctx, `${w} × ${hh} · ${fmtMeters(w * METERS)} × ${fmtMeters(hh * METERS)}`, (x0 + w) * S + 8 * inv, y0 * S + 12 * inv, inv);
       } else if (hover && inside(hover.c, hover.r) && tool === 'prop') {
         // vista previa del objeto, ya girado, antes de soltarlo
         const [w, hh] = footprint();
@@ -2696,10 +2807,94 @@ export function createBattleMap(opts = {}) {
       changed = true;
       c0 = Math.min(c0, c); r0 = Math.min(r0, r); c1 = Math.max(c1, c); r1 = Math.max(r1, r);
     }
-    if (!changed) return;
+    if (!changed) return false;
     scene.tiles = arr.join('');
-    redraw({ c0: c0 - 1, r0: r0 - 1, c1: c1 + 1, r1: r1 + 1 });
+    redraw({ c0: c0 - 2, r0: r0 - 2, c1: c1 + 2, r1: r1 + 2 }); // ±2: los contornos suaves dependen de las vecinas
     o.onChange?.(scene);
+    return true;
+  }
+  // Escribe varios terrenos a la vez: [[c, r, código], …]
+  function writeTiles(list) {
+    const arr = scene.tiles.split('');
+    let c0 = Infinity; let r0 = Infinity; let c1 = -1; let r1 = -1; let changed = false;
+    for (const [c, r, code] of list) {
+      if (!inside(c, r) || arr[idx(c, r)] === code) continue;
+      arr[idx(c, r)] = code;
+      changed = true;
+      c0 = Math.min(c0, c); r0 = Math.min(r0, r); c1 = Math.max(c1, c); r1 = Math.max(r1, r);
+    }
+    if (!changed) return false;
+    scene.tiles = arr.join('');
+    redraw({ c0: c0 - 2, r0: r0 - 2, c1: c1 + 2, r1: r1 + 2 });
+    o.onChange?.(scene);
+    return true;
+  }
+  // Sala: el borde del rectángulo se vuelve muro y el interior, suelo (el terreno elegido). Una casilla del borde que ya
+  // era de ese mismo suelo no se tapa: así dos salas que se solapan quedan unidas en vez de partidas por un muro.
+  function buildRoom(box) {
+    const floor = TS[edit.terrain]?.wall || edit.terrain === 'v' ? '.' : edit.terrain;
+    const wall = TS[edit.wall]?.wall ? edit.wall : '#';
+    const list = [];
+    for (let r = box.r0; r <= box.r1; r++) {
+      for (let c = box.c0; c <= box.c1; c++) {
+        const border = c === box.c0 || c === box.c1 || r === box.r0 || r === box.r1;
+        const small = box.c1 - box.c0 < 2 || box.r1 - box.r0 < 2; // demasiado estrecha para tener muros: solo suelo
+        list.push([c, r, border && !small && scene.tiles[idx(c, r)] !== floor ? wall : floor]);
+      }
+    }
+    return writeTiles(list);
+  }
+  // Trazo: las casillas de una línea gruesa de a a b (ríos, caminos, pasillos). width en casillas.
+  function thickLine(a, b, width) {
+    const out = new Map();
+    const n = Math.max(Math.abs(b.c - a.c), Math.abs(b.r - a.r), 1) * 4;
+    const rad = Math.max(0.5, width / 2);
+    for (let i = 0; i <= n; i++) {
+      const px = a.c + 0.5 + ((b.c - a.c) * i) / n; const py = a.r + 0.5 + ((b.r - a.r) * i) / n;
+      for (let r = Math.floor(py - rad); r <= Math.ceil(py + rad); r++) {
+        for (let c = Math.floor(px - rad); c <= Math.ceil(px + rad); c++) {
+          if (Math.hypot(c + 0.5 - px, r + 0.5 - py) <= rad + 0.01 || (c === Math.floor(px) && r === Math.floor(py))) out.set(`${c},${r}`, [c, r]);
+        }
+      }
+    }
+    return [...out.values()];
+  }
+  // Dispersar: siembra objetos de un conjunto (bosque, rocas, ruinas…) por el rectángulo, con separación, sin tapar el
+  // paso de las zonas de inicio ni caer en muros, abismos, peligros o agua (salvo lo que es de agua, como los nenúfares).
+  function scatterProps(box) {
+    const set = SCATTER_SETS[edit.scatterSet] || [[edit.prop, 1]];
+    const list = edit.scatterSet === 'objeto' ? [[edit.prop, 1]] : set;
+    const total = list.reduce((acc, [, wgt]) => acc + wgt, 0);
+    const pick = () => { let x = Math.random() * total; for (const [k, wgt] of list) { x -= wgt; if (x <= 0) return k; } return list[0][0]; };
+    const density = { pocos: 0.07, normal: 0.14, muchos: 0.24 }[edit.density] || 0.14;
+    const taken = new Set();
+    for (const q of scene.props) if (!FLOOR_PROPS.has(q.k)) for (let i = 0; i < (q.w || 1); i++) for (let j = 0; j < (q.h || 1); j++) taken.add(idx(q.c + i, q.r + j));
+    const spawns = new Set([...(scene.spawns?.party || []), ...(scene.spawns?.enemies || [])].map(([x, y]) => idx(x, y)));
+    const cells = [];
+    for (let r = box.r0; r <= box.r1; r++) for (let c = box.c0; c <= box.c1; c++) cells.push([c, r]);
+    cells.sort(() => Math.random() - 0.5);
+    const want = Math.max(1, Math.round(cells.length * density));
+    let placed = 0;
+    for (const [c, r] of cells) {
+      if (placed >= want) break;
+      const k = pick();
+      const code = scene.tiles[idx(c, r)];
+      const info = cat.T[code];
+      const wet = code === '~' || code === 'W';
+      const aquatic = WATER_PROPS.has(k);
+      if (!info || info.kind === 'muro' || code === 'v' || info.hazard || (wet !== aquatic && !ANY_GROUND.has(k)) || spawns.has(idx(c, r))) continue;
+      const blocks = cat.P[k]?.effect === 'bloquea';
+      let free = !taken.has(idx(c, r));
+      if (free && blocks) for (let dr = -1; dr <= 1 && free; dr++) for (let dc = -1; dc <= 1; dc++) if (taken.has(idx(c + dc, r + dr))) { free = false; break; }
+      if (!free) continue;
+      scene.props.push({ k, c, r });
+      taken.add(idx(c, r));
+      placed++;
+    }
+    if (!placed) return false;
+    redraw({ c0: box.c0 - 2, r0: box.r0 - 2, c1: box.c1 + 2, r1: box.r1 + 2 });
+    o.onChange?.(scene);
+    return true;
   }
   function brushCells(c, r) {
     const n = edit.brush; const off = Math.floor((n - 1) / 2);
@@ -2939,7 +3134,8 @@ export function createBattleMap(opts = {}) {
     // edición
     if (!inside(cell.c, cell.r)) { startPan(e); return; }
     if (tool === 'paint') { pushUndo(); edit.stroke = cell; setTiles(brushCells(cell.c, cell.r), edit.terrain); sfx.brush(); }
-    else if (tool === 'rect') { pushUndo(); edit.rect = { a: cell, b: cell }; drawOverlay(); }
+    else if (tool === 'rect' || tool === 'room' || tool === 'scatter') { pushUndo(); edit.rect = { a: cell, b: cell }; drawOverlay(); }
+    else if (tool === 'line') { pushUndo(); edit.line = { a: cell, b: cell }; drawOverlay(); }
     else if (tool === 'fill') { pushUndo(); floodFill(cell.c, cell.r, edit.terrain); sfx.brush(); }
     else if (tool === 'prop') { pushUndo(); placeProp(cell.c, cell.r); }
     else if (tool === 'erase') { pushUndo(); edit.stroke = p; if (!eraseAt(p)) undoStack.pop(); }
@@ -3035,7 +3231,10 @@ export function createBattleMap(opts = {}) {
           move.moved = true;
           redraw(union(before, decalBox(it)));
         }
-      } else if (tool === 'rect' && edit.rect) {
+      } else if (tool === 'line' && edit.line) {
+        const b = { c: Math.max(0, Math.min(scene.cols - 1, cell.c)), r: Math.max(0, Math.min(scene.rows - 1, cell.r)) };
+        if (b.c !== edit.line.b.c || b.r !== edit.line.b.r) { edit.line.b = b; drawOverlay(); }
+      } else if ((tool === 'rect' || tool === 'room' || tool === 'scatter') && edit.rect) {
         edit.rect.b = { c: Math.max(0, Math.min(scene.cols - 1, cell.c)), r: Math.max(0, Math.min(scene.rows - 1, cell.r)) };
         drawOverlay();
       }
@@ -3092,13 +3291,22 @@ export function createBattleMap(opts = {}) {
         if (!move.moved) undoStack.pop(); else { o.onChange?.(scene); o.onSelect?.(sel); }
         move = null;
       }
-      if (tool === 'rect' && edit.rect) {
+      if (edit.rect && ['rect', 'room', 'scatter'].includes(tool)) {
         const { a, b } = edit.rect;
         edit.rect = null;
-        const cells = [];
-        for (let c = Math.min(a.c, b.c); c <= Math.max(a.c, b.c); c++) for (let r = Math.min(a.r, b.r); r <= Math.max(a.r, b.r); r++) cells.push([c, r]);
-        setTiles(cells, edit.terrain);
-        sfx.brush();
+        const box = { c0: Math.min(a.c, b.c), r0: Math.min(a.r, b.r), c1: Math.max(a.c, b.c), r1: Math.max(a.r, b.r) };
+        const changed = tool === 'room' ? buildRoom(box) : tool === 'scatter' ? scatterProps(box) : (() => {
+          const cells = [];
+          for (let c = box.c0; c <= box.c1; c++) for (let r = box.r0; r <= box.r1; r++) cells.push([c, r]);
+          return setTiles(cells, edit.terrain);
+        })();
+        if (!changed) undoStack.pop(); else if (tool === 'scatter') sfx.step(); else sfx.brush();
+        drawOverlay();
+      }
+      if (edit.line && tool === 'line') {
+        const { a, b } = edit.line;
+        edit.line = null;
+        if (!setTiles(thickLine(a, b, edit.brush), edit.terrain)) undoStack.pop(); else sfx.brush();
         drawOverlay();
       }
       edit.stroke = null;

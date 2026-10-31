@@ -92,7 +92,7 @@ def generate(app, p, body):
 
 
 def scene_catalog(app, p, body):
-    return 200, scenes.catalog()
+    return 200, {**scenes.catalog(), "random_kinds": dungeon.kinds()}
 
 
 def make_dungeon(app, p, body):

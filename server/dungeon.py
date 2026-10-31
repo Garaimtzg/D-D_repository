@@ -9,6 +9,7 @@ con la clave de las salas en la descripción. La misma semilla da siempre la mis
 import math
 import random
 
+from . import wilds
 from .scenes import _Grid
 
 SIZES = {"pequena": (30, 22, 6), "mediana": (40, 28, 9), "grande": (52, 36, 13)}
@@ -31,8 +32,16 @@ TREASURE = ["un cofre con 2d6 × 10 po", "una gema de 50 po bajo una losa suelta
 MONSTERS = ["guardianes", "no muertos", "un cubo gelatinoso", "goblins", "una bestia hambrienta", "cultistas", "arañas gigantes"]
 
 
+def kinds():
+    """Tipos de escenario al azar para el selector: interiores (mazmorra, cueva) y exteriores (wilds.py)."""
+    return [{"key": "mazmorra", "name": "Mazmorra", "group": "Interior"}, {"key": "cueva", "name": "Cueva", "group": "Interior"}] + [
+        {"key": k, "name": name, "group": "Exterior"} for k, (name, _) in wilds.KINDS.items()]
+
+
 def generate(seed=None, size="mediana", kind="mazmorra"):
     seed = seed if seed not in (None, "") else random.randrange(1, 10**6)
+    if kind in wilds.KINDS:
+        return wilds.generate(int(seed), size, kind)
     cols, rows, n_rooms = SIZES.get(size, SIZES["mediana"])
     return (_cave if kind == "cueva" else _rooms)(int(seed), cols, rows, n_rooms)
 

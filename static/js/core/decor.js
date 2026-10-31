@@ -34,7 +34,8 @@ function hexRgb(hex) { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n
 const tintCache = new Map();
 const TINT_PX = 4; // píxeles por casilla: el lienzo se estira con suavizado y las manchas quedan sin bordes
 // Lienzo pequeño con las manchas de todo el escenario; los muros, el abismo y «sin terreno» quedan transparentes.
-export function tintLayer(sc, isWall) {
+// codeAt(x, y), si se da, dice qué terreno se ve en cada punto (con las orillas suaves); si no, el de la casilla.
+export function tintLayer(sc, isWall, codeAt = null) {
   const seed = (sc.decorSeed | 0) + 7;
   const key = `${sc.cols}x${sc.rows}:${seed}:${sc.tiles}`;
   if (tintCache.has(key)) return tintCache.get(key);
@@ -46,10 +47,12 @@ export function tintLayer(sc, isWall) {
   const d = img.data;
   for (let py = 0; py < H; py++) {
     for (let px = 0; px < W; px++) {
-      const code = sc.tiles[Math.floor(py / TINT_PX) * sc.cols + Math.floor(px / TINT_PX)];
-      const t = TINT[code];
-      if (!t || isWall(code)) continue;
       const x = (px + 0.5) / TINT_PX; const y = (py + 0.5) / TINT_PX;
+      const cell = sc.tiles[Math.floor(py / TINT_PX) * sc.cols + Math.floor(px / TINT_PX)];
+      if (isWall(cell)) continue;
+      const code = codeAt ? codeAt(x, y) : cell;
+      const t = TINT[code];
+      if (!t) continue;
       // manchas grandes (unas 6 casillas) y un poco de detalle (unas 2)
       const n = noise2(x / 6, y / 6, seed) * 0.75 + noise2(x / 1.8, y / 1.8, seed + 3) * 0.25;
       const v = Math.max(-1, Math.min(1, (n - 0.5) * 2.6));
