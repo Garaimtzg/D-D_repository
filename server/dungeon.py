@@ -121,7 +121,7 @@ def _rooms(seed, cols, rows, n_rooms):
         loot = f" Escondido: {rng.choice(TREASURE)}." if rng.random() < 0.3 else ""
         key.append(f"{n}. {title}: {text}{extra_note}{loot}")
     g.scatter("a", len(rooms), {"."}, spacing=2)
-    return _custom(g.scene(f"mazmorra-{seed}", f"Mazmorra {seed}", "Clave de las salas (solo el máster):\n" + "\n".join(key), "oscuridad"), seed)
+    return _custom(g.scene(f"mazmorra-{seed}", f"Mazmorra {seed}", "Clave de las salas (solo el máster):\n" + "\n".join(key), "oscuridad", "frio"), seed)
 
 
 def _cave(seed, cols, rows, n_rooms):
@@ -147,7 +147,7 @@ def _cave(seed, cols, rows, n_rooms):
     rng = g.rng
     key = [f"Entrada al oeste. En el fondo, al este: {rng.choice(MONSTERS)} junto a {rng.choice(TREASURE)}.",
            "Los cristales dan algo de luz; el agua es poco profunda (terreno difícil)."]
-    return _custom(g.scene(f"cueva-{seed}", f"Cueva {seed}", "Clave (solo el máster):\n" + "\n".join(key), "oscuridad"), seed)
+    return _custom(g.scene(f"cueva-{seed}", f"Cueva {seed}", "Clave (solo el máster):\n" + "\n".join(key), "oscuridad", "sombrio"), seed)
 
 
 def _custom(sc, seed):

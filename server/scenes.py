@@ -204,6 +204,35 @@ PROP_CODES = {p[0] for p in PROPS}
 BLOCKING = {p[0] for p in PROPS if p[2] == "bloquea"}
 PROP_GROUPS = list(dict.fromkeys(p[6] for p in PROPS))
 
+# Adornos: solo decoración (no cambian el movimiento ni la cobertura). Se colocan libres, con giro y escala, o salen
+# solos según el terreno. Sus pintores están en static/js/core/decor.js.
+_SU, _MH, _NA, _AG, _NF, _MG = "Suelo", "Mazmorra y hogar", "Naturaleza", "Agua", "Nieve y fuego", "Magia"
+DECALS = [
+    ("grieta", "Grieta", _SU), ("guijarros", "Guijarros", _SU), ("piedra", "Piedra suelta", _SU),
+    ("suciedad", "Mancha de suciedad", _SU), ("humedad", "Mancha de humedad", _SU), ("charquito", "Charquito", _SU),
+    ("escombro", "Cascotes", _SU), ("huellas", "Huellas", _SU),
+    ("astillas", "Astillas", _MH), ("paja", "Paja", _MH), ("papeles", "Papeles", _MH), ("monedas", "Monedas sueltas", _MH),
+    ("cera", "Vela derretida", _MH), ("huesos", "Huesos sueltos", _MH), ("telarana", "Telaraña de esquina", _MH),
+    ("sangre", "Salpicadura de sangre", _MH), ("vino", "Mancha de vino", _MH), ("quemadura", "Quemadura", _MH),
+    ("mata", "Mata de hierba", _NA), ("hierba_alta", "Hierba alta", _NA), ("flores_silvestres", "Flores silvestres", _NA),
+    ("trebol", "Tréboles", _NA), ("hojas", "Hojas caídas", _NA), ("ramitas", "Ramitas", _NA), ("setitas", "Setitas", _NA),
+    ("musgo", "Musgo", _NA), ("raiz", "Raíz", _NA), ("helecho", "Helecho pequeño", _NA),
+    ("nenufar", "Nenúfares", _AG), ("ondas", "Ondas", _AG), ("juncos", "Juncos", _AG), ("reflejo", "Reflejo", _AG),
+    ("algas", "Algas", _AG), ("espuma", "Espuma", _AG),
+    ("ventisca", "Montón de nieve", _NF), ("escarcha", "Escarcha", _NF), ("ceniza", "Ceniza y rescoldos", _NF),
+    ("costra", "Costra de lava", _NF),
+    ("runa", "Runa grabada", _MG), ("glifo", "Glifo brillante", _MG), ("cristales", "Cristales mágicos", _MG),
+]
+DECAL_CODES = {d[0] for d in DECALS}
+DECAL_GROUPS = list(dict.fromkeys(d[2] for d in DECALS))
+DECOR_LEVELS = [("ninguna", "Ninguno"), ("sutil", "Sutiles"), ("normal", "Normales"), ("recargada", "Muchos")]
+MOODS = [
+    ("natural", "Natural"), ("calido", "Cálido (fuego, taberna)"), ("frio", "Frío (cripta, invierno)"),
+    ("sombrio", "Sombrío"), ("misterio", "Misterio (feérico, arcano)"), ("enfermizo", "Enfermizo (ciénaga, plaga)"),
+    ("infernal", "Infernal (volcán, abismo)"), ("sepia", "Sepia (pergamino viejo)"),
+]
+GRIDS = [("linea", "Líneas"), ("puntos", "Puntos en las esquinas"), ("cruces", "Cruces en las esquinas"), ("ninguna", "Sin cuadrícula")]
+
 LIGHTS = [
     ("dia", "Pleno día"),
     ("penumbra", "Penumbra"),
@@ -409,12 +438,14 @@ class _Grid:
         out.sort(reverse=True)
         return [(x, y) for _, _, x, y in out]
 
-    def scene(self, sid, name, description, light):
+    def scene(self, sid, name, description, light, mood="natural", vignette=True):
         return {
             "id": f"p-{sid}", "preset": True, "name": name, "description": description,
             "cols": self.cols, "rows": self.rows, "light": light, "bg": "", "bgOpacity": 1,
             "tiles": "".join("".join(row) for row in self.t),
             "props": self.props, "spawns": self.spawns,
+            # acabado: adornos automáticos según el terreno, tono de color y viñeta
+            "autoDecor": "normal", "decorSeed": 0, "decals": [], "mood": mood, "vignette": vignette, "grid": "linea",
         }
 
 
@@ -461,7 +492,7 @@ cccccccccccccccccccccccccc
     g.prop("a", 12, 0)
     g.prop("a", 20, 0)
     return g.scene("taberna", "Taberna «El Jabalí Dorado»",
-                   "Sala con barra, chimenea y almacén. Ideal para una pelea de taberna: el grupo entra desde la calle.", "penumbra")
+                   "Sala con barra, chimenea y almacén. Ideal para una pelea de taberna: el grupo entra desde la calle.", "penumbra", "calido")
 
 
 def _bosque():
@@ -526,7 +557,7 @@ def _cripta():
     g.scatter("j", 5, {"."}, area=(2, 2, 6, 5), spacing=0)
     g.scatter("j", 3, {"."}, area=(8, 3, 19, 14), spacing=1)
     return g.scene("cripta", "Cripta olvidada",
-                   "Salas de piedra con columnas, sarcófagos y un altar. Hay una trampa oculta (solo la ve el máster).", "noche")
+                   "Salas de piedra con columnas, sarcófagos y un altar. Hay una trampa oculta (solo la ve el máster).", "noche", "frio")
 
 
 def _cueva():
@@ -554,7 +585,7 @@ def _cueva():
     g.scatter("r", 4, {":", "%"}, spacing=2)
     g.scatter("S", 2, {":"}, area=(fx - 5, fy - 5, fx + 5, fy + 5), spacing=1)
     return g.scene("cueva", "Cueva de los goblins",
-                   "Túneles de roca, una charca subterránea, setas gigantes y la hoguera de la banda.", "noche")
+                   "Túneles de roca, una charca subterránea, setas gigantes y la hoguera de la banda.", "noche", "sombrio")
 
 
 def _puente():
@@ -603,7 +634,7 @@ def _campamento():
     g.scatter("T", 10, {",", ";"}, spacing=2)
     g.scatter("b", 8, {",", ";"}, spacing=1)
     return g.scene("campamento", "Campamento de bandidos",
-                   "Empalizada de madera con tiendas, hoguera, un carro y un prisionero en una jaula.", "noche")
+                   "Empalizada de madera con tiendas, hoguera, un carro y un prisionero en una jaula.", "noche", "calido")
 
 
 def _plaza():
@@ -695,7 +726,7 @@ def _templo():
     g.scatter("b", 10, {",", ";"}, spacing=1, avoid=lambda x, y: 5 <= x <= 22 and 3 <= y <= 14)
     g.scatter("j", 3, {"."}, area=(6, 4, 21, 13), spacing=1)
     return g.scene("templo", "Templo en ruinas",
-                   "Columnas rotas, maleza entre las losas y un altar custodiado por dos estatuas.", "penumbra")
+                   "Columnas rotas, maleza entre las losas y un altar custodiado por dos estatuas.", "penumbra", "misterio")
 
 
 def _pantano():
@@ -723,7 +754,7 @@ def _pantano():
     g.scatter("b", 8, {",", ";"}, spacing=1)
     g.scatter("j", 3, {"p"}, spacing=2)
     return g.scene("pantano", "Ciénaga de los ahogados",
-                   "Barro, aguas turbias y una cabaña de bruja al final de una pasarela. Casi todo es terreno difícil.", "penumbra")
+                   "Barro, aguas turbias y una cabaña de bruja al final de una pasarela. Casi todo es terreno difícil.", "penumbra", "enfermizo")
 
 
 def _guarida():
@@ -744,7 +775,7 @@ def _guarida():
     g.scatter("r", 6, {"."}, spacing=2)
     g.scatter("Q", 2, {"."}, spacing=4)
     return g.scene("guarida", "Guarida del dragón",
-                   "Caverna volcánica con ríos de lava y el tesoro amontonado del dragón.", "noche")
+                   "Caverna volcánica con ríos de lava y el tesoro amontonado del dragón.", "noche", "infernal")
 
 
 def _campo():
@@ -765,12 +796,17 @@ PRESETS = [_taberna(), _bosque(), _cripta(), _cueva(), _puente(), _campamento(),
 
 
 def catalog() -> dict:
-    """Todo lo que el tablero necesita: terrenos, objetos, luces y escenarios prediseñados."""
+    """Todo lo que el tablero necesita: terrenos, objetos, adornos, luces, ambientes y escenarios prediseñados."""
     return {
         "cell_m": 1.5,
         "terrain": [{"code": c, "name": n, "cost": cost, "kind": kind, "hazard": c in HAZARD} for c, n, cost, kind in TERRAIN],
         "props": [{"code": c, "name": n, "effect": e, "cover": cv, "light": li, "hidden": hid, "group": g} for c, n, e, cv, li, hid, g in PROPS],
         "prop_groups": PROP_GROUPS,
         "lights": [{"key": k, "name": n} for k, n in LIGHTS],
+        "decals": [{"code": c, "name": n, "group": g} for c, n, g in DECALS],
+        "decal_groups": DECAL_GROUPS,
+        "decor_levels": [{"key": k, "name": n} for k, n in DECOR_LEVELS],
+        "moods": [{"key": k, "name": n} for k, n in MOODS],
+        "grids": [{"key": k, "name": n} for k, n in GRIDS],
         "presets": PRESETS,
     }

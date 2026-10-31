@@ -4,6 +4,7 @@
 import { api, debounced } from '../core/api.js';
 import { h, clear, icon, field, selectEl, segmented, modal, confirmDialog, toast, toastError, pickFiles, fmtDate } from '../core/dom.js';
 import { createBattleMap, sceneCatalog, sceneThumb, drawScene, blankScene, resizeScene, fmtMeters, sceneImage, imagePx } from '../core/battlemap.js';
+import { paintDecal, DECOR_DEFAULTS } from '../core/decor.js';
 import { autoPlace, ensureBoard } from '../core/board.js';
 import { newCombat } from '../core/combat.js';
 import { sfx } from '../core/sfx.js';
@@ -15,8 +16,12 @@ const KIND_GROUPS = [
 ];
 const TOOLS = [
   ['paint', 'brush', 'Pincel'], ['rect', 'grid', 'Rectángulo'], ['fill', 'bucket', 'Rellenar'], ['prop', 'gem', 'Objeto'],
-  ['erase', 'eraser', 'Borrar objeto'], ['spawn-party', 'crown', 'Inicio grupo'], ['spawn-enemies', 'skull', 'Inicio enemigos'], ['pan', 'hand', 'Mover vista'],
+  ['decor', 'sparkle', 'Adornos'], ['select', 'target', 'Elegir y mover'], ['erase', 'eraser', 'Borrar'], ['pan', 'hand', 'Mover vista'],
+  ['spawn-party', 'crown', 'Inicio grupo'], ['spawn-enemies', 'skull', 'Inicio enemigos'],
 ];
+const ROTATIONS = [[0, '0°'], [90, '90°'], [180, '180°'], [270, '270°']];
+// Fondo liso de la muestra de cada grupo de adornos (para que el adorno se vea bien en pequeño)
+const DECAL_GROUND = { Suelo: ['#8a857c', '#5f5a52'], 'Mazmorra y hogar': ['#8b5a31', '#5a3a1e'], Naturaleza: ['#5d8f45', '#3f6a2c'], Agua: ['#4a93b5', '#25607f'], 'Nieve y fuego': ['#8f9aa6', '#4a4f57'], Magia: ['#3d3550', '#1c1828'] };
 const LIGHT_ICON = { dia: '☀️', penumbra: '🌆', noche: '🌙', oscuridad: '🌑' };
 
 async function mount(root, [sceneId]) {
@@ -260,10 +265,26 @@ async function mount(root, [sceneId]) {
   }
 
   // ===================================================================== editor
-  function swatch(code, isProp) {
+  // Muestras del editor: se dibujan una vez y se reutilizan (el panel se redibuja a menudo).
+  const swatches = new Map();
+  function swatch(code, kind) {
+    const key = `${kind}:${code}`;
+    if (swatches.has(key)) return swatches.get(key);
     const cv = h('canvas', { width: 80, height: 80 });
-    const sc = { cols: 1, rows: 1, tiles: isProp ? '.' : code, props: isProp ? [{ k: code, c: 0, r: 0 }] : [], spawns: {} };
-    drawScene(cv.getContext('2d'), sc, cat, { s: 80, dm: true });
+    const ctx = cv.getContext('2d');
+    if (kind === 'decal') {
+      const [a, b] = DECAL_GROUND[cat.decals.find((d) => d.code === code)?.group] || DECAL_GROUND.Suelo;
+      const g = ctx.createRadialGradient(30, 26, 4, 40, 40, 60);
+      g.addColorStop(0, a); g.addColorStop(1, b);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 80, 80);
+      const corner = code === 'telarana';
+      paintDecal(ctx, { k: code, x: corner ? 0.06 : 0.5, y: corner ? 0.06 : 0.5, a: 0, s: corner ? 1.8 : 2.5 }, 80);
+    } else {
+      const sc = { cols: 1, rows: 1, tiles: kind === 'terrain' ? code : '.', props: kind === 'prop' ? [{ k: code, c: 0, r: 0 }] : [], spawns: {}, autoDecor: 'ninguna' };
+      drawScene(ctx, sc, cat, { s: 80, dm: true });
+    }
+    swatches.set(key, cv);
     return cv;
   }
 
@@ -271,22 +292,95 @@ async function mount(root, [sceneId]) {
     if (sc.preset) return renderPresetPage(sc);
     const save = debounced(() => api.update('scenes', sc).then((d) => { sc.updated = d.updated; }).catch(toastError), 500);
     const stage = h('div', { class: 'editor-stage' });
-    const ed = { tool: 'paint', terrain: sc.bg ? '_' : ',', prop: 'T', w: 1, h: 1, brush: 1, hidden: false, open: new Set() };
-    const bm = createBattleMap({ catalog: cat, editable: true, dm: true, onChange: () => save() });
+    const ed = {
+      tool: 'paint', terrain: sc.bg ? '_' : ',', prop: 'T', w: 1, h: 1, rot: 0, brush: 1, hidden: false, open: new Set(), q: '',
+      decal: 'auto', decalBrush: 'uno', decalScale: 1, decalSpin: true, decalOpen: new Set(),
+    };
+    const look = () => ({ ...DECOR_DEFAULTS, ...sc });
+    const bm = createBattleMap({
+      catalog: cat, editable: true, dm: true, onChange: () => save(),
+      onSelect: () => drawSide(), onEdit: (patch) => { Object.assign(ed, patch); drawSide(); },
+    });
     stage.append(bm.el);
     const side = h('aside', { class: 'editor-side' });
 
-    const applyEdit = () => { bm.setTool(ed.tool); bm.setEdit({ terrain: ed.terrain, prop: ed.prop, w: ed.w, h: ed.h, brush: ed.brush, hidden: ed.hidden }); };
+    const applyEdit = () => {
+      bm.setTool(ed.tool);
+      bm.setEdit({ terrain: ed.terrain, prop: ed.prop, w: ed.w, h: ed.h, rot: ed.rot, brush: ed.brush, hidden: ed.hidden,
+        decal: ed.decal, decalBrush: ed.decalBrush, decalScale: ed.decalScale, decalSpin: ed.decalSpin });
+    };
     const toolBtn = ([k, ic, l]) => h('button', { class: 'ed-tool', type: 'button', 'aria-pressed': String(ed.tool === k), onclick: () => { ed.tool = k; applyEdit(); drawSide(); } },
       h('span', { class: 'ic' }, icon(ic, 18)), l);
     const terrainSw = (t) => h('button', { class: 'swatch', type: 'button', 'aria-pressed': String(ed.terrain === t.code && ['paint', 'rect', 'fill'].includes(ed.tool)), 'data-tip': `${t.name}${t.cost === 2 ? ' · terreno difícil' : t.cost == null ? ' · no se puede pisar' : ''}${t.hazard ? ' · peligroso' : ''}`,
-      onclick: () => { ed.terrain = t.code; if (!['paint', 'rect', 'fill'].includes(ed.tool)) ed.tool = 'paint'; applyEdit(); drawSide(); } }, swatch(t.code, false), t.name);
+      onclick: () => { ed.terrain = t.code; if (!['paint', 'rect', 'fill'].includes(ed.tool)) ed.tool = 'paint'; applyEdit(); drawSide(); } }, swatch(t.code, 'terrain'), t.name);
     const propSw = (p) => h('button', { class: 'swatch', type: 'button', 'aria-pressed': String(ed.prop === p.code && ed.tool === 'prop'),
       'data-tip': `${p.name}${p.effect === 'bloquea' ? ' · bloquea el paso' : p.effect === 'dificil' ? ' · terreno difícil' : p.effect === 'peligro' ? ' · peligroso' : ''}${p.cover ? ` · cobertura ${p.cover}` : ''}${p.light ? ` · da luz (${fmtMeters(p.light * 1.5)})` : ''}`,
-      onclick: () => { ed.prop = p.code; ed.tool = 'prop'; applyEdit(); drawSide(); } }, swatch(p.code, true), p.name);
+      onclick: () => { ed.prop = p.code; ed.tool = 'prop'; applyEdit(); drawSide(); } }, swatch(p.code, 'prop'), p.name);
+    const decalSw = (d) => h('button', { class: 'swatch', type: 'button', 'aria-pressed': String(ed.decal === d.code && ed.tool === 'decor'), 'data-tip': `${d.name} · solo adorno, no cambia el movimiento`,
+      onclick: () => { ed.decal = d.code; ed.tool = 'decor'; applyEdit(); drawSide(); } }, swatch(d.code, 'decal'), d.name);
+    const propName = Object.fromEntries(cat.props.map((p) => [p.code, p.name]));
+    const decalName = Object.fromEntries(cat.decals.map((d) => [d.code, d.name]));
+
+    // Lo elegido con «Elegir y mover»: qué es y qué se le puede hacer.
+    function selectionPanel() {
+      const sel = bm.selection;
+      if (!sel) return h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Pulsa un objeto o un adorno para elegirlo y arrástralo para moverlo. R lo gira, Supr lo borra y Ctrl + D lo duplica.');
+      const it = sel.item;
+      return h('div', { class: 'stack-sm sel-box' },
+        h('div', { class: 'row between nowrap' }, h('b', {}, sel.type === 'prop' ? propName[it.k] || it.k : decalName[it.k] || it.k),
+          h('span', { class: 'tiny muted' }, sel.type === 'prop' ? `${it.w || 1}×${it.h || 1} · ${it.rot || 0}°` : `adorno · ${Math.round(it.a || 0)}°`)),
+        h('div', { class: 'ed-row' },
+          h('button', { class: 'btn sm', type: 'button', onclick: () => bm.rotateSelected(90), 'data-tip': 'Girar (R; Mayús + R al revés)' }, icon('refresh', 14), 'Girar'),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => bm.duplicateSelected(), 'data-tip': 'Duplicar (Ctrl + D)' }, icon('copy', 14), 'Duplicar'),
+          h('button', { class: 'btn sm ghost danger', type: 'button', onclick: () => bm.deleteSelected(), 'data-tip': 'Borrar (Supr)' }, icon('trash', 14), 'Borrar')),
+        sel.type === 'prop' && h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: !!it.hidden, onchange: (e) => bm.updateSelected({ hidden: e.target.checked }) }), 'Solo lo ve el máster'),
+        sel.type === 'decal' && field('Tamaño', h('input', { type: 'range', min: 0.4, max: 2.5, step: 0.05, value: it.s || 1, oninput: (e) => bm.updateSelected({ s: Number(e.target.value) }) })));
+    }
+
+    // Acabado: adornos automáticos, ambiente, viñeta y cuadrícula.
+    function finishPanel() {
+      const L = look();
+      const set = (patch, redraw = true) => { Object.assign(sc, patch); if (redraw) bm.redraw(); save(); drawSide(); };
+      const manual = (sc.decals || []).length;
+      return h('div', { class: 'panel stack', style: { order: 3 } },
+        h('h3', { style: { margin: 0 } }, icon('sparkle', 16), ' Acabado y ambiente'),
+        field('Adornos automáticos', segmented(cat.decor_levels.map((l) => [l.key, l.name]), L.autoDecor, (v) => set({ autoDecor: v }))),
+        h('div', { class: 'ed-row' },
+          h('button', { class: 'btn sm', type: 'button', disabled: L.autoDecor === 'ninguna', onclick: () => set({ decorSeed: (L.decorSeed | 0) + 1 }), 'data-tip': 'Otra colocación de los adornos automáticos' }, '🎲 Otra variación'),
+          h('span', { class: 'tiny muted' }, 'Salen solos según el terreno y se adaptan al repintar.')),
+        h('div', { class: 'ed-row size-inputs' },
+          field('Ambiente', selectEl(cat.moods.map((m) => [m.key, m.name]), L.mood, (v) => set({ mood: v }))),
+          field('Cuadrícula', selectEl(cat.grids.map((g) => [g.key, g.name]), L.grid, (v) => set({ grid: v })))),
+        h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: !!L.vignette, onchange: (e) => set({ vignette: e.target.checked }) }), 'Viñeta: oscurecer un poco los bordes'),
+        manual > 0 && h('button', { class: 'btn sm ghost', type: 'button', onclick: () => { if (bm.clearDecals()) { toast(`Quitados ${manual} adornos puestos a mano.`, { iconName: 'trash' }); drawSide(); } } },
+          icon('trash', 14), `Quitar los adornos puestos a mano (${manual})`));
+    }
+
+    // Listas de objetos y adornos: con búsqueda, o por grupos plegables (se abre el del elegido y los que abras tú).
+    const propsBox = h('div', { class: 'stack-sm' });
+    const decalsBox = h('div', { class: 'stack-sm' });
+    const fold = (openSet, label, list, chosen, sw) => {
+      const open = openSet.has(label) || list.some((x) => x.code === chosen);
+      return h('details', { class: 'ed-group', open, ontoggle: (e) => { if (e.target.open) openSet.add(label); else openSet.delete(label); } },
+        h('summary', { class: 'ed-group-title' }, `${label} (${list.length})`), h('div', { class: 'swatches' }, list.map(sw)));
+    };
+    function drawLists() {
+      const q = ed.q.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const match = (x) => !q || x.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q);
+      const props = cat.props.filter(match); const decals = cat.decals.filter(match);
+      clear(propsBox, q
+        ? (props.length ? h('div', { class: 'swatches' }, props.map(propSw)) : h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Ningún objeto se llama así.'))
+        : cat.prop_groups.map((label) => fold(ed.open, label, cat.props.filter((p) => p.group === label), ed.tool === 'prop' && ed.prop, propSw)));
+      const auto = h('button', { class: 'swatch auto-decal', type: 'button', 'aria-pressed': String(ed.decal === 'auto' && ed.tool === 'decor'), 'data-tip': 'Cada adorno, el que pega con el terreno donde cae',
+        onclick: () => { ed.decal = 'auto'; ed.tool = 'decor'; applyEdit(); drawSide(); } }, h('span', { class: 'auto-ic' }, '✨'), 'Según el terreno');
+      clear(decalsBox, q
+        ? (decals.length ? h('div', { class: 'swatches' }, decals.map(decalSw)) : h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Ningún adorno se llama así.'))
+        : [h('div', { class: 'swatches' }, auto), cat.decal_groups.map((label) => fold(ed.decalOpen, label, cat.decals.filter((d) => d.group === label), ed.tool === 'decor' && ed.decal, decalSw))]);
+    }
 
     const size = { cols: sc.cols, rows: sc.rows };
     function drawSide() {
+      drawLists();
       const showTerrain = ['paint', 'rect', 'fill'].includes(ed.tool);
       const propsFirst = ed.tool === 'prop' || ed.tool === 'erase';
       clear(side,
@@ -294,12 +388,22 @@ async function mount(root, [sceneId]) {
           h('div', { class: 'ed-tools' }, TOOLS.map(toolBtn)),
           ed.tool === 'paint' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Pincel'),
             segmented([[1, '1×1'], [2, '2×2'], [3, '3×3']], ed.brush, (v) => { ed.brush = v; applyEdit(); })),
+          ed.tool === 'prop' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Giro'),
+            segmented(ROTATIONS, ed.rot, (v) => { ed.rot = v; applyEdit(); }), h('span', { class: 'tiny muted' }, 'o la tecla R')),
           ed.tool === 'prop' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Tamaño'),
             selectEl([1, 2, 3, 4].map((n) => [n, `${n} de ancho`]), ed.w, (v) => { ed.w = Number(v); applyEdit(); }, { class: 'mini-sel', 'aria-label': 'Ancho del objeto' }),
             selectEl([1, 2, 3, 4].map((n) => [n, `${n} de alto`]), ed.h, (v) => { ed.h = Number(v); applyEdit(); }, { class: 'mini-sel', 'aria-label': 'Alto del objeto' }),
             h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: ed.hidden, onchange: (e) => { ed.hidden = e.target.checked; applyEdit(); } }), 'Solo lo ve el máster')),
           ed.tool.startsWith('spawn') && h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Pulsa casillas para marcar (o quitar) dónde aparecen las fichas al colocarlas automáticamente.'),
-          ed.tool === 'erase' && h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Pulsa o arrastra sobre los objetos para quitarlos. También vale el clic derecho con cualquier herramienta.'),
+          ed.tool === 'erase' && h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Pulsa o arrastra sobre los objetos y los adornos para quitarlos. También vale el clic derecho con cualquier herramienta.'),
+          ed.tool === 'select' && selectionPanel(),
+          ed.tool === 'decor' && [
+            h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Pincel'),
+              segmented([['uno', 'Uno'], ['punado', 'Un puñado']], ed.decalBrush, (v) => { ed.decalBrush = v; applyEdit(); })),
+            h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Tamaño'),
+              h('input', { type: 'range', min: 0.4, max: 2.5, step: 0.05, value: ed.decalScale, 'aria-label': 'Tamaño de los adornos', oninput: (e) => { ed.decalScale = Number(e.target.value); applyEdit(); } }),
+              h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: ed.decalSpin, onchange: (e) => { ed.decalSpin = e.target.checked; applyEdit(); } }), 'Giro al azar')),
+            h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Los adornos son solo decoración: no estorban el paso. Pulsa o arrastra para sembrarlos; el clic derecho los quita.')],
           h('div', { class: 'ed-row' },
             h('button', { class: 'btn sm', type: 'button', onclick: () => bm.undo() || toast('Nada que deshacer.') }, icon('undo', 14), 'Deshacer'),
             h('button', { class: 'btn sm', type: 'button', onclick: () => bm.redo() || toast('Nada que rehacer.') }, icon('redo', 14), 'Rehacer'))),
@@ -312,14 +416,14 @@ async function mount(root, [sceneId]) {
           })),
         h('div', { class: 'panel stack', style: { order: propsFirst ? 1 : 2 } },
           h('h3', { style: { margin: 0 } }, icon('gem', 16), ' Objetos'),
-          // muchos objetos: cada grupo se pliega; se abre el del objeto elegido y los que abras tú
-          cat.prop_groups.map((label) => {
-            const list = cat.props.filter((p) => p.group === label);
-            const open = ed.open.has(label) || list.some((p) => p.code === ed.prop);
-            return h('details', { class: 'ed-group', open, ontoggle: (e) => { if (e.target.open) ed.open.add(label); else ed.open.delete(label); } },
-              h('summary', { class: 'ed-group-title' }, `${label} (${list.length})`), h('div', { class: 'swatches' }, list.map(propSw)));
-          })),
-        h('div', { class: 'panel stack', style: { order: 3 } },
+          h('input', { type: 'search', class: 'ed-search', placeholder: 'Buscar objeto o adorno…', value: ed.q, 'aria-label': 'Buscar objeto o adorno',
+            oninput: (e) => { ed.q = e.target.value; drawLists(); } }),
+          propsBox),
+        h('div', { class: `panel stack ${ed.tool === 'decor' ? '' : 'dim'}`, style: { order: ed.tool === 'decor' ? 0 : 2 } },
+          h('h3', { style: { margin: 0 } }, icon('sparkle', 16), ' Adornos'),
+          decalsBox),
+        finishPanel(),
+        h('div', { class: 'panel stack', style: { order: 4 } },
           h('h3', { style: { margin: 0 } }, icon('grid', 16), ' Escenario'),
           field('Luz', selectEl(cat.lights.map((l) => [l.key, `${LIGHT_ICON[l.key]} ${l.name}`]), sc.light, (v) => { sc.light = v; bm.redraw(); save(); })),
           h('div', { class: 'ed-row size-inputs' },
@@ -376,7 +480,9 @@ async function mount(root, [sceneId]) {
 
     const onKey = (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
-      if (typing || !(e.ctrlKey || e.metaKey)) return;
+      if (typing || document.querySelector('.modal-back')) return;
+      if (bm.editorKey(e)) { e.preventDefault(); return; } // R, Supr, Ctrl + D, Esc
+      if (!(e.ctrlKey || e.metaKey)) return;
       if (e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); bm.undo(); }
       else if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) { e.preventDefault(); bm.redo(); }
     };

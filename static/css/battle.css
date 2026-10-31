@@ -14,6 +14,8 @@
 .bm[data-tool="ruler"] .bm-viewport, .bm[data-tool="area"] .bm-viewport { cursor: crosshair; }
 .bm.editing .bm-viewport { cursor: cell; }
 .bm.editing[data-tool="pan"] .bm-viewport { cursor: grab; }
+.bm.editing[data-tool="decor"] .bm-viewport { cursor: crosshair; }
+.bm.editing[data-tool="select"] .bm-viewport { cursor: default; }
 .bm-viewport.drop-over { box-shadow: inset 0 0 0 3px var(--gold), inset 0 0 40px rgba(226, 180, 86, .25); }
 .bm-layer {
   position: absolute; left: 0; top: 0; transform-origin: 0 0;
@@ -142,6 +144,9 @@ details.ed-group[open] > summary::before { transform: rotate(90deg); }
 details.ed-group > summary:hover { color: var(--gold-2); }
 .ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .ed-row .seg button { padding: 4px 10px; }
+.ed-search { width: 100%; }
+.swatch.auto-decal .auto-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 7px; font-size: 1.4rem; background: radial-gradient(circle at 35% 30%, rgba(248, 220, 148, .35), rgba(0, 0, 0, .25)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1), 0 2px 5px rgba(0, 0, 0, .4); }
+.sel-box { padding: 8px 10px; border-radius: 10px; border: 1px dashed rgba(255, 217, 107, .55); background: rgba(255, 217, 107, .06); }
 .ed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .ed-head .title-input { flex: 1; min-width: 220px; }
 .size-inputs input { width: 64px; }
