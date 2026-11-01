@@ -235,3 +235,81 @@ body.player-mode .mesa-side { top: 14px; max-height: calc(100vh - 28px); }
 .pin-dest-opt { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 10px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); text-align: center; transition: border-color .15s, transform .15s var(--ease); }
 .pin-dest-opt:hover, .pin-dest-opt:focus-visible { border-color: var(--gold); transform: translateY(-2px); }
 .pin-dest-opt img { width: 100%; height: 90px; object-fit: cover; border-radius: 6px; }
+
+/* ------------------------------------------- pantalla de jugadores en otro ordenador */
+/* botón y panel del máster */
+.screen-btn.on { border-color: rgba(76, 195, 138, .55); color: #b4f3cf; box-shadow: 0 0 14px rgba(76, 195, 138, .22); }
+.screen-panel { gap: 12px; }
+.screen-panel h4 { margin: 6px 0 0; font: 600 .95rem var(--font-display); color: var(--gold-2); letter-spacing: .03em; }
+.sp-intro { margin: 0; color: var(--text-2); }
+.sp-switch { padding: 10px 14px; border-radius: var(--r); border: 1px solid var(--line-2); background: rgba(0, 0, 0, .22); width: 100%; }
+.sp-switch.on { border-color: rgba(76, 195, 138, .55); background: rgba(76, 195, 138, .08); color: #c9f6dc; }
+.sp-error { margin: 0; color: #ffb3ab; }
+.sp-connect { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px 18px; padding: 12px 14px; border-radius: var(--r); background: rgba(0, 0, 0, .25); border: 1px solid var(--line); }
+.sp-connect > :nth-child(n+3) { grid-column: 1 / -1; }
+.sp-urls { display: flex; flex-direction: column; gap: 6px; }
+.sp-url { font: 700 1.05rem ui-monospace, Consolas, monospace; color: var(--gold-2); background: rgba(0, 0, 0, .3); padding: 4px 8px; border-radius: 6px; user-select: all; }
+.sp-code { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.sp-code-val { font: 700 2rem var(--font-display); letter-spacing: .28em; color: var(--gold-2); text-shadow: 0 0 18px rgba(226, 180, 86, .35); user-select: all; }
+.sp-clients { font-size: .9rem; }
+.sp-wait textarea { width: 100%; }
+.sp-wait-img { height: 46px; border-radius: 6px; border: 2px solid #fbf3df; }
+.sp-show { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 14px; }
+.sp-never { margin: 0; }
+.sp-hint { margin: 0; color: var(--gold-2); }
+.screen-panel .check.is-off { opacity: .45; cursor: default; }
+.dock-physical { margin: -4px 0 8px; color: var(--gold-2); }
+@media (max-width: 720px) { .sp-connect { grid-template-columns: minmax(0, 1fr); } }
+
+/* lo que el máster no deja ver */
+body.remote .ping-hint { display: none; }
+.mesa.no-initiative .ribbon, .mesa.no-party .party, .mesa.no-dice .dock, .mesa.no-rolls .feed { display: none; }
+.mesa.no-side .mesa-grid { grid-template-columns: minmax(0, 1fr); }
+.mesa.no-side .mesa-side { display: none; }
+/* la pantalla de jugadores ocupa justo la pantalla: el tablero se estira y nada se sale por abajo */
+body.remote main#view { height: 100vh; padding: 12px; animation: none; }
+body.remote .view-mesa, body.remote .mesa, body.remote .mesa-grid { height: 100%; min-height: 0; }
+body.remote .mesa-grid { align-items: stretch; }
+body.remote .table-frame { min-height: 0; }
+body.remote .board { height: auto; flex: 1 1 0; min-height: 0; }
+body.remote .mesa-side { top: 0; max-height: 100%; }
+body.remote .ribbon:empty { display: none; } /* sin combate no queda una franja vacía arriba */
+body.remote .remote-bar { position: absolute; right: 12px; bottom: 12px; z-index: 9; }
+body.remote .remote-bar .zoom { margin: 0; }
+body.remote .remote-bar .zoom:empty { display: none; }
+@media (max-width: 1200px) { body.remote main#view { height: auto; } body.remote .board { height: 70vh; flex: none; } }
+
+/* página de los jugadores: código, conexión, pantalla completa, espera y negro */
+.remote-gate { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 16px;
+  background: radial-gradient(ellipse at 50% 35%, #3a2414 0%, #140f0b 55%, #070504 100%); }
+.remote-gate-card { width: min(440px, 100%); display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 34px 28px;
+  border-radius: 22px; background: linear-gradient(180deg, var(--panel-a), var(--panel-b)); border: 1px solid var(--line-2); box-shadow: var(--shadow-2), var(--glow); }
+.remote-gate-card h1 { margin: 0; font: 700 1.7rem var(--font-display); color: var(--gold-2); letter-spacing: .05em; }
+.remote-gate-card p { margin: 0; color: var(--text-2); }
+.remote-crest { font-size: 2.6rem; filter: drop-shadow(0 0 14px rgba(226, 180, 86, .5)); }
+.remote-code-in { width: 100%; height: 72px; text-align: center; font: 700 2.3rem var(--font-display); letter-spacing: .42em; padding-left: .42em; text-transform: uppercase; }
+.remote-gate-err { color: #ffb3ab !important; font-weight: 700; }
+.remote-gate .btn { width: 100%; justify-content: center; }
+
+.remote-status { position: fixed; left: 14px; bottom: 12px; z-index: 160; display: flex; gap: 8px; align-items: center; padding: 5px 11px; border-radius: 999px;
+  font-size: .78rem; color: var(--muted); background: rgba(0, 0, 0, .55); border: 1px solid var(--line); transition: opacity .5s; pointer-events: none; }
+.remote-status i { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
+.remote-status.ok i { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
+.remote-status.lost { color: #ffc4bd; border-color: rgba(224, 82, 74, .5); }
+.remote-status.lost i { background: var(--crimson); animation: blink .8s ease-in-out infinite; }
+.remote-full { position: fixed; top: 12px; right: 12px; z-index: 160; opacity: .65; transition: opacity .5s; }
+.remote-full:hover { opacity: 1; }
+body.remote-idle .remote-status.ok, body.remote-idle .remote-full { opacity: 0; }
+body.remote-idle .remote-full { pointer-events: none; }
+body.remote-idle .board { cursor: none; }
+
+.remote-curtain { position: fixed; inset: 0; z-index: 145; display: grid; place-items: center; padding: 24px; background: #000; animation: curtainIn .7s ease; }
+.remote-curtain.espera { background: radial-gradient(ellipse at 50% 42%, #3a2414 0%, #1a110b 45%, #060403 100%); }
+@keyframes curtainIn { from { opacity: 0; } to { opacity: 1; } }
+.remote-wait { max-width: min(820px, 100%); display: flex; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+.remote-wait h1 { margin: 0; font: 700 clamp(2rem, 5.5vw, 4rem) var(--font-display); color: var(--gold-2); letter-spacing: .05em; text-shadow: 0 0 34px rgba(226, 180, 86, .35); }
+.remote-wait p { margin: 0; font: italic 400 clamp(1.15rem, 2.6vw, 1.8rem) var(--font-serif); color: var(--text-2); white-space: pre-line; }
+.remote-wait-img { max-width: 100%; max-height: 52vh; border-radius: 4px; border: 5px solid #fbf3df; box-shadow: 0 0 0 1px #8a6a3d, 0 18px 50px rgba(0, 0, 0, .7); }
+.remote-embers { display: flex; gap: 14px; }
+.remote-embers i { width: 9px; height: 9px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 12px var(--ember); animation: candle 2.4s ease-in-out infinite; }
+.remote-embers i:nth-child(2) { animation-delay: -.8s; } .remote-embers i:nth-child(3) { animation-delay: -1.6s; }

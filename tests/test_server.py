@@ -857,5 +857,273 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.call("PUT", "/api/characters")[0], 405)
 
 
+
+class RemoteScreenTests(unittest.TestCase):
+    """Pantalla de jugadores en otro ordenador: apagada de serie, con código, y sin secretos del máster."""
+
+    def setUp(self):
+        from server import remote
+        self.remote = remote
+        self.tmp = tempfile.TemporaryDirectory()
+        self.server = make_server("127.0.0.1", 0, data_dir=self.tmp.name)
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.server.app.remote.bind_host = "127.0.0.1"  # en los tests, sin salir a la red
+        self.server.app.remote.bind_ports = [0]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def tearDown(self):
+        self.server.app.remote.stop()
+        self.server.shutdown()
+        self.server.server_close()
+        self.tmp.cleanup()
+
+    def call(self, base, method, path, body=None, headers=None, raw=None):
+        data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
+        req = urllib.request.Request(base + path, data=data, method=method, headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as res:
+                return res.status, res.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def dm(self, method, path, body=None, **kw):
+        status, raw = self.call(self.base, method, path, body, **kw)
+        return status, json.loads(raw or b"null")
+
+    def turn_on(self, **show):
+        _, st = self.dm("PUT", "/api/pantalla", {"on": True, **({"show": show} if show else {})})
+        self.assertTrue(st["running"], st["error"])
+        self.rbase = f"http://127.0.0.1:{st['port']}"
+        self.code = st["code"]
+        return st
+
+    def players(self, path="/api/jugadores", method="GET", body=None, code=True):
+        headers = {"X-Mesa-Codigo": self.code} if code is True else ({"X-Mesa-Codigo": code} if code else {})
+        status, raw = self.call(self.rbase, method, path, body, headers=headers)
+        try:
+            return status, json.loads(raw)
+        except ValueError:
+            return status, raw
+
+    def test_off_by_default_and_turns_on_and_off(self):
+        _, st = self.dm("GET", "/api/pantalla")
+        self.assertEqual((st["on"], st["running"], st["port"], st["urls"]), (False, False, None, []))
+        self.assertIsNone(self.server.app.remote.server)  # nada escucha en la red hasta que el máster la enciende
+        st = self.turn_on()
+        self.assertRegex(st["code"], r"^[A-Z2-9]{6}$")
+        self.assertTrue(st["urls"])
+        _, again = self.dm("GET", "/api/pantalla")
+        self.assertEqual(again["code"], st["code"])  # el código se mantiene
+        _, st = self.dm("PUT", "/api/pantalla", {"on": False})
+        self.assertFalse(st["running"])
+        with self.assertRaises(OSError):
+            urllib.request.urlopen(self.rbase + "/", timeout=2)
+
+    def test_needs_the_code_and_only_serves_the_players_page(self):
+        self.turn_on()
+        status, page = self.call(self.rbase, "GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn(b"remote.js", page)
+        self.assertEqual(self.call(self.rbase, "GET", "/js/main.js")[0], 200)
+        self.assertEqual(self.players(code=False)[0], 401)
+        self.assertEqual(self.players(code="ZZZZZZ")[0], 401)
+        self.assertEqual(self.players()[0], 200)
+        self.assertEqual(self.call(self.rbase, "GET", f"/api/jugadores?c={self.code.lower()}")[0], 200)
+        self.assertEqual(self.call(self.rbase, "GET", "/api/jugadores", headers={"Cookie": f"otra=1; mesa_codigo={self.code}"})[0], 200)
+        # nada del máster sale por la red, ni con el código
+        for path in ("/api/characters", "/api/settings", "/api/pantalla", "/api/pantalla/vista", "/api/rolls", "/api/backup", "/api/monsters", "/api/notes"):
+            self.assertEqual(self.players(path)[0], 403, path)
+        for method in ("POST", "PUT", "DELETE"):
+            self.assertEqual(self.players("/api/characters", method, {"name": "x"})[0], 403, method)
+        self.assertEqual(self.players("/api/settings", "PUT", {"remote": {}})[0], 403)
+        for path in ("/index.html", "/js/../index.html", "/js/%2e%2e/index.html", "/js/core/", "/dados-movil.html"):
+            self.assertEqual(self.call(self.rbase, "GET", path)[0], 404, path)
+        # un código nuevo echa a quien tuviera el anterior
+        old = self.code
+        _, st = self.dm("PUT", "/api/pantalla", {"newCode": True})
+        self.assertNotEqual(st["code"], old)
+        self.assertEqual(self.players(code=old)[0], 401)
+
+    def make_table(self):
+        """Una partida con secretos: enemigo oculto, trampa, notas, niebla y una tirada secreta."""
+        preset = scenes.PRESETS[0]
+        cols = preset["cols"]
+        _, ana = self.dm("POST", "/api/characters", {"name": "Ana", "type": "jugador", "hp": 9, "maxHp": 12, "ac": 15, "notes": "secreto de Ana",
+                                                   "portrait": "/uploads/" + "a" * 32 + ".png"})
+        self.dm("POST", "/api/characters", {"name": "Villano", "type": "enemigo", "hp": 50, "maxHp": 50, "notes": "plan malvado"})
+        combatants = [
+            {"cid": "c1", "charId": ana["id"], "name": "Ana", "type": "jugador", "hp": 9, "maxHp": 12, "ac": 15, "init": 12, "conditions": []},
+            {"cid": "c2", "name": "Asesino", "type": "enemigo", "hp": 30, "maxHp": 30, "init": 20, "hidden": True, "conditions": []},
+            {"cid": "c3", "name": "Lobo", "type": "enemigo", "hp": 7, "maxHp": 20, "ac": 13, "init": 10, "conditions": [{"name": "Derribado", "rounds": 1}]},
+            {"cid": "c4", "name": "Lobo 2", "type": "enemigo", "hp": 11, "maxHp": 11, "init": 8, "conditions": []},
+        ]
+        board = {"scene": preset["id"], "pos": {"c1": [1, 1], "c2": [3, 3], "c3": [2, 1], "c4": [10, 10]}, "moved": {},
+                 "fog": {"on": True, "seen": [1 * cols + 1, 1 * cols + 2]}}
+        _, combat = self.dm("POST", "/api/combats", {"name": "Emboscada", "status": "active", "round": 2, "turn": 2,
+                                                      "combatants": combatants, "board": board, "log": ["El asesino espera"]})
+        self.dm("POST", "/api/roll", {"expr": "1d20", "label": "Percepción secreta", "secret": True})
+        self.dm("POST", "/api/roll", {"expr": "1d20", "label": "Ataque", "who": "Ana"})
+        self.dm("PUT", "/api/settings", {"activeCombat": combat["id"], "playerMessage": "Huele a azufre", "clock": {"day": 3, "minutes": 600}})
+        return combat
+
+    def test_bundle_has_no_secrets(self):
+        self.turn_on()
+        self.make_table()
+        _, b = self.players()
+        text = json.dumps(b, ensure_ascii=False)
+        for secret in ("Asesino", "secreto de Ana", "Villano", "plan malvado", "Percepción secreta", "El asesino espera", '"remote"'):
+            self.assertNotIn(secret, text)
+        c = b["combat"]
+        self.assertEqual([x["name"] for x in c["combatants"]], ["Ana", "Lobo", "Lobo 2"])
+        self.assertEqual(c["turn"], 1)  # le toca al lobo, contado sin el oculto
+        ana, wolf, wolf2 = c["combatants"]
+        self.assertEqual((ana["hp"], ana["maxHp"], ana["ac"]), (9, 12, 15))
+        self.assertEqual((wolf["hp"], wolf["maxHp"]), (8, 20))  # 7/20 se ve como «maltrecho» (40 %), no el número
+        self.assertNotIn("ac", wolf)
+        self.assertEqual(wolf["conditions"], [{"name": "Derribado", "rounds": 1}])
+        self.assertEqual(set(c["board"]["pos"]), {"c1", "c3"})  # el segundo lobo está bajo la niebla: ni su casilla
+        self.assertEqual([r["label"] for r in b["rolls"]], ["Ataque"])
+        self.assertEqual(b["settings"]["playerMessage"], "Huele a azufre")
+        self.assertNotIn("remote", b["settings"])
+        self.assertEqual(set(b["chars"][0]) & {"notes", "inventory", "spells"}, set())
+        self.assertEqual(b["scene"]["id"], scenes.PRESETS[0]["id"])
+        self.assertNotIn("description", b["scene"])
+        # sin PG de los enemigos: solo si sigue en pie
+        self.dm("PUT", "/api/pantalla", {"show": {"enemyHp": "no"}})
+        _, b = self.players()
+        wolf = b["combat"]["combatants"][1]
+        self.assertEqual((wolf["hp"], wolf["maxHp"]), (1, None))
+        # el máster ve lo mismo que ellos desde su ordenador
+        _, preview = self.dm("GET", "/api/pantalla/vista")
+        self.assertEqual(preview["version"], b["version"])
+
+    def test_hidden_props_and_notes_of_custom_scenes(self):
+        self.turn_on()
+        _, sc = self.dm("POST", "/api/scenes", {"name": "Guarida", "cols": 4, "rows": 4, "tiles": "." * 16, "notes": "la trampa está en el centro",
+                                                "props": [{"k": "B", "c": 0, "r": 0}, {"k": "T", "c": 2, "r": 2, "hidden": True}]})
+        _, combat = self.dm("POST", "/api/combats", {"name": "x", "status": "active", "round": 1, "turn": 0, "combatants": [], "board": {"scene": sc["id"]}})
+        self.dm("PUT", "/api/settings", {"activeCombat": combat["id"]})
+        _, b = self.players()
+        self.assertEqual(b["scene"]["props"], [{"k": "B", "c": 0, "r": 0}])
+        self.assertNotIn("notes", b["scene"])
+        self.assertEqual([s["id"] for s in b["scenes"]], [sc["id"]])
+        status, cat = self.players("/api/scene-catalog")
+        self.assertEqual(status, 200)
+        self.assertTrue(all(not p.get("hidden") for s in cat["presets"] for p in s["props"]))
+        self.assertTrue(all("description" not in s for s in cat["presets"]))
+        self.assertEqual(self.players("/api/scene-catalog", code=False)[0], 401)
+
+    def test_show_options(self):
+        self.turn_on(map=False, rolls=False, narration=False, clock=False, party=False, dice=False)
+        self.make_table()
+        _, b = self.players()
+        self.assertIsNone(b["map"])
+        self.assertIsNone(b["scene"])
+        self.assertEqual((b["combat"]["board"]["scene"], b["combat"]["board"]["pos"]), (None, {}))
+        self.assertEqual((b["rolls"], b["chars"]), ([], []))
+        self.assertNotIn("playerMessage", b["settings"])
+        self.assertNotIn("clock", b["settings"])
+        _, st = self.dm("PUT", "/api/pantalla", {"show": {"enemyHp": "exacto", "nada": True}})
+        self.assertEqual(st["show"]["enemyHp"], "aprox")  # lo que no se conoce no entra
+        self.assertNotIn("nada", st["show"])
+
+    def test_uploads_only_if_they_are_on_screen(self):
+        self.turn_on()
+        shown = self.dm("POST", "/api/uploads", raw=b"\x89PNG mapa", headers={"X-Filename": "mapa.png"})[1]["url"]
+        hidden = self.dm("POST", "/api/uploads", raw=b"\x89PNG secreto", headers={"X-Filename": "secreto.png"})[1]["url"]
+        _, m = self.dm("POST", "/api/maps", {"name": "Valle", "url": shown, "tokens": [], "notes": "aquí hay un tesoro",
+                                             "pins": [{"id": "p1", "x": 0.5, "y": 0.5, "label": "Cueva", "link": "wiki:x", "notes": "dragón"}]})
+        self.dm("PUT", "/api/settings", {"tableMap": m["id"]})
+        _, b = self.players()
+        self.assertEqual(b["map"]["url"], shown)
+        self.assertNotIn("aquí hay un tesoro", json.dumps(b, ensure_ascii=False))
+        self.assertEqual(b["map"]["pins"], [])  # chinchetas «solo el máster» (lo normal)
+        self.assertEqual(self.players(shown)[0], 200)
+        self.assertEqual(self.call(self.rbase, "GET", shown)[0], 403)  # sin código, tampoco
+        self.assertEqual(self.players(hidden)[0], 403)
+        self.dm("PUT", f"/api/maps/{m['id']}", {**m, "pinsShow": "todos"})
+        _, b = self.players()
+        self.assertEqual(b["map"]["pins"], [{"id": "p1", "x": 0.5, "y": 0.5, "icon": None, "label": "Cueva"}])
+
+    def test_players_rolls_are_public(self):
+        self.turn_on()
+        self.dm("POST", "/api/characters", {"name": "Ana", "type": "jugador", "hp": 9, "maxHp": 9})
+        status, r = self.players("/api/roll", "POST", {"expr": "1d20+3", "label": "Ana: Sigilo", "who": "Ana", "secret": True})
+        self.assertEqual(status, 200)
+        self.assertEqual((r["secret"], r["remote"], r["who"]), (False, True, "Ana"))
+        _, r = self.players("/api/roll", "POST", {"expr": "1d6", "who": "Máster"})
+        self.assertEqual(r["who"], "Jugador")  # nadie se hace pasar por el máster
+        self.assertEqual(self.players("/api/roll", "POST", {"expr": "hola"})[0], 400)
+        self.assertEqual(self.players("/api/roll", "POST", {"expr": "1d6"}, code=False)[0], 403)
+        _, log = self.dm("GET", "/api/rolls")
+        self.assertEqual([x["who"] for x in log], ["Ana", "Jugador"])
+        self.dm("PUT", "/api/pantalla", {"show": {"dice": False}})
+        self.assertEqual(self.players("/api/roll", "POST", {"expr": "1d6"})[0], 403)
+
+    def test_physical_dice_only_when_the_dm_allows_them(self):
+        self.turn_on()
+        self.dm("POST", "/api/characters", {"name": "Ana", "type": "jugador", "hp": 9, "maxHp": 9})
+        _, st = self.dm("GET", "/api/pantalla")
+        self.assertFalse(st["show"]["physical"])  # de serie, la app tira por ellos
+        roll = {"expr": "1d20+5", "mode": "adv", "label": "Ana: Ataque", "who": "Ana", "dice": [[4, 20]]}
+        status, err = self.players("/api/roll", "POST", roll)
+        self.assertEqual(status, 403)  # nadie «apunta» un 20 si el máster no ha activado los dados físicos
+        self.assertIn("dados físicos", err["error"])
+        self.dm("PUT", "/api/pantalla", {"show": {"physical": True}})
+        _, b = self.players()
+        self.assertTrue(b["show"]["physical"])  # la pantalla de los jugadores lo sabe y pide lo que ha salido
+        status, r = self.players("/api/roll", "POST", roll)
+        self.assertEqual(status, 200)
+        self.assertEqual((r["total"], r["natural"], r["crit"], r["physical"], r["secret"], r["remote"]), (25, 20, "critico", True, False, True))
+        self.assertEqual(self.players("/api/roll", "POST", {**roll, "dice": [[21, 3]]})[0], 400)  # un d20 no saca 21
+        status, r = self.players("/api/roll", "POST", {"expr": "2d6", "who": "Ana"})  # «Que tire la app» sigue valiendo
+        self.assertEqual((status, r.get("physical", False)), (200, False))
+        _, log = self.dm("GET", "/api/rolls")
+        self.assertEqual([x.get("physical", False) for x in log], [True, False])
+
+    def test_waiting_screen_black_screen_and_freeze(self):
+        self.turn_on()
+        _, a = self.dm("POST", "/api/maps", {"name": "Aldea", "url": "", "tokens": []})
+        _, z = self.dm("POST", "/api/maps", {"name": "Mazmorra", "url": "", "tokens": []})
+        self.dm("PUT", "/api/settings", {"tableMap": a["id"]})
+        self.dm("PUT", "/api/pantalla", {"screen": "espera", "waitText": "Descanso de diez minutos", "waitImage": "/etc/passwd"})
+        _, b = self.players()
+        self.assertEqual((b["screen"], b["wait"]["text"], b["wait"]["image"]), ("espera", "Descanso de diez minutos", ""))
+        self.assertNotIn("map", b)  # mientras esperan no se manda nada de la partida
+        self.dm("PUT", "/api/pantalla", {"screen": "negro"})
+        self.assertEqual(self.players()[1]["screen"], "negro")
+        self.dm("PUT", "/api/pantalla", {"screen": "mesa", "frozen": True})
+        self.dm("PUT", "/api/settings", {"tableMap": z["id"]})  # el máster prepara la mazmorra sin que la vean
+        _, b = self.players()
+        self.assertEqual((b["map"]["name"], b["frozen"]), ("Aldea", True))
+        self.dm("PUT", "/api/pantalla", {"frozen": False})
+        self.assertEqual(self.players()[1]["map"]["name"], "Mazmorra")
+
+    def test_long_poll_waits_for_changes(self):
+        import time
+        self.turn_on()
+        old, self.remote.LONG_POLL = self.remote.LONG_POLL, 5
+        try:
+            _, b = self.players()
+            threading.Timer(0.6, lambda: self.dm("PUT", "/api/settings", {"tableWeather": "lluvia"})).start()
+            t0 = time.time()
+            _, b2 = self.players(f"/api/jugadores?v={b['version']}")
+            self.assertLess(time.time() - t0, 4)  # contesta en cuanto cambia algo, sin esperar al final
+            self.assertNotEqual(b2["version"], b["version"])
+            self.assertEqual(b2["settings"]["tableWeather"], "lluvia")
+            _, st = self.dm("GET", "/api/pantalla")
+            self.assertEqual([c["ip"] for c in st["clients"]], ["127.0.0.1"])
+        finally:
+            self.remote.LONG_POLL = old
+
+    def test_comes_back_on_after_restart(self):
+        from server.handler import start_remote_if_on
+        self.turn_on()
+        self.server.app.remote.stop()  # como si se cerrara la mesa con la pantalla encendida
+        self.assertIsNone(self.server.app.remote.server)
+        start_remote_if_on(self.server)
+        self.assertIsNotNone(self.server.app.remote.server)
+
+
 if __name__ == "__main__":
     unittest.main()

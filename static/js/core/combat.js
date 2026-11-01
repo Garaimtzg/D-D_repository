@@ -167,6 +167,7 @@ export function resetCombat(c) {
 // Estado que ven los jugadores de un enemigo, sin números.
 export function healthWord(x) {
   if (x.hp <= 0) return 'Caído';
+  if (x.maxHp == null) return 'En pie'; // la pantalla de jugadores en otro ordenador puede no llevar los PG del enemigo
   const r = x.hp / Math.max(1, x.maxHp);
   return r >= 1 ? 'Ileso' : r > 0.5 ? 'Herido' : r > 0.25 ? 'Maltrecho' : 'A las puertas';
 }

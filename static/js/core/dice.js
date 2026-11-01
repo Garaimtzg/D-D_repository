@@ -91,7 +91,13 @@ export function setPhysicalMode(v) {
   window.dispatchEvent(new CustomEvent('dnd:physical', { detail: v }));
 }
 
+// La pantalla de jugadores en otro ordenador no usa la preferencia de este navegador: lo decide el máster
+// desde su panel (static/js/remote.js pone aquí esa decisión).
+let physicalOverride = null;
+export function setPhysicalOverride(fn) { physicalOverride = fn; }
+
 async function wantsPhysical(who) {
+  if (physicalOverride) return !!physicalOverride(who);
   const m = physicalMode();
   if (m === 'todos') return true;
   if (m !== 'jugadores') return false;
