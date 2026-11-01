@@ -4,6 +4,8 @@ Se guardan tal cual las escribe el editor y aquí se convierten a la misma forma
 (phb2024), así el creador de personajes, la ficha y la subida de nivel las usan sin casos especiales. Todo lo que
 llega del usuario se recorta y se valida: un dato raro se ignora en vez de romper la referencia.
 """
+import re
+
 from . import phb2024
 
 ABILITIES = ("fue", "des", "con", "int", "sab", "car")
@@ -14,6 +16,9 @@ CASTERS = {"full": phb2024.PREP_FULL, "half": phb2024.PREP_HALF,
 ARMOR = ("ligera", "media", "pesada", "escudo")
 WEAPONS = ("sencilla", "marcial")
 ARMOR_TEXT = {"ligera": "ligeras", "media": "medias", "pesada": "pesadas"}
+UPLOAD = re.compile(r"^/uploads/[a-f0-9]{32}\.[a-z0-9]{2,5}$")
+# Campos de una especie que el editor reescribe del todo: si la edición los quita, se quitan también de la original.
+SPECIES_EDITABLE = ("natural_ac", "hp_per_level", "carry_bigger", "tool", "skill_choice", "skill_count", "image", "lore", "height", "lifespan")
 
 
 def _txt(value, limit=200):
@@ -57,7 +62,8 @@ def species(doc: dict) -> dict:
         "speed": _num(doc.get("speed"), 1.5, 30, 9), "darkvision": _num(doc.get("darkvision"), 0, 120, 0),
         "traits": traits,
         "skills": _skills(doc.get("skills")),
-        "spells": [[_num(s.get("level"), 1, 20, 1), s["name"], *([_uses(s["uses"])] if s.get("uses") else [])]
+        "spells": [[_num(s.get("level"), 1, 20, 1), s["name"], *([_uses(s["uses"])] if s.get("uses") else []),
+                    *(["corto"] if s.get("uses") and s.get("reset") == "corto" else [])]
                    for s in _list(doc.get("spells")) if isinstance(s, dict) and s.get("name") in spell_names],
         "resources": [[_txt(r.get("name"), 60), _uses(r.get("uses")), r.get("reset") if r.get("reset") in RESETS else "largo", _num(r.get("level"), 1, 20, 1)]
                       for r in _list(doc.get("resources")) if isinstance(r, dict) and _txt(r.get("name"))],
@@ -75,6 +81,11 @@ def species(doc: dict) -> dict:
         out["hp_per_level"] = 1
     if doc.get("carry_bigger"):
         out["carry_bigger"] = True
+    if isinstance(doc.get("image"), str) and UPLOAD.match(doc["image"]):
+        out["image"] = doc["image"]  # foto de la especie: la ficha y el creador la muestran
+    for key, limit in (("lore", 1500), ("height", 60), ("lifespan", 60)):
+        if _txt(doc.get(key)):
+            out[key] = _txt(doc.get(key), limit)
     return out
 
 
@@ -163,12 +174,29 @@ def background(doc: dict) -> dict:
     }
 
 
+def edited_species(original: dict, doc: dict) -> dict:
+    """Especie del manual editada en la mesa: conserva su id (las fichas la siguen encontrando), su página, sus linajes
+    y lo que el editor no toca, y toma del editor todo lo demás."""
+    out = {**original}
+    for key in SPECIES_EDITABLE:
+        out.pop(key, None)
+    mine = species(doc)
+    for key in ("id", "origin", "group"):
+        mine.pop(key, None)
+    return {**out, **mine, "edited": True}
+
+
 def merge(reference: dict, docs: list) -> dict:
-    """Añade a la referencia las especies, clases y trasfondos propios guardados."""
+    """Añade a la referencia las especies, clases y trasfondos propios guardados. Una especie con «base» es una especie
+    del manual editada: sustituye a la original en su sitio."""
     for doc in docs:
         if not isinstance(doc, dict) or "id" not in doc:
             continue
-        if doc.get("kind") == "species":
+        if doc.get("kind") == "species" and doc.get("base"):
+            at = next((i for i, sp in enumerate(reference["species"]) if sp["id"] == doc["base"]), None)
+            if at is not None:
+                reference["species"][at] = edited_species(reference["species"][at], doc)
+        elif doc.get("kind") == "species":
             reference["species"].append(species(doc))
         elif doc.get("kind") == "class":
             reference["classes"].append(klass(doc))

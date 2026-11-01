@@ -15,6 +15,8 @@ import {
   spellLists, spellCounts, freeUseFor, featGrants, featBonus, carryCapacity, fmtKg, GENDERS, speciesFacts,
 } from '../core/dnd.js';
 import { openCreator } from './creator.js';
+import { bestiaryDialog as openBestiary, fixAsModel } from './bestiary.js';
+import { editSpecies } from './homebrew.js';
 import { spellTip, spellMeta, spellCard, pickSpells } from './spellui.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
@@ -131,20 +133,8 @@ async function mount(root, [selId]) {
     } catch (e) { toastError(e); }
   }
 
-  async function bestiaryDialog() {
-    const all = await monsters();
-    const grid = h('div', { class: 'bestiary' });
-    let q = '';
-    const draw = () => clear(grid, all.filter((m) => `${m.name} ${m.en || ''} ${m.eu || ''} ${m.source || ''} ${m.creature}`.toLowerCase().includes(q)).map((m) => h('button', {
-      class: `beast ${m.source ? 'homebrew' : ''}`, type: 'button', onclick: () => { grid.closest('.modal-back').remove(); create(fromMonster(m)); },
-    }, h('span', { class: 'beast-cr' }, `VD ${m.cr}`), h('b', {}, m.name), h('span', { class: 'tiny muted' }, m.source ? `${m.creature} · Euskal Herria` : m.creature),
-    h('span', { class: 'beast-stats' }, h('span', {}, icon('shield', 13), m.ac), h('span', {}, icon('heart', 13), m.hp), h('span', {}, icon('sword', 13), m.attacks.length)))));
-    draw();
-    modal('Bestiario', h('div', { class: 'stack' },
-      searchBox('Buscar por nombre o tipo (dragón, no muerto, vasca…)', (v) => { q = v.toLowerCase(); draw(); }),
-      grid, h('p', { class: 'tiny muted' }, `${all.filter((m) => !m.source).length} criaturas del SRD 5.2.1 de Wizards of the Coast (CC-BY-4.0), traducidas al castellano, y ${all.filter((m) => m.source).length} de la mitología de Euskal Herria (propias de esta app, equilibradas con la Guía del DM; busca «vasca»). Al elegir una se crea una ficha de enemigo que puedes editar.`)),
-    [], { wide: true, iconName: 'book' });
-  }
+  // Bestiario (static/js/views/bestiary.js): elegir una criatura crea su ficha; con el lápiz se edita el modelo.
+  const bestiaryDialog = () => openBestiary({ onPick: (m) => create(fromMonster(m)), chars: state.chars });
 
   async function saveAll(chars) {
     await Promise.all(chars.map((c) => api.update('characters', c).catch(toastError)));
@@ -210,6 +200,8 @@ async function mount(root, [selId]) {
           h('button', { class: 'btn icon', type: 'button', 'aria-label': 'Siguiente', disabled: idx < 0 || idx >= list.length - 1, onclick: () => open(list[idx + 1]) }, icon('next', 16))),
         h('div', { class: 'row', style: { marginLeft: 'auto' } },
           h('button', { class: 'btn', type: 'button', onclick: () => addToCombat(c) }, icon('combate', 16), 'Al combate'),
+          c.type === 'enemigo' && h('button', { class: 'btn', type: 'button', 'data-tip': c.monster ? 'Guardar esta ficha como el modelo de su criatura en el bestiario' : 'Añadir esta ficha al bestiario como modelo',
+            onclick: async () => { if (await fixAsModel(c, state.chars)) refresh(); } }, icon('book', 16), 'Fijar como modelo'),
           h('button', { class: 'btn', type: 'button', onclick: () => duplicate(c) }, icon('copy', 16), 'Duplicar'),
           h('button', { class: 'btn danger', type: 'button', onclick: () => remove(c) }, icon('trash', 16), 'Eliminar'))),
       h('article', { class: `sheet parchment ${c.type}` },
@@ -1113,7 +1105,11 @@ async function mount(root, [selId]) {
           h('ul', { class: 'trait-list' }, featuresUpTo(cls, level, c.subclass).filter(([, f]) => f !== 'Mejora de característica').map(([l, f, t, sub]) => h('li', { class: sub ? 'sub' : '' },
             h('span', { class: 'lvl' }, l), h('b', {}, f), t && h('span', { class: 'tiny muted' }, ` — ${t}`))))),
         sp && h('div', { class: 'traits-block' },
-          h('div', { class: 'row between' }, h('b', {}, sp.name, c.lineage ? ` · ${c.lineage}` : ''), h('span', { class: 'tiny muted' }, source(sp))),
+          sp.image && h('span', { class: 'species-pic sm', style: { backgroundImage: `url("${sp.image}")` } }),
+          h('div', { class: 'row between' }, h('b', {}, sp.name, c.lineage ? ` · ${c.lineage}` : ''),
+            h('span', { class: 'row nowrap' }, h('span', { class: 'tiny muted' }, sp.edited ? `${source(sp)} · editada` : source(sp)),
+              h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Editar la especie ${sp.name}`, 'data-tip': 'Editar la especie (para todas sus fichas)',
+                onclick: async () => { const R2 = await editSpecies(sp, ref, state.chars); if (R2) { Object.assign(ref, R2); refresh(); } } }, icon('edit', 13)))),
           (sp.lore || sp.summary) && h('p', { class: 'small species-lore' }, sp.lore || sp.summary),
           speciesFacts(sp) && h('div', { class: 'tiny muted' }, speciesFacts(sp)),
           h('ul', { class: 'trait-list' }, sp.traits.map(([n, t]) => h('li', {}, h('b', {}, n), h('span', { class: 'tiny muted' }, ` — ${t}`))),

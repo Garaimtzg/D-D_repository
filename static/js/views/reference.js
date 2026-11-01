@@ -4,6 +4,8 @@ import { h, clear, icon, searchBox, segmented, selectEl, toast, modal } from '..
 import { roll } from '../core/dice.js';
 import { reference, ABILITY_SHORT, CONDITION_ICON, fmtM } from '../core/dnd.js';
 import { spellTip, spellCard } from './spellui.js';
+import { editSpecies } from './homebrew.js';
+import { api } from '../core/api.js';
 
 export default { id: 'reglas', title: 'Reglas', icon: 'reglas', hint: 'Manual del Jugador 2024: estados, acciones, clases y tablas', mount };
 
@@ -99,8 +101,11 @@ async function mount(root) {
     const species = ref.species.filter((s) => match(s.name, s.traits));
     if (show('personajes') && species.length) {
       blocks.push(panel('Especies', 'personajes', '', h('div', { class: 'stack-sm' }, species.map((s) => h('details', { class: 'class-card' },
-        h('summary', {}, h('div', { class: 'grow' }, h('b', {}, s.name), h('div', { class: 'tiny muted' },
-          `${s.size} · ${fmtM(s.speed)}${s.darkvision ? ` · visión en la oscuridad ${s.darkvision} m` : ''}`)), page(s.page || s.origin)),
+        h('summary', {}, h('div', { class: 'grow' }, h('b', {}, s.name), s.edited && h('span', { class: 'chip tiny-chip' }, 'editada'), h('div', { class: 'tiny muted' },
+          `${s.size} · ${fmtM(s.speed)}${s.darkvision ? ` · visión en la oscuridad ${s.darkvision} m` : ''}`)), page(s.page || s.origin),
+          h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Editar ${s.name}`, 'data-tip': 'Editar la especie para tu mesa',
+            onclick: async (e) => { e.preventDefault(); const R2 = await editSpecies(s, ref, await api.list('characters')); if (R2) { Object.assign(ref, R2); draw(); } } }, icon('edit', 13))),
+        s.image && h('span', { class: 'species-pic', style: { backgroundImage: `url("${s.image}")` } }),
         (s.lore || s.summary) && h('p', { class: 'small' }, s.lore || s.summary),
         (s.height || s.lifespan) && h('p', { class: 'tiny muted' }, [s.height && `Altura: ${s.height}`, s.lifespan && `Esperanza de vida: ${s.lifespan}`].filter(Boolean).join(' · ')),
         h('dl', { class: 'ref compact' }, s.traits.map(([n, t]) => [h('dt', {}, n), h('dd', {}, t)])),

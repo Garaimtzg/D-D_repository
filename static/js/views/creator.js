@@ -3,7 +3,7 @@
 // Junto a las del manual aparecen las especies y subclases del «Manual para casi todo» (adaptadas a 2024), las de
 // Euskal Herria (material propio) y las especies y clases que crea cada mesa (editor en homebrew.js).
 import { h, clear, icon, toast } from '../core/dom.js';
-import { editHomebrew } from './homebrew.js';
+import { editHomebrew, editSpecies } from './homebrew.js';
 import { api } from '../core/api.js';
 import {
   reference, reloadReference, newCharacter, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, mod, fmtMod, fmtM, maxHpFor, computeAC,
@@ -278,8 +278,10 @@ export async function openCreator({ onCreate }) {
       }),
       s && h('section', { class: 'panel cr-detail' },
         h('div', { class: 'panel-head' }, h('h3', {}, SPECIES_ICON[s.id] || '🧬', ' ', s.name),
-          h('div', { class: 'actions' }, s.homebrew_id && h('button', { class: 'btn xs', type: 'button', onclick: async () => homebrew('species', await homebrewDoc('species', s)) }, icon('edit', 13), 'Editar'),
+          h('div', { class: 'actions' }, h('button', { class: 'btn xs', type: 'button', 'data-tip': s.homebrew_id && !s.edited ? 'Editar tu especie' : 'Editar esta especie del manual para tu mesa (todas sus fichas la usarán así)',
+            onclick: async () => { const R2 = await editSpecies(s, R, await api.list('characters')); if (R2) { R = R2; render(); } } }, icon('edit', 13), 'Editar'),
             h('span', { class: 'chip' }, source(s)))),
+        s.image && h('span', { class: 'species-pic', style: { backgroundImage: `url("${s.image}")` } }),
         (s.lore || s.summary) && h('p', { class: 'small' }, s.lore || s.summary),
         speciesFacts(s) && h('p', { class: 'tiny muted', style: { marginTop: 0 } }, speciesFacts(s)),
         h('ul', { class: 'cr-traits' }, s.traits.map(([n, t]) => h('li', {}, h('b', {}, n), ' — ', t))),
