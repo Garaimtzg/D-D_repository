@@ -7,7 +7,7 @@ import webbrowser
 from pathlib import Path
 
 from server.config import DATA_DIR
-from server.handler import make_server
+from server.handler import make_server, start_remote_if_on
 
 
 def running_mesa(port):
@@ -53,6 +53,9 @@ def main():
     port = server.server_address[1]
     url = f"http://localhost:{port}"
     print(f"Mesa de D&D en {url}  (Ctrl+C para salir)")
+    start_remote_if_on(server)  # la pantalla de jugadores en otro ordenador, si el máster la dejó activada
+    if server.app.remote.server:
+        print(f"Pantalla de jugadores en la red: {', '.join(server.app.remote.status()['urls'])} (código {server.app.remote.status()['code']})")
     open_browser(url, args)
     try:
         server.serve_forever()

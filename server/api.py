@@ -137,6 +137,23 @@ def put_settings(app, p, body):
     return 200, app.store.set_doc("settings", current)
 
 
+# -- pantalla de jugadores en otro ordenador (solo desde este ordenador) ----------
+def get_screen(app, p, body):
+    return 200, app.remote.status()
+
+
+def put_screen(app, p, body):
+    try:
+        return 200, app.remote.update(_require_dict(body))
+    except ValueError as e:
+        raise ApiError(400, str(e))
+
+
+def preview_screen(app, p, body):
+    """Lo que ve ahora la pantalla de jugadores (para que el máster lo compruebe)."""
+    return 200, app.remote.bundle()
+
+
 # -- subida de ficheros ---------------------------------------------------
 def upload(app, p, body):
     raw, filename = body
@@ -172,6 +189,9 @@ ROUTES = [
     ("POST", r"/api/night", night),
     ("GET", r"/api/scene-catalog", scene_catalog),
     ("POST", r"/api/dungeon", make_dungeon),
+    ("GET", r"/api/pantalla", get_screen),
+    ("PUT", r"/api/pantalla", put_screen),
+    ("GET", r"/api/pantalla/vista", preview_screen),
     ("GET", r"/api/settings", get_settings),
     ("PUT", r"/api/settings", put_settings),
     ("POST", r"/api/uploads", upload),

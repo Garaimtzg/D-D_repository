@@ -1,6 +1,8 @@
 // Mesa: el centro de la partida. El mapa sobre la mesa con fichas que se arrastran,
 // la iniciativa del combate activo, el grupo, la bandeja de dados y las últimas tiradas.
 // «Modo jugadores» lo pone a pantalla completa y oculta lo que solo debe ver el máster.
+// La misma Mesa sirve de «pantalla de jugadores en otro ordenador» (static/js/remote.js): entonces los datos llegan
+// del servidor ya sin secretos (server/remote.py), nada se guarda y se queda siempre en modo jugadores.
 import { api, debounced } from '../core/api.js';
 import {
   h, clear, icon, dieIcon, token, hpBar, shield, floatNum, modal, promptDialog, toast, toastError,
@@ -12,7 +14,7 @@ import { createWeather, WEATHERS } from '../core/weather.js';
 import { ambience } from '../core/ambience.js';
 import { sfx } from '../core/sfx.js';
 import { roll, onRoll, describe } from '../core/dice.js';
-import { createBattleMap } from '../core/battlemap.js';
+import { createBattleMap, sceneCatalog } from '../core/battlemap.js';
 import { nightDialog, announceNight } from './night.js';
 import { placeMap, parentMap } from '../core/mentions.js';
 import { groupCheck, partyScreen } from '../core/party.js';
@@ -23,12 +25,16 @@ export default { id: 'mesa', title: 'Mesa', icon: 'mesa', hint: 'Mapa o tablero 
 
 const DICE = [4, 6, 8, 10, 12, 20, 100];
 
-async function mount(root) {
-  const [settings, maps, chars, rolls, scenes, wiki] = await Promise.all([
-    api.settings(), api.list('maps'), api.list('characters'), api.get('/api/rolls'), loadScenes(), api.list('wiki'),
-  ]);
+// opts.remote = { bundle, onUpdate(fn) }: la pantalla de jugadores en otro ordenador (lo que ven, ya compuesto)
+async function mount(root, params, opts = {}) {
+  const remote = opts.remote || null;
+  const first = remote?.bundle;
+  const [settings, maps, chars, rolls, scenes, wiki] = remote
+    ? [first.settings || {}, first.map ? [first.map] : [], first.chars || [], first.rolls || [], { cat: await sceneCatalog(), custom: first.scenes || [] }, []]
+    : await Promise.all([api.settings(), api.list('maps'), api.list('characters'), api.get('/api/rolls'), loadScenes(), api.list('wiki')]);
   let combat = null;
-  if (settings.activeCombat) {
+  if (remote) combat = first.combat || null;
+  else if (settings.activeCombat) {
     combat = await api.get(`/api/combats/${settings.activeCombat}`).catch(() => null);
     if (combat?.status !== 'active') combat = null;
   }
@@ -36,16 +42,21 @@ async function mount(root) {
   const state = {
     settings, maps, chars, combat, rolls,
     map: maps.find((m) => m.id === (settings.tableMap || settings.shownMap)) || null,
-    who: prefs.get('mesa.who', ''), mode: '', mod: 0, player: false, view: prefs.get('mesa.view', 'tablero'),
+    who: prefs.get('mesa.who', ''), mode: '', mod: 0, player: !!remote,
+    view: remote ? settings.tableView || 'tablero' : prefs.get('mesa.view', 'tablero'), // en remoto, la del máster
     draw: null, pen: prefs.get('mesa.pen', '#e0524a'), // dibujo a mano alzada sobre el mapa: 'pen', 'erase' o nada
     trail: [], // mapas de los que se entró por una chincheta, para volver por el mismo camino
   };
   const view = { scale: 1, x: 0, y: 0 };
   const cleanups = [];
 
-  const saveMap = debounced((m) => api.update('maps', m).catch(toastError), 400);
-  const saveCombat = debounced((c) => api.update('combats', c).catch(toastError), 250);
-  const saveChar = (ch) => api.update('characters', ch).catch(toastError);
+  // en la pantalla remota no se guarda nada: solo se mira (el servidor tampoco lo dejaría)
+  const saveMap = debounced((m) => remote || api.update('maps', m).catch(toastError), 400);
+  const saveCombat = debounced((c) => remote || api.update('combats', c).catch(toastError), 250);
+  const saveChar = (ch) => remote || api.update('characters', ch).catch(toastError);
+  // pantalla de jugadores en otro ordenador (vista desde el ordenador del máster): si está encendida, la Mesa comparte
+  // la señal de Mayús + clic y la vista (tablero o mapa), y recoge las tiradas que hacen los jugadores desde allí
+  const screen = { on: false, clients: 0 };
   const saveView = debounced(() => state.map && prefs.set(`view.${state.map.id}`, view), 400);
 
   // ------------------------------------------------------------------ estructura
@@ -71,8 +82,10 @@ async function mount(root) {
   const partyEl = h('div', { class: 'panel party' });
   const dockEl = h('div', { class: 'panel dock' });
   const feedEl = h('div', { class: 'panel feed' });
-  const exitBtn = h('button', { class: 'btn exit-player', type: 'button', onclick: () => setPlayerMode(false) }, icon('close'), 'Salir del modo jugadores');
-  root.append(h('div', { class: 'mesa' }, barEl, h('div', { class: 'mesa-grid' }, frame, h('aside', { class: 'mesa-side' }, partyEl, dockEl, feedEl)), exitBtn));
+  const exitBtn = !remote && h('button', { class: 'btn exit-player', type: 'button', onclick: () => setPlayerMode(false) }, icon('close'), 'Salir del modo jugadores');
+  const mesaEl = h('div', { class: 'mesa' }, !remote && barEl, h('div', { class: 'mesa-grid' }, frame, h('aside', { class: 'mesa-side' }, partyEl, dockEl, feedEl)), exitBtn);
+  root.append(mesaEl);
+  if (remote) { barEl.classList.add('remote-bar'); board.append(barEl); } // allí solo quedan el zoom, sobre el propio tablero
 
   // ------------------------------------------------------------ tablero de combate
   // Si el combate activo tiene escenario, la mesa muestra su cuadrícula en lugar del mapa.
@@ -84,7 +97,8 @@ async function mount(root) {
     if (bm) return bm;
     bm = createBattleMap({
       catalog: scenes.cat, dm: !state.player,
-      canMove: (t) => !state.player || t.type === 'jugador',
+      canMove: (t) => !remote && (!state.player || t.type === 'jugador'),
+      onPing: (p) => sharePing({ on: 'board', x: p.x, y: p.y }),
       onMove: (cid, col, row, meters, jump) => {
         const c = state.combat;
         const b = ensureBoard(c);
@@ -242,12 +256,18 @@ async function mount(root) {
         h('button', { class: 'btn sm', type: 'button', onclick: narrate, 'data-tip': 'Muestra un texto sobre la mesa' }, icon('feather'), 'Narrar'),
         selectEl(WEATHERS, state.settings.tableWeather || '', setWeather, { 'aria-label': 'Clima sobre la mesa', class: 'weather-select', 'data-tip': 'Clima sobre el tablero (con su sonido de ambiente)' })),
       battleScene() && h('div', { class: 'row nowrap mesa-mode dm-only', 'data-tip': 'El combate activo tiene tablero con cuadrícula' },
-        segmented([['tablero', 'Tablero de combate'], ['mapa', 'Mapa']], state.view, (v) => { state.view = v; prefs.set('mesa.view', v); hidePopover(); renderAll(); if (v === 'tablero') setTimeout(() => bm?.fit(), 60); })),
+        segmented([['tablero', 'Tablero de combate'], ['mapa', 'Mapa']], state.view, (v) => {
+          state.view = v; prefs.set('mesa.view', v); hidePopover(); renderAll(); if (v === 'tablero') setTimeout(() => bm?.fit(), 60);
+          if (screen.on) api.saveSettings({ tableView: v }).catch(() => {}); // la pantalla de jugadores sigue lo mismo
+        })),
       h('span', { class: 'tiny muted ping-hint', 'data-tip': 'Señala un punto a toda la mesa' }, h('kbd', {}, 'Mayús'), ' + clic: señalar'),
       h('div', { class: 'row zoom' }, !inBattle() && [ // el tablero de combate trae sus propios controles
         h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Alejar', onclick: () => zoomCenter(1 / 1.25) }, icon('zoomOut', 18)),
         h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Acercar', onclick: () => zoomCenter(1.25) }, icon('zoomIn', 18)),
         h('button', { class: 'btn icon sm', type: 'button', 'aria-label': 'Ajustar el mapa', 'data-tip': 'Ajustar (doble clic en el mapa)', onclick: fit }, icon('fit', 18))]),
+      !remote && h('button', { class: `btn sm screen-btn dm-only ${screen.on ? 'on' : ''}`, type: 'button', onclick: screenPanel,
+        'data-tip': screen.on ? 'Pantalla de jugadores en otro ordenador: encendida. Pulsa para elegir qué ven' : 'Conecta otro ordenador como pantalla de los jugadores y elige qué ven' },
+      '📡 ', screen.on ? (screen.clients ? `Pantalla · ${screen.clients} conectad${screen.clients === 1 ? 'o' : 'os'}` : 'Pantalla · esperando') : 'Pantalla de jugadores'),
       h('button', { class: `btn ${state.player ? '' : 'primary'} dm-only`, type: 'button', onclick: () => setPlayerMode(true),
         'data-tip': 'Pantalla completa sin secretos: oculta los PG de los enemigos, los ocultos y las tiradas secretas' }, icon('eye'), 'Modo jugadores'));
   }
@@ -347,14 +367,16 @@ async function mount(root) {
     renderAll();
     setTimeout(() => { fit(); bm?.fit(); }, 150);
   }
-  const onFs = () => { if (!document.fullscreenElement && state.player) setPlayerMode(false); };
+  const onFs = () => { if (!remote && !document.fullscreenElement && state.player) setPlayerMode(false); };
   document.addEventListener('fullscreenchange', onFs);
-  const onKey = (e) => { if (e.key === 'Escape' && state.player) setPlayerMode(false); };
+  const onKey = (e) => { if (!remote && e.key === 'Escape' && state.player) setPlayerMode(false); };
   document.addEventListener('keydown', onKey);
-  cleanups.push(() => { document.removeEventListener('fullscreenchange', onFs); document.removeEventListener('keydown', onKey); document.body.classList.remove('player-mode'); });
+  cleanups.push(() => { document.removeEventListener('fullscreenchange', onFs); document.removeEventListener('keydown', onKey); document.body.classList.remove('player-mode', 'remote'); });
+  if (remote) document.body.classList.add('player-mode', 'remote');
 
   // how: 'enter' (por una chincheta: se recuerda de dónde se vino), 'back' (volviendo) o nada (elegido arriba).
   async function setMap(m, how = '') {
+    if (remote) return; // en la pantalla remota el mapa lo pone el máster
     if (how === 'enter' && state.map) state.trail.push(state.map);
     else if (how !== 'back') state.trail = [];
     state.map = m;
@@ -379,19 +401,28 @@ async function mount(root) {
   }
 
   async function setWeather(k) {
+    if (remote) return;
     (WEATHER_SOUND[state.settings.tableWeather] || []).forEach((n) => ambience.isOn(n) && ambience.stop(n));
     if (sfx.on) (WEATHER_SOUND[k] || []).forEach((n) => !ambience.isOn(n) && ambience.toggle(n, 0.35));
     weather.set(k);
     state.settings = await api.saveSettings({ tableWeather: k }).catch((e) => { toastError(e); return state.settings; });
   }
 
-  // Mayús + clic sobre el mapa: una onda que señala ese punto a toda la mesa.
-  function ping(e) {
-    const p = toImage(e.clientX, e.clientY);
+  // Mayús + clic sobre el mapa: una onda que señala ese punto a toda la mesa (y a la pantalla de jugadores, si está).
+  function pingAt(p) {
     const el = h('span', { class: 'ping', style: { left: `${p.x}px`, top: `${p.y}px` } }, h('i'), h('i'), h('i'));
     tokensEl.append(el);
     sfx.ping();
     setTimeout(() => el.remove(), 2600);
+  }
+  function ping(e) {
+    const p = toImage(e.clientX, e.clientY);
+    pingAt(p);
+    sharePing({ on: 'map', map: state.map?.id, x: p.x, y: p.y });
+  }
+  function sharePing(p) {
+    if (remote || !screen.on) return;
+    api.saveSettings({ ping: { ...p, id: uid() } }).catch(() => {});
   }
 
   async function narrate() {
@@ -486,7 +517,7 @@ async function mount(root) {
       const dx = (ev.clientX - start.cx) / view.scale;
       const dy = (ev.clientY - start.cy) / view.scale;
       if (!moved && Math.hypot(ev.clientX - start.cx, ev.clientY - start.cy) < 4) return;
-      if (state.player && tokenInfo(t).type !== 'jugador') return; // en modo jugadores solo se mueven los suyos
+      if (remote || (state.player && tokenInfo(t).type !== 'jugador')) return; // en modo jugadores solo se mueven los suyos
       moved = true;
       hidePopover();
       t.x = start.x + dx; t.y = start.y + dy;
@@ -521,7 +552,7 @@ async function mount(root) {
   let stroke = null; // trazo que se está dibujando
   board.addEventListener('pointerdown', (e) => {
     if (inBattle()) return;
-    if (!state.map || e.target.closest('.mtoken, .mpin, .tk-pop, .narration, .board-clock, .board-back, .board-empty button')) return;
+    if (!state.map || e.target.closest('.mtoken, .mpin, .tk-pop, .narration, .board-clock, .board-back, .board-empty button, .mesa-bar')) return;
     if (e.shiftKey) { ping(e); return; }
     if (state.draw === 'erase' && e.target.tagName === 'polyline') {
       state.map.drawings.splice(Number(e.target.dataset.i), 1);
@@ -579,10 +610,10 @@ async function mount(root) {
     const r = board.getBoundingClientRect();
     zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
-  board.addEventListener('dblclick', (e) => { if (!inBattle() && !e.target.closest('.mtoken, .tk-pop')) fit(); });
+  board.addEventListener('dblclick', (e) => { if (!inBattle() && !e.target.closest('.mtoken, .tk-pop, .mesa-bar')) fit(); });
 
   // Soltar sobre la mesa: una imagen se convierte en mapa; una ficha del panel, en ficha del mapa.
-  dropZone(board, (files) => uploadMap(files));
+  if (!remote) dropZone(board, (files) => uploadMap(files));
   board.addEventListener('dragover', (e) => { if ([...e.dataTransfer.types].includes('application/x-dnd-token')) { e.preventDefault(); board.classList.add('over'); } });
   board.addEventListener('drop', (e) => {
     const raw = e.dataTransfer.getData('application/x-dnd-token');
@@ -592,6 +623,7 @@ async function mount(root) {
     addToken(JSON.parse(raw), toImage(e.clientX, e.clientY));
   });
   const draggable = (el, data) => {
+    if (remote) return el;
     el.draggable = true;
     el.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('application/x-dnd-token', JSON.stringify(data));
@@ -795,12 +827,12 @@ async function mount(root) {
   function renderDock() {
     const ch = rollerChar();
     const cmb = ch && state.combat?.combatants.find((x) => x.charId === ch.id);
-    const who = ch ? ch.name : 'Máster';
+    const who = ch ? ch.name : remote ? 'Jugador' : 'Máster';
     const color = ch?.color || '';
     const modTxt = h('b', { class: 'tnum mod-val' }, fmtMod(state.mod));
     const setMod = (d) => { state.mod += d; modTxt.textContent = fmtMod(state.mod); };
     const doRoll = (expr, label, mode = '') => roll(expr, { label: `${who}: ${label}`, who, color, mode, secret: false });
-    const whoOptions = [['', '🎲 Máster'], ...state.chars.filter((c) => c.type === 'jugador').map((c) => [c.id, c.name]),
+    const whoOptions = [['', remote ? '🎲 Jugador' : '🎲 Máster'], ...state.chars.filter((c) => c.type === 'jugador').map((c) => [c.id, c.name]),
       ...state.chars.filter((c) => c.type !== 'jugador').map((c) => [c.id, `${c.name} (${TYPE_LABEL[c.type].split(' ')[0]})`])];
     const whoSel = selectEl(state.player ? whoOptions.filter(([id]) => !id || state.chars.find((c) => c.id === id)?.type === 'jugador') : whoOptions,
       state.who, (v) => { state.who = v; prefs.set('mesa.who', v); renderDock(); }, { 'aria-label': 'Quién tira', class: 'who-select' });
@@ -895,6 +927,157 @@ async function mount(root) {
       if (id.startsWith('b-')) { const tel = board.querySelector(`.bm-token[data-id="${id.slice(2)}"]`); if (tel && inBattle()) battlePop(id.slice(2), tel); else hidePopover(); }
       else { const t = state.map?.tokens.find((x) => x.id === id); if (t) showPopover(t); }
     }
+  }
+
+  // ------------------------------------------------- pantalla de jugadores en otro ordenador
+  // En el otro ordenador: lo que el máster deja ver llega por remote.onUpdate y se pinta sin guardar nada.
+  // Los escenarios se conservan si no han cambiado (redibujar el tablero entero con cada ficha movida parpadea).
+  const sceneCache = new Map();
+  const stableScene = (sc) => {
+    const json = JSON.stringify(sc);
+    const hit = sceneCache.get(sc.id);
+    if (hit && hit[0] === json) return hit[1];
+    sceneCache.set(sc.id, [json, sc]);
+    return sc;
+  };
+  let lastPing = state.settings.ping?.id || '';
+  let shownWeather = state.settings.tableWeather || '';
+  function applyShow(show = {}) {
+    const off = (k) => show[k] === false;
+    mesaEl.classList.toggle('no-initiative', off('initiative'));
+    mesaEl.classList.toggle('no-party', off('party'));
+    mesaEl.classList.toggle('no-dice', off('dice'));
+    mesaEl.classList.toggle('no-rolls', off('rolls'));
+    mesaEl.classList.toggle('no-side', off('party') && off('dice') && off('rolls'));
+  }
+  function applyRemote(b) {
+    if (b.screen !== 'mesa') return; // la espera o el negro los pone remote.js por encima
+    const before = state.combat ? combatRules.current(state.combat)?.cid : null;
+    const prev = state.map;
+    state.settings = b.settings || {};
+    state.chars = b.chars || [];
+    state.rolls = b.rolls || [];
+    state.combat = b.combat || null;
+    state.combat?.combatants.forEach((x) => { const ch = state.chars.find((c) => c.id === x.charId); if (ch) x.look = ch.look; });
+    scenes.custom = (b.scenes || []).map(stableScene);
+    state.map = b.map || null;
+    state.maps = state.map ? [state.map] : [];
+    state.view = state.settings.tableView || 'tablero';
+    if (shownWeather !== (state.settings.tableWeather || '')) { shownWeather = state.settings.tableWeather || ''; weather.set(shownWeather); }
+    applyShow(b.show);
+    if (state.map?.id !== prev?.id || state.map?.url !== prev?.url) loadMap();
+    else if (state.map && img.naturalWidth) renderDrawings();
+    renderAll();
+    const cur = state.combat ? combatRules.current(state.combat) : null;
+    if (cur && cur.cid !== before) announce(cur); // también tras el turno de alguien oculto (que allí no se ve)
+    const pg = state.settings.ping;
+    if (pg?.id && pg.id !== lastPing) {
+      lastPing = pg.id;
+      if (pg.on === 'board' && inBattle()) bm?.ping(pg);
+      else if (pg.on === 'map' && !inBattle() && state.map?.id === pg.map) pingAt(pg);
+    }
+  }
+  if (remote) {
+    applyShow(first.show);
+    cleanups.push(remote.onUpdate(applyRemote));
+  }
+
+  // En el ordenador del máster: el botón de la barra dice si está encendida y cuántos miran; con ella encendida,
+  // se recogen cada pocos segundos las tiradas que hacen los jugadores desde su ordenador.
+  let screenTimer = 0;
+  function setScreen(st) {
+    const was = screen.on;
+    screen.on = !!st?.on && !!st?.running;
+    screen.clients = st?.clients?.length || 0;
+    if (screen.on && !was) api.saveSettings({ tableView: state.view }).catch(() => {});
+    clearInterval(screenTimer);
+    if (screen.on) screenTimer = setInterval(pollScreen, 3000);
+    renderBar();
+  }
+  async function pollScreen() {
+    const [st, log] = await Promise.all([api.get('/api/pantalla').catch(() => null), api.get('/api/rolls').catch(() => null)]);
+    if (log) {
+      const known = new Set(state.rolls.map((r) => r.id));
+      const fresh = log.filter((r) => !known.has(r.id));
+      if (fresh.length) {
+        state.rolls.push(...fresh);
+        renderFeed();
+        fresh.filter((r) => r.remote).forEach((r) => toast(h('span', {}, (r.label || '').startsWith(r.who) ? r.label : [h('b', {}, r.who), ` · ${r.label || r.expr}`], ': ', h('b', {}, r.total),
+          r.crit === 'critico' ? ' ¡CRÍTICO!' : r.crit === 'pifia' ? ' ¡PIFIA!' : ''), { iconName: 'dados', kind: r.crit === 'critico' ? 'good' : '' }));
+      }
+    }
+    if (st && (!!(st.on && st.running) !== screen.on || (st.clients?.length || 0) !== screen.clients)) setScreen(st);
+  }
+  if (!remote) {
+    api.get('/api/pantalla').then(setScreen).catch(() => {});
+    cleanups.push(() => clearInterval(screenTimer));
+  }
+
+  const SHOW = [
+    ['map', '🗺️ El mapa o el tablero de combate'], ['initiative', '⚔️ La iniciativa'], ['party', '👑 El grupo y sus PG'],
+    ['rolls', '📜 Las últimas tiradas (nunca las secretas)'], ['clock', '🕰️ El reloj y el calendario'], ['weather', '🌧️ El clima'],
+    ['narration', '🪶 La narración y las imágenes que enseñas'], ['dice', '🎲 Que tiren dados desde su ordenador'],
+  ];
+  async function screenPanel() {
+    let st = await api.get('/api/pantalla').catch(toastError);
+    if (!st) return;
+    const body = h('div', { class: 'stack screen-panel' });
+    const clientsEl = h('div', { class: 'sp-clients' });
+    const put = async (patch, redraw = true) => {
+      try { st = await api.put('/api/pantalla', patch); setScreen(st); if (redraw) draw(); } catch (e) { toastError(e); }
+    };
+    const saveWait = debounced((text) => put({ waitText: text }, false), 500);
+    const link = (url) => `${url}?c=${st.code}`;
+    const copy = async (text) => {
+      try { await navigator.clipboard.writeText(text); toast('Enlace copiado: pásalo al otro ordenador.', { kind: 'good', iconName: 'check' }); }
+      catch { promptDialog('Copia el enlace', 'Enlace para el otro ordenador', text); }
+    };
+    const drawClients = () => clear(clientsEl, st.clients.length
+      ? [h('b', {}, `🟢 ${st.clients.length === 1 ? 'Un ordenador mirando' : `${st.clients.length} ordenadores mirando`}`), h('span', { class: 'tiny muted' }, ` · ${st.clients.map((c) => c.ip).join(', ')}`)]
+      : h('span', { class: 'muted' }, '⚪ Todavía no se ha conectado nadie.'));
+    const check = (on, label, onchange, tip) => h('label', { class: 'check', 'data-tip': tip || null }, h('input', { type: 'checkbox', checked: !!on, onchange: (e) => onchange(e.target.checked) }), h('span', {}, label));
+    function draw() {
+      drawClients();
+      clear(body,
+        h('p', { class: 'sp-intro' }, 'Otro ordenador (o una tele con navegador) conectado a la misma red puede ser la pantalla de los jugadores: tú sigues con la Mesa completa aquí y allí solo se ve lo que elijas. ',
+          h('span', { class: 'muted' }, 'Mientras esté apagada, todo sigue igual y nada sale de este ordenador.')),
+        h('label', { class: `check sp-switch ${st.on ? 'on' : ''}` }, h('input', { type: 'checkbox', checked: st.on, onchange: (e) => put({ on: e.target.checked }) }),
+          h('b', {}, st.on ? '📡 Pantalla de jugadores encendida' : 'Encender la pantalla de jugadores')),
+        st.on && !st.running && h('p', { class: 'sp-error' }, '⚠️ ', st.error || 'No se ha podido abrir la conexión en la red.'),
+        st.running && h('div', { class: 'sp-connect' },
+          h('div', { class: 'sp-urls' }, h('span', { class: 'small muted' }, 'En el otro ordenador, abre en el navegador:'),
+            st.urls.map((u) => h('div', { class: 'row nowrap' }, h('code', { class: 'sp-url' }, u),
+              h('button', { class: 'btn xs', type: 'button', onclick: () => copy(link(u)), 'data-tip': 'Copia el enlace con el código ya puesto' }, icon('scroll', 13), 'Copiar enlace')))),
+          h('div', { class: 'sp-code' }, h('span', { class: 'small muted' }, 'y escribe el código'), h('b', { class: 'sp-code-val' }, st.code),
+            h('button', { class: 'btn xs ghost', type: 'button', onclick: () => put({ newCode: true }), 'data-tip': 'Código nuevo: quien tuviera el anterior deja de ver la mesa' }, '🔄 Nuevo código')),
+          clientsEl,
+          h('div', { class: 'row' },
+            h('a', { class: 'btn xs ghost', href: link(`http://127.0.0.1:${st.port}/`), target: '_blank', rel: 'noopener' }, icon('eye', 13), 'Ver aquí lo que ven'),
+            h('span', { class: 'tiny muted' }, 'Si no conecta: los dos en la misma wifi y, en Windows, permite Python en el cortafuegos («Redes privadas») cuando lo pregunte.'))),
+        h('h4', {}, 'Qué ven ahora'),
+        segmented([['mesa', '🗺️ La mesa'], ['espera', '⏳ Pantalla de espera'], ['negro', '⬛ En negro']], st.screen, (v) => put({ screen: v })),
+        st.screen === 'espera' && h('div', { class: 'stack-sm sp-wait' },
+          h('textarea', { rows: 2, maxlength: 300, placeholder: 'Texto de la espera (por ejemplo: «Descanso de diez minutos»)', oninput: (e) => saveWait(e.target.value) }, st.waitText),
+          h('div', { class: 'row' },
+            st.waitImage && h('img', { class: 'sp-wait-img', src: st.waitImage, alt: '' }),
+            h('button', { class: 'btn xs', type: 'button', onclick: async () => {
+              const [file] = await pickFiles('image/*');
+              if (!file) return;
+              try { const up = await api.upload(file); put({ waitImage: up.url }); } catch (e) { toastError(e); }
+            } }, icon('upload', 13), st.waitImage ? 'Cambiar la imagen' : 'Poner una imagen'),
+            st.waitImage && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => put({ waitImage: '' }) }, 'Quitar la imagen'))),
+        check(st.frozen, '❄️ Congelar: siguen viendo lo de ahora mientras preparas lo siguiente', (v) => put({ frozen: v }),
+          'Cambia de mapa, coloca enemigos o abre el combate sin que lo vean; al descongelar lo ven todo de golpe'),
+        h('h4', {}, 'Qué se muestra'),
+        h('div', { class: 'sp-show' }, SHOW.map(([k, label]) => check(st.show[k], label, (v) => put({ show: { [k]: v } })))),
+        h('label', { class: 'field' }, 'PG de los enemigos', selectEl([['aprox', 'Aproximados (ileso, herido, maltrecho…)'], ['no', 'No: solo si sigue en pie o ha caído']], st.show.enemyHp, (v) => put({ show: { enemyHp: v } }))),
+        h('p', { class: 'tiny muted sp-never' }, '🔒 Nunca salen de este ordenador: los enemigos ocultos, los PG exactos de los enemigos, las trampas y puertas secretas, las notas del máster, las tiradas secretas, los enemigos que tapa la niebla y las fichas completas. Las tiradas que hagan allí son siempre públicas.'));
+    }
+    draw();
+    const timer = setInterval(async () => { const s = await api.get('/api/pantalla').catch(() => null); if (s) { st = { ...st, clients: s.clients }; drawClients(); setScreen(s); } }, 4000);
+    await modal('📡 Pantalla de jugadores', body, [{ label: 'Hecho', value: null, class: 'primary' }], { iconName: 'eye', wide: true });
+    clearInterval(timer);
+    if (saveWait.pending) saveWait.flush();
   }
 
   cleanups.push(onRoll((r) => { state.rolls.push(r); renderFeed(); }));

@@ -3179,7 +3179,7 @@ export function createBattleMap(opts = {}) {
     if (e.button === 1 || spaceDown || tool === 'pan') { e.preventDefault(); startPan(e); return; }
     if (e.button !== 0) return;
     if (!o.editable) {
-      if (e.shiftKey) { ping(p); return; }
+      if (e.shiftKey) { ping(p); o.onPing?.(p); return; }
       if (tool === 'move' && tokenEl) {
         const t = tokenById(tokenEl.dataset.id);
         if (!t) return;

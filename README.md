@@ -3,7 +3,8 @@
 Una mesa de rol para jugar a Dungeons & Dragons **en un solo ordenador**, todos juntos, con las reglas
 del **Manual del Jugador de 2024** (edición en español): combates sobre un tablero con cuadrícula y
 escenarios listos para usar, dados 3D que ruedan de verdad, iniciativa, fichas de personaje con creador
-paso a paso, música, ambientes y efectos de sonido.
+paso a paso, música, ambientes y efectos de sonido. Si quieres, otro ordenador (o una tele) puede hacer de
+**pantalla de los jugadores** y el máster elige qué se ve en ella.
 
 Servidor en Python (solo la librería estándar, no hay que instalar nada) e interfaz en HTML, CSS y JavaScript.
 Todo se guarda en local, en la carpeta `data/`.
@@ -30,6 +31,8 @@ Para que arranque sola al encender el ordenador, copia `Mesa DnD.vbs` en la carp
   de inicio. Al empezar, la Mesa muestra ese tablero y se centra en quien tiene el turno.
 - Pulsa **Modo jugadores** para ponerla a pantalla completa sin secretos: se ocultan los PG exactos
   de los enemigos, los enemigos ocultos, las trampas del tablero y las tiradas secretas. Sal con `Esc`.
+- **📡 Pantalla de jugadores** (opcional): el máster sigue con la Mesa completa en su ordenador y otro ordenador de la misma
+  red muestra a los jugadores solo lo que él elige. Mira [Pantalla de jugadores en otro ordenador](#pantalla-de-jugadores-en-otro-ordenador).
 - En la bandeja, elige **quién tira**: los dados toman el color de su ficha y aparecen sus ataques.
 - `Mayús + clic` sobre el mapa hace una onda para señalar un punto a toda la mesa.
 - **Prueba de grupo** (en el panel del grupo de la Mesa o en Personajes): todos tiran la misma habilidad o salvación contra una CD;
@@ -136,6 +139,29 @@ nivel, truenos… Se activa o se silencia con el altavoz de la barra lateral.
 servidor ni internet, con los mismos dados 3D, sonido, vibración, «agitar para tirar» e historial.
 Descárgala desde **Herramientas → Dados en el móvil**, pásala al móvil y ábrela en el navegador.
 
+## Pantalla de jugadores en otro ordenador
+
+Opcional: mientras no la enciendas, todo funciona como siempre y la mesa solo se ve desde este ordenador.
+
+1. En la **Mesa**, pulsa **📡 Pantalla de jugadores** y enciéndela.
+2. En el otro ordenador (en la misma wifi o red de casa), abre en el navegador la dirección que aparece
+   (por ejemplo `http://192.168.1.20:8001/`) y escribe el **código** de seis letras. **Copiar enlace** da la dirección
+   con el código ya puesto. La primera vez, Windows puede preguntar si deja a Python usar la red: permite **Redes privadas**.
+3. Desde el mismo panel eliges **qué ven**: el mapa o el tablero, la iniciativa, el grupo, las tiradas, el reloj, el clima,
+   la narración, si pueden tirar dados desde allí y si los PG de los enemigos salen aproximados o nada.
+
+Lo que pasa en tu Mesa llega al momento: las fichas que mueves, el turno (con su anuncio), el clima, la narración, la
+niebla que revelas y la onda de `Mayús + clic`. Además puedes:
+
+- **Congelar** la pantalla: siguen viendo lo de ahora mientras cambias de mapa o colocas a los enemigos; al descongelar lo ven todo.
+- Poner una **pantalla de espera** (el nombre de la campaña, un texto y una imagen) o dejarla **en negro**.
+- Ver lo que ven con **Ver aquí lo que ven**, y cambiar el **código** para echar a quien tuviera el anterior.
+
+Las tiradas que hagan desde allí son siempre públicas y te salen como aviso en la Mesa. **Nunca salen de tu ordenador**
+los enemigos ocultos, los PG exactos de los enemigos, las trampas y puertas secretas, las notas del máster, las tiradas
+secretas, los enemigos que tapa la niebla ni las fichas completas: el servidor prepara lo que ven y no sirve nada más
+(ni las fichas, ni las notas, ni el compendio, ni las imágenes que no estén en pantalla).
+
 ## Guardar y compartir la campaña
 
 Todo se guarda solo en `data/`. En **Herramientas → Campaña** puedes **descargar una copia** (.zip con
@@ -167,10 +193,12 @@ server/                    servidor HTTP, API JSON, almacén, copias .zip, dados
                            lo que dan las dotes y las cargas de los objetos mágicos
   scenes.py                terrenos, objetos y escenarios prediseñados del tablero
   dungeon.py               mazmorras y cuevas al azar con su clave
+  remote.py                pantalla de jugadores en otro ordenador: lo que ven (sin secretos), código y su propio puerto
   gaueko.py                la noche de Gaueko: modificadores, presagios y encuentros nocturnos
   magicitems2024.json      objetos mágicos del SRD 5.2.1 en castellano (generado)
 static/
   index.html               la aplicación
+  jugadores.html           pantalla de jugadores en otro ordenador (js/remote.js monta la Mesa en modo jugadores)
   dados-movil.html         página de dados para el móvil (generada, no editar)
   css/                     base, componentes, barra, mesa, personajes, combate y demás secciones
   js/main.js               navegación, barras y atajos

@@ -11,7 +11,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from . import api, backup, config
+from . import api, backup, config, remote
 from .storage import JsonStore
 
 mimetypes.add_type("text/javascript", ".js")
@@ -24,6 +24,7 @@ class App:
         self.store = JsonStore(data_dir, config.COLLECTIONS)
         self.data_dir = Path(data_dir)
         self.upload_dir = self.data_dir / "uploads"
+        self.remote = None  # pantalla de jugadores en otro ordenador (server/remote.py); se crea al arrancar
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -158,5 +159,15 @@ class Server(ThreadingHTTPServer):
 
 
 def make_server(host, port, data_dir=config.DATA_DIR):
-    handler = type("BoundHandler", (Handler,), {"app": App(data_dir)})
-    return Server((host, port), partial(handler, directory=str(config.STATIC_DIR)))
+    app = App(data_dir)
+    handler = type("BoundHandler", (Handler,), {"app": app})
+    server = Server((host, port), partial(handler, directory=str(config.STATIC_DIR)))
+    app.remote = remote.RemoteManager(app, server.server_address[1])
+    server.app = app
+    return server
+
+
+def start_remote_if_on(server):
+    """Si el máster dejó activada la pantalla de jugadores en otro ordenador, se vuelve a abrir al arrancar."""
+    if server.app.remote.config()["on"]:
+        server.app.remote.start()
