@@ -22,7 +22,9 @@ async function mount(root, [selId]) {
   combats.forEach((c) => c.combatants.forEach((x) => { const ch = chars.find((y) => y.id === x.charId); if (ch) x.look = ch.look; })); // aspecto al día
   const state = { combats, chars, settings, sel: combats.find((c) => c.id === (selId || settings.activeCombat)) || null, mode: '' };
   if (!state.sel && combats.length) state.sel = combats.find((c) => c.status === 'active') || combats.find((c) => c.status === 'planned') || null;
-  const allConds = [...ref.conditions, ...ref.trackers];
+  const masteryStates = ref.mastery_states || [];
+  const allConds = [...ref.conditions, ...masteryStates, ...ref.trackers];
+  const nameOf = (c, cid) => c.combatants.find((y) => y.cid === cid)?.name || '';
 
   const side = h('aside', { class: 'panel sticky combat-side' });
   // huecos fijos: así el tablero no se vuelve a crear (ni sale de pantalla completa) al actualizar
@@ -526,8 +528,14 @@ async function mount(root, [selId]) {
     };
     amount.addEventListener('keydown', (e) => { if (e.key === 'Enter') apply(e.shiftKey ? 'heal' : 'dmg')(); });
 
-    const condAdd = selectEl([['', '+ Estado'], ...allConds.map((k) => [k.name, condLabel(k.name)])], '', async (name) => {
+    const condAdd = h('select', { class: 'cond-add', 'aria-label': 'Añadir estado', onchange: (e) => { const v = e.target.value; e.target.value = ''; addCond(v); } },
+      h('option', { value: '' }, '+ Estado'),
+      h('optgroup', { label: 'Estados' }, ref.conditions.map((k) => h('option', { value: k.name }, condLabel(k.name)))),
+      masteryStates.length > 0 && h('optgroup', { label: 'Maestrías de armas' }, masteryStates.map((m) => h('option', { value: `m:${m.name}` }, `${condLabel(m.name)} (${m.mastery})`))),
+      h('optgroup', { label: 'Marcadores' }, ref.trackers.map((k) => h('option', { value: k.name }, condLabel(k.name)))));
+    const addCond = async (name) => {
       if (!name) return;
+      if (name.startsWith('m:')) { masteryDialog(c, x, masteryStates.find((m) => m.name === name.slice(2))); return; }
       const rounds = await modal(`${condLabel(name)}`, h('p', { class: 'muted' }, '¿Durante cuántos turnos de esta criatura?'),
         [{ label: 'Indefinido', value: 0 }, { label: '1 turno', value: 1 }, { label: '3 turnos', value: 3 }, { label: '1 minuto (10)', value: 10, class: 'primary' }], { iconName: 'hourglass' });
       if (rounds == null) return;
@@ -536,7 +544,7 @@ async function mount(root, [selId]) {
       if (name === 'Concentrado') x.concentration = true;
       R.log(c, `${x.name} queda ${name.toLowerCase()}${rounds ? ` (${rounds} turnos)` : ''}.`);
       commit();
-    }, { class: 'cond-add', 'aria-label': 'Añadir estado' });
+    };
 
     const initBox = h('label', { class: 'init-badge', 'data-tip': 'Iniciativa' }, bind(x, 'init', { type: 'number', 'aria-label': 'Iniciativa', onCommit: () => { R.sortInitiative(c); commit(); } }));
 
@@ -550,8 +558,8 @@ async function mount(root, [selId]) {
           x.cr && x.type === 'enemigo' && h('span', { class: 'tiny muted' }, `VD ${x.cr}`),
           x.size && x.size !== 'Mediano' && h('span', { class: 'tiny muted' }, x.size),
           x.concentration && h('span', { class: 'chip conc', 'data-tip': 'Concentrado: al recibir daño, salvación de CON (CD 10 o la mitad del daño, máx. 30)' }, icon('aura', 13), 'Concentración'),
-          x.conditions.map((k, j) => h('span', { class: 'chip cond', 'data-tip': allConds.find((r) => r.name === k.name)?.text || '' },
-            condLabel(k.name), k.rounds ? h('span', { class: 'count' }, k.rounds) : '',
+          x.conditions.map((k, j) => h('span', { class: `chip cond ${k.by ? 'mastery' : ''}`, 'data-tip': condTip(c, k) },
+            condLabel(k.name), k.by && h('span', { class: 'tiny' }, ` · ${nameOf(c, k.by)}`), k.rounds ? h('span', { class: 'count' }, k.rounds) : '',
             h('button', { type: 'button', 'aria-label': `Quitar ${k.name}`, onclick: () => {
               x.conditions.splice(j, 1);
               if (k.name === 'Concentrado') x.concentration = false;
@@ -566,11 +574,14 @@ async function mount(root, [selId]) {
             h('button', { class: 'btn xs success', type: 'button', onclick: apply('heal'), 'data-tip': 'Curar (Mayús + Intro)' }, icon('heart', 13)),
             h('button', { class: 'btn xs', type: 'button', onclick: apply('temp'), 'data-tip': 'PG temporales' }, icon('shield', 13)))),
         x.type === 'jugador' && down && deathSaveRow(c, x),
+        vexRow(c, x),
         x.attacks?.length > 0 && h('div', { class: 'row cbt-attacks' }, x.attacks.map((a) => h('span', { class: 'attack', 'data-tip': a.notes || null },
           a.save
             ? h('button', { class: 'btn xs', type: 'button', onclick: () => roll(a.damage, { label: `${x.name}: ${a.name} (${a.save})`, who: x.name, secret: x.hidden, color: x.color }) }, icon('flame', 12), `${a.name} · ${a.save} · ${a.damage}`)
-            : [h('button', { class: 'btn xs', type: 'button', onclick: () => roll(`1d20${fmtMod((Number(a.bonus) || 0) - 2 * (x.exhaustion || 0))}`, { label: `${x.name}: ${a.name}`, who: x.name, mode: state.mode, secret: x.hidden, color: x.color }) },
+            : [h('button', { class: 'btn xs', type: 'button', onclick: () => attackRoll(c, x, a) },
               icon('dados', 12), `${a.name} ${fmtMod(Number(a.bonus) || 0)}`),
+            masteryOf(a) && h('button', { class: 'btn xs mastery-btn', type: 'button', 'data-tip': `${masteryOf(a).mastery}: ${ref.masteries.find((m) => m.name === masteryOf(a).mastery)?.text || ''} Pulsa al acertar para aplicarlo.`,
+              onclick: () => masteryTarget(c, x, a, masteryOf(a)) }, '⚡ ', masteryOf(a).mastery),
             a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => roll(a.damage, { label: `${x.name}: daño de ${a.name}`, who: x.name, secret: x.hidden, color: x.color }) }, a.damage),
             a.damage && a.damage !== '0' && h('button', { class: 'btn xs ghost', type: 'button', 'data-tip': 'Crítico', onclick: () => roll(critExpr(a.damage), { label: `${x.name}: crítico con ${a.name}`, who: x.name, secret: x.hidden, color: x.color }) }, '×2')])))),
       h('div', { class: 'cbt-side' },
@@ -589,6 +600,80 @@ async function mount(root, [selId]) {
           h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Quitar a ${x.name}`, 'data-tip': 'Quitar del combate', onclick: () => removeCombatant(c, i) }, icon('close', 15)))),
     ]);
     return row;
+  }
+
+  // ------------------------------------------------- maestrías de armas
+  // Estado de maestría de un ataque con arma (la ficha anota «Maestría: Debilitar» en las notas del arma dominada).
+  function masteryOf(a) {
+    const m = /Maestría: ([\wáéíóú]+)/.exec(a.notes || '');
+    return m && masteryStates.find((st) => st.mastery === m[1]);
+  }
+  const condTip = (c, k) => {
+    const text = allConds.find((r) => r.name === k.name)?.text || '';
+    if (!k.by) return text;
+    return `${text} Lo causó ${nameOf(c, k.by)}: dura hasta ${k.ends === 'fin' ? 'el final' : 'el inicio'} de su ${k.skip ? 'próximo ' : ''}turno.`;
+  };
+  // Tirada de ataque con lo que dejan las maestrías: desventaja si está Debilitado (y se gasta) y ventaja contra quien
+  // tenga Molestado por él, si se ha elegido (y también se gasta).
+  function attackRoll(c, x, a) {
+    const weak = x.conditions.find((k) => k.name === 'Debilitado');
+    const vexT = x.vexNext && c.combatants.find((y) => y.cid === x.vexNext && y.conditions.some((k) => k.name === 'Molestado' && k.by === x.cid));
+    const modes = [state.mode, weak && 'dis', vexT && 'adv'].filter(Boolean);
+    const adv = modes.includes('adv'); const dis = modes.includes('dis');
+    const mode = adv && dis ? '' : adv ? 'adv' : dis ? 'dis' : '';
+    roll(`1d20${fmtMod((Number(a.bonus) || 0) - 2 * (x.exhaustion || 0))}`, {
+      label: `${x.name}: ${a.name}${weak ? ' (debilitado)' : ''}${vexT ? ` (ventaja contra ${vexT.name})` : ''}`, who: x.name, mode, secret: x.hidden, color: x.color });
+    if (weak) { x.conditions = x.conditions.filter((k) => k !== weak); R.log(c, `${x.name} ataca debilitado: con desventaja.`); }
+    if (vexT) {
+      vexT.conditions = vexT.conditions.filter((k) => !(k.name === 'Molestado' && k.by === x.cid));
+      R.log(c, `${x.name} ataca a ${vexT.name} con ventaja (Molestar).`);
+    }
+    if (x.vexNext) x.vexNext = null;
+    if (weak || vexT) commit();
+  }
+  // Quien tiene Molestado por este combatiente: un botón para que su siguiente ataque vaya con ventaja contra él.
+  function vexRow(c, x) {
+    const vexed = c.combatants.filter((y) => y !== x && y.conditions?.some((k) => k.name === 'Molestado' && k.by === x.cid));
+    if (!vexed.length) return null;
+    return h('div', { class: 'row cbt-vex' }, h('span', { class: 'tiny muted' }, 'Molestar:'), vexed.map((y) => h('button', {
+      class: 'btn xs', type: 'button', 'aria-pressed': String(x.vexNext === y.cid), 'data-tip': 'Su siguiente ataque, con ventaja contra esta criatura',
+      onclick: () => { x.vexNext = x.vexNext === y.cid ? null : y.cid; commit(); } }, '😤 Ventaja contra ', y.name)));
+  }
+  // Al acertar con un arma dominada: a quién se le aplica su maestría.
+  async function masteryTarget(c, x, a, st) {
+    const foes = c.combatants.filter((y) => y !== x && (y.type === 'enemigo') !== (x.type === 'enemigo'));
+    const others = c.combatants.filter((y) => y !== x && !foes.includes(y));
+    const dc = 8 + (Number(a.bonus) || 0);
+    let target = null;
+    const pick = (list) => list.map((y) => h('button', { class: 'btn pick-item', type: 'button', onclick: (e) => { target = y; e.currentTarget.closest('.modal').querySelector('.actions .primary')?.click(); } },
+      token(y, { size: 30 }), h('b', {}, y.name), y.hp <= 0 && h('span', { class: 'tiny muted' }, ' · caído')));
+    const ok = await modal(`${condLabel(st.name)} · ${st.mastery} con ${a.name}`, h('div', { class: 'stack' },
+      h('p', { class: 'muted', style: { margin: 0 } }, st.name === 'Derribado'
+        ? `Al acertar, el objetivo hace una salvación de CON CD ${dc}: si falla, queda derribado. Elige a quién ha derribado.`
+        : `${ref.masteries.find((m) => m.name === st.mastery)?.text || st.text} Elige a quién ha acertado ${x.name}.`),
+      h('div', { class: 'stack-sm pick-list' }, pick(foes), others.length > 0 && [h('div', { class: 'eyebrow' }, 'Otros'), pick(others)])),
+    [{ label: 'Cancelar', value: false }, { label: 'Aplicar', value: true, class: 'primary', icon: 'check' }], { iconName: 'sword' });
+    if (!ok || !target) return;
+    R.applyMastery(c, target, st, x);
+    sfx.magic();
+    commit();
+  }
+  // Añadir un estado de maestría desde el desplegable: quién lo causa (para saber cuándo se acaba).
+  async function masteryDialog(c, target, st) {
+    const others = c.combatants.filter((y) => y !== target);
+    const cur = R.current(c);
+    let by = cur && cur !== target ? cur.cid : '';
+    const ok = await modal(`${condLabel(st.name)} (${st.mastery})`, h('div', { class: 'stack' },
+      h('p', { class: 'muted', style: { margin: 0 } }, st.text),
+      field('Lo causa', selectEl([['', '— Nadie en concreto (se quita a mano) —'], ...others.map((y) => [y.cid, y.name])], by, (v) => { by = v; })),
+      st.ends && h('p', { class: 'tiny muted', style: { margin: 0 } }, st.ends === 'fin'
+        ? 'Se acaba solo al final del próximo turno de quien lo causa, o cuando le ataque con ventaja.'
+        : 'Se acaba solo al inicio del próximo turno de quien lo causa.')),
+    [{ label: 'Cancelar', value: false }, { label: 'Aplicar', value: true, class: 'primary', icon: 'check' }], { iconName: 'sword' });
+    if (!ok) return;
+    R.applyMastery(c, target, st, others.find((y) => y.cid === by) || null);
+    sfx.magic();
+    commit();
   }
 
   function deathSaveRow(c, x) {

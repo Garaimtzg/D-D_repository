@@ -439,3 +439,14 @@ input.mini { width: 54px; padding: 4px; }
 .species-pic { display: grid; place-items: center; width: 96px; height: 96px; border-radius: 14px; font-size: 2rem; background: rgba(0, 0, 0, .25) center / cover no-repeat; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 6px 16px rgba(0, 0, 0, .45); }
 .species-pic.sm { float: right; width: 64px; height: 64px; margin: 0 0 6px 10px; }
 .class-card .species-pic, .cr-detail .species-pic { float: right; margin: 0 0 8px 12px; }
+/* selector de emoticono de una especie */
+.emoji-picker { display: flex; flex-direction: column; gap: 6px; }
+.emoji-big { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; font-size: 1.9rem; background: rgba(0, 0, 0, .25); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+.emoji-grid { display: flex; flex-wrap: wrap; gap: 3px; }
+.emoji-grid button { all: unset; cursor: pointer; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; font-size: 1.15rem; border: 1px solid transparent; }
+.emoji-grid button:hover { background: rgba(255, 255, 255, .06); border-color: var(--line-2); }
+.emoji-grid button.on { border-color: var(--gold); background: rgba(226, 180, 86, .16); }
+.cr-extra-lang > summary { cursor: pointer; color: var(--text-2); margin: 6px 0; }
+.cr-card.custom { position: relative; border-color: rgba(140, 170, 255, .5); }
+.cr-card.custom::after { content: 'PROPIA'; position: absolute; top: 8px; left: 8px; padding: 1px 6px; border-radius: 6px; font: 800 .58rem var(--font); letter-spacing: .06em; color: #10173a; background: #9db4ff; }
+.hb-form .cr-skills + input.inline { width: 16em; max-width: 100%; }

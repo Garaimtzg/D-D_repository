@@ -48,6 +48,30 @@ LANGUAGES = {
     "estandar": ["Común", "Dracónico", "Elfo", "Enano", "Gigante", "Gnomo", "Goblin", "Lenguaje de signos común", "Mediano", "Orco"],
     "inusuales": ["Abisal", "Celestial", "Druídico", "Habla de las profundidades", "Infernal", "Infracomún", "Jerga de ladrones", "Primordial", "Silvano"],
 }
+# Idiomas en esta mesa: cada personaje habla común y el idioma de su especie (más los de su clase, su trasfondo o su
+# historia), en vez de dos idiomas estándar a elegir sin contexto. El idioma de cada especie sale de su libro de origen;
+# los antiguos acuano y aurano son ahora primordial, como en 2024. Una especie sin idioma propio habla solo común.
+SPECIES_LANGUAGES = {
+    "aasimar": ["Celestial"], "draconido": ["Dracónico"], "elfo": ["Elfo"], "enano": ["Enano"], "gnomo": ["Gnomo"],
+    "goliat": ["Gigante"], "mediano": ["Mediano"], "orco": ["Orco"], "tiefling": ["Infernal"],
+    "aarakocra": ["Primordial"], "osgo": ["Goblin"], "centauro": ["Silvano"], "duergar": ["Enano", "Infracomún"],
+    "eladrin": ["Elfo"], "elfo_mar": ["Elfo", "Primordial"], "firbolg": ["Elfo", "Gigante"], "genasi": ["Primordial"],
+    "githyanki": ["Gith"], "githzerai": ["Gith"], "gnomo_profundidades": ["Gnomo", "Infracomún"], "goblin": ["Goblin"],
+    "hada": ["Silvano"], "harengon": ["Silvano"], "hobgoblin": ["Goblin"], "kenku": ["Primordial"], "kobold": ["Dracónico"],
+    "hombre_lagarto": ["Dracónico"], "minotauro": ["Minotauro"], "satiro": ["Silvano"], "shadar_kai": ["Elfo"],
+    "tortuga": ["Primordial"], "triton": ["Primordial"], "yuan_ti": ["Abisal", "Dracónico"], "grung": ["Grung"],
+    "locathah": ["Primordial"], "verdan": ["Goblin"], "semielfo": ["Elfo"], "semiorco": ["Orco"], "leonido": ["Leonino"],
+    "loxodon": ["Loxodon"], "hibrido_simic": ["Elfo"], "vedalken": ["Vedalken"],
+    "jentil": ["Gigante"], "lamina": ["Silvano"], "basajaun": ["Silvano"], "iratxo": ["Silvano"],
+}
+CLASS_LANGUAGES = {"druida": ["Druídico"], "picaro": ["Jerga de ladrones"]}  # rasgos de nivel 1 de 2024
+# Estados que dejan las maestrías de armas (MdJ 2024): duran hasta el turno siguiente de quien los causa.
+MASTERY_STATES = [
+    ("Debilitado", "Debilitar", "inicio", "Desventaja en su siguiente tirada de ataque antes del próximo turno de quien le atacó."),
+    ("Ralentizado", "Ralentizar", "inicio", "Su velocidad baja 3 m hasta el próximo turno de quien le atacó (no se acumula)."),
+    ("Molestado", "Molestar", "fin", "Quien le atacó tiene ventaja en su siguiente ataque contra él antes del final de su próximo turno."),
+    ("Derribado", "Derribar", "", "Falló la salvación de CON (CD 8 + modificador del ataque + competencia): queda derribado hasta que se levante."),
+]
 
 # ------------------------------------------------------------------ magia
 FULL_SLOTS = [
@@ -743,7 +767,7 @@ def _class_data(c):
     """La clase con lo que la ficha necesita para jugar: qué hace cada rasgo, rasgos de subclase y equipo."""
     feats = {f for fs in c["features"].values() for f in fs}
     text = {**COMMON, **FEATURES[c["id"]], f"Subclase de {c['name'].lower()}": SUBCLASS_PICK}
-    return {**c, "feature_text": {f: t for f, t in text.items() if f in feats}, "subclass_features": SUBCLASSES[c["id"]],
+    return {**c, "languages": CLASS_LANGUAGES.get(c["id"], []), "feature_text": {f: t for f, t in text.items() if f in feats}, "subclass_features": SUBCLASSES[c["id"]],
             "choice": CHOICES.get(c["id"]), "style_level": STYLE_LEVEL.get(c["id"]), "expertise": EXPERTISE.get(c["id"], []),
             "kits": [_kit(k) for k in CLASS_KITS[c["id"]]], "subclass_unarmored": {s: UNARMORED[s] for s in c["subclasses"] if s in UNARMORED},
             "subclass_source": {s: SUBCLASS_SOURCE.get(s, "Manual del Jugador 2024") for s in c["subclasses"]}}
@@ -752,7 +776,8 @@ def _class_data(c):
 def _species(s):
     """La especie con su descripción (server/lore.py) y si cuenta un tamaño más para la carga."""
     text, height, lifespan = lore.SPECIES_LORE.get(s["id"], ("", "", ""))
-    return {**s, "lore": text, "height": height, "lifespan": lifespan, **({"carry_bigger": True} if s["id"] in CARRY_BIGGER else {})}
+    return {**s, "lore": text, "height": height, "lifespan": lifespan, "languages": SPECIES_LANGUAGES.get(s["id"], []),
+            **({"carry_bigger": True} if s["id"] in CARRY_BIGGER else {})}
 
 
 def data() -> dict:
@@ -772,6 +797,7 @@ def data() -> dict:
         "coins": COINS,
         "conditions": [{"name": n, "text": t} for n, t in CONDITIONS],
         "trackers": [{"name": n, "text": t} for n, t in TRACKERS],
+        "mastery_states": [{"name": n, "mastery": m, "ends": e, "text": t} for n, m, e, t in MASTERY_STATES],
         "actions": [{"name": n, "text": t} for n, t in ACTIONS],
         "rules": [{"name": n, "text": t} for n, t in QUICK_RULES],
         "level_xp": LEVEL_XP,

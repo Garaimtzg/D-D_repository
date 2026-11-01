@@ -2,7 +2,7 @@
 // especies, trasfondos, dotes, armas y armaduras, y las tablas de PX. Cada entrada remite a su página.
 import { h, clear, icon, searchBox, segmented, selectEl, toast, modal } from '../core/dom.js';
 import { roll } from '../core/dice.js';
-import { reference, ABILITY_SHORT, CONDITION_ICON, fmtM } from '../core/dnd.js';
+import { reference, ABILITY_SHORT, CONDITION_ICON, fmtM, speciesIcon } from '../core/dnd.js';
 import { spellTip, spellCard } from './spellui.js';
 import { editSpecies } from './homebrew.js';
 import { api } from '../core/api.js';
@@ -44,6 +44,12 @@ async function mount(root) {
     if (show('estados') && trackers.length) {
       blocks.push(panel('Marcadores de la mesa', 'target', '', h('div', { class: 'cond-grid one' }, trackers.map((c) => h('article', { class: 'cond-card' },
         h('span', { class: 'cond-emoji' }, CONDITION_ICON[c.name] || '•'), h('div', {}, h('b', {}, c.name), h('p', {}, c.text)))))));
+    }
+    const mstates = (ref.mastery_states || []).filter((c) => c.name !== 'Derribado' && match(c.name, c.mastery, c.text));
+    if (show('estados') && mstates.length) {
+      blocks.push(panel('Estados de las maestrías de armas', 'sword', '', h('div', { class: 'cond-grid one' }, mstates.map((c) => h('article', { class: 'cond-card' },
+        h('span', { class: 'cond-emoji' }, CONDITION_ICON[c.name] || '•'), h('div', {}, h('b', {}, c.name, h('span', { class: 'tiny muted' }, ` · ${c.mastery}`)), h('p', {}, c.text))))),
+      h('p', { class: 'tiny muted' }, 'En Combate duran hasta el turno de quien los causó y se aplican con el botón ⚡ junto al arma dominada; Derribar deja el estado Derribado.')));
     }
 
     // ---------------------------------------------------------------- combate
@@ -101,8 +107,8 @@ async function mount(root) {
     const species = ref.species.filter((s) => match(s.name, s.traits));
     if (show('personajes') && species.length) {
       blocks.push(panel('Especies', 'personajes', '', h('div', { class: 'stack-sm' }, species.map((s) => h('details', { class: 'class-card' },
-        h('summary', {}, h('div', { class: 'grow' }, h('b', {}, s.name), s.edited && h('span', { class: 'chip tiny-chip' }, 'editada'), h('div', { class: 'tiny muted' },
-          `${s.size} · ${fmtM(s.speed)}${s.darkvision ? ` · visión en la oscuridad ${s.darkvision} m` : ''}`)), page(s.page || s.origin),
+        h('summary', {}, h('div', { class: 'grow' }, h('b', {}, speciesIcon(s), ' ', s.name), s.edited && h('span', { class: 'chip tiny-chip' }, 'editada'), h('div', { class: 'tiny muted' },
+          `${s.size} · ${fmtM(s.speed)}${s.darkvision ? ` · visión en la oscuridad ${s.darkvision} m` : ''} · habla común${s.languages?.length ? ` y ${s.languages.join(', ').toLowerCase()}` : ''}`)), page(s.page || s.origin),
           h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Editar ${s.name}`, 'data-tip': 'Editar la especie para tu mesa',
             onclick: async (e) => { e.preventDefault(); const R2 = await editSpecies(s, ref, await api.list('characters')); if (R2) { Object.assign(ref, R2); draw(); } } }, icon('edit', 13))),
         s.image && h('span', { class: 'species-pic', style: { backgroundImage: `url("${s.image}")` } }),
