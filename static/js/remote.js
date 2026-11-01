@@ -3,6 +3,7 @@
 // ver. Aquí no se guarda nada en la partida: solo se mira y, si el máster lo permite, se tiran dados (siempre públicos).
 // El servidor contesta «/api/jugadores?v=…» cuando algo cambia (o a los 20 s), así que no se pregunta a lo loco.
 import { h, clear, icon, initTooltips } from './core/dom.js';
+import { setPhysicalOverride } from './core/dice.js';
 import mesa from './views/mesa.js';
 
 const COOKIE = 'mesa_codigo';
@@ -19,6 +20,10 @@ const listeners = new Set();
 let version = '';
 let mounted = false;
 let mounting = null;
+let latest = null; // lo último que ha llegado del servidor
+
+// Dados físicos: si el máster los activa en su panel, cada tirada pide lo que ha salido (como en su ordenador).
+setPhysicalOverride(() => !!latest?.show?.physical);
 
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 const hasCode = () => document.cookie.split(';').some((c) => c.trim().startsWith(`${COOKIE}=`));
@@ -86,6 +91,7 @@ function drawCurtain(b) {
 
 // ------------------------------------------------------------------ lo que llega del servidor
 async function apply(b) {
+  latest = b;
   document.title = `${b.campaign || 'Mesa de D&D'} · Pantalla de jugadores`;
   drawCurtain(b);
   if (b.screen !== 'mesa') return;

@@ -1060,6 +1060,27 @@ class RemoteScreenTests(unittest.TestCase):
         self.dm("PUT", "/api/pantalla", {"show": {"dice": False}})
         self.assertEqual(self.players("/api/roll", "POST", {"expr": "1d6"})[0], 403)
 
+    def test_physical_dice_only_when_the_dm_allows_them(self):
+        self.turn_on()
+        self.dm("POST", "/api/characters", {"name": "Ana", "type": "jugador", "hp": 9, "maxHp": 9})
+        _, st = self.dm("GET", "/api/pantalla")
+        self.assertFalse(st["show"]["physical"])  # de serie, la app tira por ellos
+        roll = {"expr": "1d20+5", "mode": "adv", "label": "Ana: Ataque", "who": "Ana", "dice": [[4, 20]]}
+        status, err = self.players("/api/roll", "POST", roll)
+        self.assertEqual(status, 403)  # nadie «apunta» un 20 si el máster no ha activado los dados físicos
+        self.assertIn("dados físicos", err["error"])
+        self.dm("PUT", "/api/pantalla", {"show": {"physical": True}})
+        _, b = self.players()
+        self.assertTrue(b["show"]["physical"])  # la pantalla de los jugadores lo sabe y pide lo que ha salido
+        status, r = self.players("/api/roll", "POST", roll)
+        self.assertEqual(status, 200)
+        self.assertEqual((r["total"], r["natural"], r["crit"], r["physical"], r["secret"], r["remote"]), (25, 20, "critico", True, False, True))
+        self.assertEqual(self.players("/api/roll", "POST", {**roll, "dice": [[21, 3]]})[0], 400)  # un d20 no saca 21
+        status, r = self.players("/api/roll", "POST", {"expr": "2d6", "who": "Ana"})  # «Que tire la app» sigue valiendo
+        self.assertEqual((status, r.get("physical", False)), (200, False))
+        _, log = self.dm("GET", "/api/rolls")
+        self.assertEqual([x.get("physical", False) for x in log], [True, False])
+
     def test_waiting_screen_black_screen_and_freeze(self):
         self.turn_on()
         _, a = self.dm("POST", "/api/maps", {"name": "Aldea", "url": "", "tokens": []})

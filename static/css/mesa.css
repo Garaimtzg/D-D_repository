@@ -256,6 +256,9 @@ body.player-mode .mesa-side { top: 14px; max-height: calc(100vh - 28px); }
 .sp-wait-img { height: 46px; border-radius: 6px; border: 2px solid #fbf3df; }
 .sp-show { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px 14px; }
 .sp-never { margin: 0; }
+.sp-hint { margin: 0; color: var(--gold-2); }
+.screen-panel .check.is-off { opacity: .45; cursor: default; }
+.dock-physical { margin: -4px 0 8px; color: var(--gold-2); }
 @media (max-width: 720px) { .sp-connect { grid-template-columns: minmax(0, 1fr); } }
 
 /* lo que el máster no deja ver */

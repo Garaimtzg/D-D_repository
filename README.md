@@ -46,6 +46,7 @@ Para que arranque sola al encender el ordenador, copia `Mesa DnD.vbs` en la carp
   del DM, con los usos gratis que quieras) abren un buscador con la descripción de cada conjuro.
 - **Dados físicos**: si la mesa tira dados de verdad, pulsa el botón 🎲 de la barra de arriba (o el panel de Dados) para que la app
   pida lo que ha salido en vez de tirar: solo para los personajes jugadores (los enemigos los sigue tirando la app) o para todo.
+  En la pantalla de jugadores en otro ordenador se activa aparte, desde su panel 📡.
   Sirve en cualquier tirada (ataques, daño, salvaciones, iniciativa, pruebas de grupo…): escribe cada dado, o la suma en los grupos
   grandes (8d6), y la app suma los modificadores, aplica la ventaja y avisa de los críticos. «Que tire la app» la tira por ti.
 - **Avatares vivos**: la cara del muñeco cambia con su estado: tirita y luego ojo morado y gesto de dolor con pocos PG,
@@ -157,7 +158,10 @@ niebla que revelas y la onda de `Mayús + clic`. Además puedes:
 - Poner una **pantalla de espera** (el nombre de la campaña, un texto y una imagen) o dejarla **en negro**.
 - Ver lo que ven con **Ver aquí lo que ven**, y cambiar el **código** para echar a quien tuviera el anterior.
 
-Las tiradas que hagan desde allí son siempre públicas y te salen como aviso en la Mesa. **Nunca salen de tu ordenador**
+Las tiradas que hagan desde allí son siempre públicas y te salen como aviso en la Mesa. Si jugáis con **dados físicos**,
+marca **«Que apunten allí sus dados físicos»**: cada tirada de su bandeja (ataques, daño, iniciativa…) pide lo que ha salido
+en sus dados, y la app suma los modificadores, aplica la ventaja y avisa de los críticos («Que tire la app» sigue a mano).
+Si no lo marcas, allí tira siempre la app y el servidor no acepta resultados apuntados. **Nunca salen de tu ordenador**
 los enemigos ocultos, los PG exactos de los enemigos, las trampas y puertas secretas, las notas del máster, las tiradas
 secretas, los enemigos que tapa la niebla ni las fichas completas: el servidor prepara lo que ven y no sirve nada más
 (ni las fichas, ni las notas, ni el compendio, ni las imágenes que no estén en pantalla).

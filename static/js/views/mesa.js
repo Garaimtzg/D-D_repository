@@ -13,7 +13,7 @@ import * as combatRules from '../core/combat.js';
 import { createWeather, WEATHERS } from '../core/weather.js';
 import { ambience } from '../core/ambience.js';
 import { sfx } from '../core/sfx.js';
-import { roll, onRoll, describe } from '../core/dice.js';
+import { roll, onRoll, describe, physicalMode } from '../core/dice.js';
 import { createBattleMap, sceneCatalog } from '../core/battlemap.js';
 import { nightDialog, announceNight } from './night.js';
 import { placeMap, parentMap } from '../core/mentions.js';
@@ -46,6 +46,7 @@ async function mount(root, params, opts = {}) {
     view: remote ? settings.tableView || 'tablero' : prefs.get('mesa.view', 'tablero'), // en remoto, la del máster
     draw: null, pen: prefs.get('mesa.pen', '#e0524a'), // dibujo a mano alzada sobre el mapa: 'pen', 'erase' o nada
     trail: [], // mapas de los que se entró por una chincheta, para volver por el mismo camino
+    show: remote ? first.show || {} : {}, // en la pantalla remota: lo que el máster deja ver y hacer
   };
   const view = { scale: 1, x: 0, y: 0 };
   const cleanups = [];
@@ -839,6 +840,7 @@ async function mount(root, params, opts = {}) {
 
     clear(dockEl,
       h('div', { class: 'panel-head' }, h('h3', {}, icon('dados'), 'Bandeja'), h('div', { class: 'actions' }, whoSel)),
+      remote && state.show.physical && h('p', { class: 'tiny muted dock-physical' }, '✋ Dados físicos: tirad los vuestros y apuntad lo que sale; la app suma y avisa de los críticos.'),
       h('div', { class: 'dock-dice' }, DICE.map((s) => h('button', {
         class: `die-btn d${s}`, type: 'button', 'aria-label': `Tirar 1d${s}`, style: color ? { '--dc': color } : null,
         onclick: () => doRoll(`1d${s}${state.mod ? fmtMod(state.mod) : ''}`, `d${s}${state.mod ? ` ${fmtMod(state.mod)}` : ''}`, s === 20 ? state.mode : ''),
@@ -952,6 +954,7 @@ async function mount(root, params, opts = {}) {
   }
   function applyRemote(b) {
     if (b.screen !== 'mesa') return; // la espera o el negro los pone remote.js por encima
+    state.show = b.show || {};
     const before = state.combat ? combatRules.current(state.combat)?.cid : null;
     const prev = state.map;
     state.settings = b.settings || {};
@@ -1002,7 +1005,7 @@ async function mount(root, params, opts = {}) {
       if (fresh.length) {
         state.rolls.push(...fresh);
         renderFeed();
-        fresh.filter((r) => r.remote).forEach((r) => toast(h('span', {}, (r.label || '').startsWith(r.who) ? r.label : [h('b', {}, r.who), ` · ${r.label || r.expr}`], ': ', h('b', {}, r.total),
+        fresh.filter((r) => r.remote).forEach((r) => toast(h('span', {}, r.physical ? '✋ ' : '', (r.label || '').startsWith(r.who) ? r.label : [h('b', {}, r.who), ` · ${r.label || r.expr}`], ': ', h('b', {}, r.total),
           r.crit === 'critico' ? ' ¡CRÍTICO!' : r.crit === 'pifia' ? ' ¡PIFIA!' : ''), { iconName: 'dados', kind: r.crit === 'critico' ? 'good' : '' }));
       }
     }
@@ -1017,6 +1020,7 @@ async function mount(root, params, opts = {}) {
     ['map', '🗺️ El mapa o el tablero de combate'], ['initiative', '⚔️ La iniciativa'], ['party', '👑 El grupo y sus PG'],
     ['rolls', '📜 Las últimas tiradas (nunca las secretas)'], ['clock', '🕰️ El reloj y el calendario'], ['weather', '🌧️ El clima'],
     ['narration', '🪶 La narración y las imágenes que enseñas'], ['dice', '🎲 Que tiren dados desde su ordenador'],
+    ['physical', '✋ Que apunten allí sus dados físicos'],
   ];
   async function screenPanel() {
     let st = await api.get('/api/pantalla').catch(toastError);
@@ -1035,7 +1039,9 @@ async function mount(root, params, opts = {}) {
     const drawClients = () => clear(clientsEl, st.clients.length
       ? [h('b', {}, `🟢 ${st.clients.length === 1 ? 'Un ordenador mirando' : `${st.clients.length} ordenadores mirando`}`), h('span', { class: 'tiny muted' }, ` · ${st.clients.map((c) => c.ip).join(', ')}`)]
       : h('span', { class: 'muted' }, '⚪ Todavía no se ha conectado nadie.'));
-    const check = (on, label, onchange, tip) => h('label', { class: 'check', 'data-tip': tip || null }, h('input', { type: 'checkbox', checked: !!on, onchange: (e) => onchange(e.target.checked) }), h('span', {}, label));
+    const check = (on, label, onchange, tip, disabled = false) => h('label', { class: `check ${disabled ? 'is-off' : ''}`, 'data-tip': tip || null },
+      h('input', { type: 'checkbox', checked: !!on, disabled, onchange: (e) => onchange(e.target.checked) }), h('span', {}, label));
+    const TIPS = { physical: 'Cada tirada de su bandeja pide lo que ha salido en sus dados; la app suma los modificadores, aplica la ventaja y avisa de los críticos' };
     function draw() {
       drawClients();
       clear(body,
@@ -1069,7 +1075,9 @@ async function mount(root, params, opts = {}) {
         check(st.frozen, '❄️ Congelar: siguen viendo lo de ahora mientras preparas lo siguiente', (v) => put({ frozen: v }),
           'Cambia de mapa, coloca enemigos o abre el combate sin que lo vean; al descongelar lo ven todo de golpe'),
         h('h4', {}, 'Qué se muestra'),
-        h('div', { class: 'sp-show' }, SHOW.map(([k, label]) => check(st.show[k], label, (v) => put({ show: { [k]: v } })))),
+        h('div', { class: 'sp-show' }, SHOW.map(([k, label]) => check(st.show[k], label, (v) => put({ show: { [k]: v } }), TIPS[k], k === 'physical' && !st.show.dice))),
+        physicalMode() !== 'off' && st.show.dice && !st.show.physical && h('p', { class: 'tiny sp-hint' },
+          '✋ En este ordenador usas dados físicos: marca «Que apunten allí sus dados físicos» para que también los apunten en su pantalla.'),
         h('label', { class: 'field' }, 'PG de los enemigos', selectEl([['aprox', 'Aproximados (ileso, herido, maltrecho…)'], ['no', 'No: solo si sigue en pie o ha caído']], st.show.enemyHp, (v) => put({ show: { enemyHp: v } }))),
         h('p', { class: 'tiny muted sp-never' }, '🔒 Nunca salen de este ordenador: los enemigos ocultos, los PG exactos de los enemigos, las trampas y puertas secretas, las notas del máster, las tiradas secretas, los enemigos que tapa la niebla y las fichas completas. Las tiradas que hagan allí son siempre públicas.'));
     }

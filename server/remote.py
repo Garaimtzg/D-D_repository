@@ -8,7 +8,8 @@ desde la red. Al activarla, el máster abre una segunda entrada en la red local 
     máster ha elegido mostrar: sin enemigos ocultos, sin PG exactos de los enemigos (aproximados o nada), sin trampas
     ni puertas secretas, sin notas del máster, sin tiradas secretas y sin los enemigos que tapa la niebla;
   · las imágenes que aparecen en eso (el mapa, los retratos, la imagen que se enseña) y ninguna otra;
-  · las tiradas de dados que hagan los jugadores (siempre públicas), si el máster lo permite.
+  · las tiradas de dados que hagan los jugadores (siempre públicas), si el máster lo permite; con dados físicos,
+    si el máster lo activa, apuntan lo que ha salido y la app suma, aplica la ventaja y avisa de los críticos.
 
 Todo lo demás de la API devuelve 403 desde la red: las fichas, las notas, el compendio o los combates enteros nunca
 salen de este ordenador. Para entrar hace falta el código que muestra el máster (cookie «mesa_codigo»).
@@ -40,6 +41,7 @@ DEFAULT_SHOW = {
     "weather": True,      # el clima sobre el tablero
     "narration": True,    # la narración y la imagen que enseña el máster
     "dice": True,         # que puedan tirar dados desde su ordenador
+    "physical": False,    # que allí apunten lo que sale en sus dados físicos (la app suma y avisa de los críticos)
 }
 SCREENS = ("mesa", "espera", "negro")
 CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # sin 0/O ni 1/I/L, que se confunden al dictarlo
@@ -415,6 +417,10 @@ class RemoteHandler(SimpleHTTPRequestHandler):
             return self._json(413, {"error": "Petición demasiado grande"})
         try:
             body = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            # lo que sale en los dados físicos solo se acepta si el máster los ha activado en esta pantalla
+            # (si no, cualquiera podría «apuntar» un 20 en vez de dejar tirar a la app)
+            if body.get("dice") is not None and not self.manager.config()["show"]["physical"]:
+                return self._json(403, {"error": "El máster no ha activado los dados físicos en esta pantalla"})
             result = dice.roll(str(body.get("expr", ""))[:60], str(body.get("mode", "")), given=body.get("dice"))
         except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
             return self._json(400, {"error": "JSON no válido"})
