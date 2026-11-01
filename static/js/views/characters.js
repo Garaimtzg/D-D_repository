@@ -12,7 +12,7 @@ import {
   newCharacter, migrateCharacter, fromMonster, applyDamage, applyHealing, longRest, shortRest, combatantFrom,
   classOf, speciesOf, backgroundOf, computeAC, maxHpFor, slotsFor, classResources, featuresUpTo, masteryCount, columnAt, weaponAttack, weaponProficient,
   source, grantResources, derivedAttacks, pendingChoices, featAbilities, castingOf, subclassResourceNames, grantedSpells, spellChoices,
-  spellLists, spellCounts, freeUseFor, featGrants, featBonus, carryCapacity, fmtKg, GENDERS, speciesFacts,
+  spellLists, spellCounts, freeUseFor, featGrants, featBonus, carryCapacity, fmtKg, GENDERS, speciesFacts, speciesIcon, ref as liveRef,
 } from '../core/dnd.js';
 import { openCreator } from './creator.js';
 import { bestiaryDialog as openBestiary, fixAsModel } from './bestiary.js';
@@ -26,7 +26,10 @@ import { groupCheck, partyScreen } from '../core/party.js';
 export default { id: 'personajes', title: 'Personajes', icon: 'personajes', hint: 'Jugadores, personajes de la historia y enemigos · tecla 4', mount };
 
 async function mount(root, [selId]) {
-  const [ref, raw] = await Promise.all([reference(), api.list('characters')]);
+  // ref es la referencia viva: el creador la recarga al crear especies, clases o trasfondos propios, y los desplegables
+  // de la ficha (también la ficha en blanco) tienen que verlos sin salir de Personajes.
+  let [ref, raw] = await Promise.all([reference(), api.list('characters')]);
+  const freshRef = () => { ref = liveRef() || ref; };
   const state = {
     chars: raw.map(migrateCharacter), // fichas antiguas reciben los campos nuevos y las unidades de 2024
     filter: prefs.get('chars.filter', 'todos'), search: '', sel: null, attackMode: '',
@@ -188,6 +191,7 @@ async function mount(root, [selId]) {
   const refresh = () => renderSheet();
 
   function renderSheet() {
+    freshRef();
     const c = state.sel;
     const list = visible();
     const idx = list.indexOf(c);
@@ -288,12 +292,20 @@ async function mount(root, [selId]) {
       c.spellAbility = cls.spell_ability || '';
       c.autoSlots = !!cls.caster;
       c.weaponTraining = [...cls.weapon_training];
+      addLanguages(c, cls.languages || []);
       c.armorTraining = [...cls.armor_training];
       if (c.type !== 'enemigo') { const diff = maxHpFor(c) - c.maxHp; c.maxHp += diff; c.hp = Math.max(0, Math.min(c.maxHp, c.hp + diff)); }
       syncClassData(c);
       toast(h('div', {}, h('b', {}, cls.name), h('div', { class: 'small' }, `${cls.summary} Dado de golpe d${cls.hit_die}. (${source(cls)})`)), { iconName: 'book', ms: 6000 });
     }
     save(c); refresh();
+  }
+
+  // Añade idiomas a la lista de la ficha (texto separado por comas) sin repetir ninguno.
+  function addLanguages(c, list) {
+    const have = String(c.languages || '').split(',').map((x) => x.trim()).filter(Boolean);
+    for (const l of list) if (!have.some((x) => x.toLowerCase() === l.toLowerCase())) have.push(l);
+    c.languages = have.join(', ');
   }
 
   function setSpecies(c, id) {
@@ -304,6 +316,7 @@ async function mount(root, [selId]) {
     if (sp) {
       c.speed = sp.speed + featBonus(c, 'speed');
       if (!sp.size.includes(c.size)) c.size = sp.size.split(' o ')[0];
+      addLanguages(c, ['Común', ...(sp.languages || [])]);
       toast(h('div', {}, h('b', {}, sp.name), h('div', { class: 'small' }, `${sp.traits.map(([n]) => n).join(' · ')} (${source(sp)})`)), { iconName: 'book', ms: 6000 });
     }
     syncGrants(c);
@@ -317,6 +330,7 @@ async function mount(root, [selId]) {
     c.background = bg?.name || '';
     if (bg) {
       bg.skills.forEach((k) => { c.skills[k] = Math.max(1, c.skills[k] || 0); });
+      addLanguages(c, bg.languages || []);
       if (!c.feats.includes(bg.feat)) { c.feats.push(bg.feat); featChanged(c, bg.feat, 1); }
       toast(h('div', {}, h('b', {}, bg.name), h('div', { class: 'small' },
         `Dote ${bg.feat} y competencia en ${bg.skills.map((k) => ref.skills.find((s) => s.key === k)?.name).join(' y ')}. Sus características (+2/+1 o +1/+1/+1): ${bg.abilities.map((k) => ABILITY_SHORT[k]).join(', ')}. (${source(bg)})`)),
@@ -743,7 +757,7 @@ async function mount(root, [selId]) {
           save(c); refresh();
         } }, n)));
 
-    const allConds = [...ref.conditions, ...ref.trackers].filter((x) => x.name !== 'Cansancio');
+    const allConds = [...ref.conditions, ...(ref.mastery_states || []).filter((m) => m.name !== 'Derribado'), ...ref.trackers].filter((x) => x.name !== 'Cansancio');
     const condAdd = selectEl([['', '+ Añadir estado'], ...allConds.map((x) => x.name).filter((n) => !c.conditions.includes(n)).map((n) => [n, condLabel(n)])], '', (v) => {
       if (v) { c.conditions.push(v); save(c); refresh(); }
     }, { class: 'cond-add', 'aria-label': 'Añadir estado' });
@@ -1106,7 +1120,7 @@ async function mount(root, [selId]) {
             h('span', { class: 'lvl' }, l), h('b', {}, f), t && h('span', { class: 'tiny muted' }, ` — ${t}`))))),
         sp && h('div', { class: 'traits-block' },
           sp.image && h('span', { class: 'species-pic sm', style: { backgroundImage: `url("${sp.image}")` } }),
-          h('div', { class: 'row between' }, h('b', {}, sp.name, c.lineage ? ` · ${c.lineage}` : ''),
+          h('div', { class: 'row between' }, h('b', {}, speciesIcon(sp), ' ', sp.name, c.lineage ? ` · ${c.lineage}` : ''),
             h('span', { class: 'row nowrap' }, h('span', { class: 'tiny muted' }, sp.edited ? `${source(sp)} · editada` : source(sp)),
               h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Editar la especie ${sp.name}`, 'data-tip': 'Editar la especie (para todas sus fichas)',
                 onclick: async () => { const R2 = await editSpecies(sp, ref, state.chars); if (R2) { Object.assign(ref, R2); refresh(); } } }, icon('edit', 13)))),

@@ -70,18 +70,22 @@ export function step(c, dir) {
   const n = c.combatants.length;
   if (!n) return null;
   const round = c.round;
+  if (dir > 0 && c.status === 'active' && c.round > 0) expireBy(c, current(c), 'fin'); // termina el turno de quien estaba
   for (let i = 0; i < n; i++) {
     c.turn += dir;
     if (c.turn >= n) { c.turn = 0; c.round += 1; log(c, `— Ronda ${c.round} —`); }
     if (c.turn < 0) { c.turn = n - 1; c.round = Math.max(1, c.round - 1); }
     const x = current(c);
     if (x.type === 'jugador' || x.hp > 0) break;
+    if (dir > 0) { expireBy(c, x, 'inicio'); expireBy(c, x, 'fin'); } // un enemigo caído no juega: sus efectos se acaban
   }
   if (c.board) c.board.moved = {}; // el movimiento se cuenta por turno
   const x = current(c);
   if (c.round > round) sfx.gong(); else sfx.turn();
   if (dir > 0) {
+    expireBy(c, x, 'inicio'); // empieza su turno: se acaban Debilitado y Ralentizado que causó
     x.conditions = x.conditions.filter((cond) => {
+      if (cond.by) return true; // los de maestría duran según el turno de quien los causó, no el suyo
       if (cond.rounds == null) return true;
       cond.rounds -= 1;
       if (cond.rounds <= 0) {
@@ -95,6 +99,31 @@ export function step(c, dir) {
     if (x.type === 'jugador' && x.hp <= 0 && x.deathSaves.ko < 3 && x.deathSaves.ok < 3) toast(`${x.name} está a 0 PG: tirada de salvación de muerte.`, { iconName: 'skull' });
   }
   return x;
+}
+
+// Estados de maestría (Debilitado, Ralentizado, Molestado) que causó `who`: se acaban al inicio o al final de su turno.
+// skip: cuántas veces más hay que esperar (Molestar dura hasta el final de su PRÓXIMO turno, no del actual).
+function expireBy(c, who, moment) {
+  if (!who) return;
+  for (const y of c.combatants) {
+    y.conditions = (y.conditions || []).filter((cond) => {
+      if (cond.by !== who.cid || cond.ends !== moment) return true;
+      if (cond.skip > 0) { cond.skip -= 1; return true; }
+      log(c, `${y.name} ya no está ${cond.name.toLowerCase()}.`);
+      return false;
+    });
+  }
+}
+
+// Aplica un estado de maestría de armas: el de la referencia (mastery_states) que causa `by` sobre `target`. No se
+// acumulan: si ya lo tenía, se renueva. Derribado dura hasta que se levante.
+export function applyMastery(c, target, state, by) {
+  target.conditions = (target.conditions || []).filter((k) => k.name !== state.name);
+  const during = by && current(c) === by; // en su turno: Molestar aguanta también todo su turno siguiente
+  target.conditions.push(state.ends
+    ? { name: state.name, rounds: null, by: by?.cid || null, ends: state.ends, skip: state.ends === 'fin' && during ? 1 : 0 }
+    : { name: state.name, rounds: null });
+  log(c, `${target.name} queda ${state.name.toLowerCase()}${by ? ` (${state.mastery} de ${by.name})` : ''}.`);
 }
 
 export async function rollInitiative(c, onlyMissing = false) {

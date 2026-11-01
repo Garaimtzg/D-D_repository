@@ -592,6 +592,43 @@ class BestiaryEditTests(unittest.TestCase):
         self.assertTrue(dwarf["image"].startswith("/uploads/"))
 
 
+class LanguagesAndMasteryTests(unittest.TestCase):
+    """Idiomas por especie, clase y trasfondo (sin dos gratis) y estados de las maestrías de armas."""
+
+    def test_languages_come_from_species_and_class(self):
+        ref = rules.reference()
+        species = {s["id"]: s for s in ref["species"]}
+        self.assertEqual(species["elfo"]["languages"], ["Elfo"])
+        self.assertEqual(species["duergar"]["languages"], ["Enano", "Infracomún"])
+        self.assertEqual(species["humano"]["languages"], [])  # solo común
+        self.assertTrue(all(isinstance(s["languages"], list) and "Común" not in s["languages"] for s in ref["species"]))
+        classes = {c["id"]: c for c in ref["classes"]}
+        self.assertEqual((classes["druida"]["languages"], classes["picaro"]["languages"], classes["guerrero"]["languages"]),
+                         (["Druídico"], ["Jerga de ladrones"], []))
+
+    def test_homebrew_emoji_and_languages(self):
+        from server import homebrew
+        ref = homebrew.merge(rules.reference(), [
+            {"id": "a", "kind": "species", "name": "Gente zorro", "emoji": "🦊", "languages": ["Común", "Silvano", "Silvano", "Vulpino"]},
+            {"id": "b", "kind": "background", "name": "Sabio de puerto", "languages": ["Primordial"]},
+            {"id": "c", "kind": "species", "base": "orco", "name": "Orco", "emoji": "🐗", "languages": ["Orco", "Gigante"]},
+        ])
+        fox = next(s for s in ref["species"] if s["id"] == "hb-a")
+        self.assertEqual((fox["emoji"], fox["languages"]), ("🦊", ["Silvano", "Vulpino"]))
+        self.assertEqual(next(b for b in ref["backgrounds"] if b["id"] == "hb-b")["languages"], ["Primordial"])
+        orc = next(s for s in ref["species"] if s["id"] == "orco")
+        self.assertEqual((orc["emoji"], orc["languages"]), ("🐗", ["Orco", "Gigante"]))
+
+    def test_mastery_states(self):
+        ref = rules.reference()
+        states = {m["name"]: m for m in ref["mastery_states"]}
+        self.assertEqual(set(states), {"Debilitado", "Ralentizado", "Molestado", "Derribado"})
+        masteries = {m["name"] for m in ref["masteries"]}
+        self.assertTrue(all(m["mastery"] in masteries for m in ref["mastery_states"]))
+        self.assertEqual((states["Debilitado"]["ends"], states["Molestado"]["ends"], states["Derribado"]["ends"]), ("inicio", "fin", ""))
+        self.assertIn("Derribado", {c["name"] for c in ref["conditions"]})
+
+
 class MobilePageTests(unittest.TestCase):
     def test_mobile_page_is_up_to_date(self):
         import importlib.util

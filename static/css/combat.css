@@ -99,3 +99,8 @@
   .cbt-side { grid-column: 1 / -1; flex-direction: row; justify-content: flex-end; }
   .cbt-hp { grid-template-columns: 1fr; }
 }
+/* maestrías de armas */
+.mastery-btn { border-color: rgba(226, 180, 86, .45); color: var(--gold-2, #f8dc94); }
+.chip.cond.mastery { border-color: rgba(226, 180, 86, .5); }
+.cbt-vex { gap: 6px; align-items: center; }
+.cbt-vex .btn[aria-pressed="true"] { background: linear-gradient(180deg, #f8dc94, #c9963f); color: #2a1906; }

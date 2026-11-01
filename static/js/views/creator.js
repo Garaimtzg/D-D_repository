@@ -9,7 +9,7 @@ import {
   reference, reloadReference, newCharacter, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, mod, fmtMod, fmtM, maxHpFor, computeAC,
   slotsFor, classResources, featuresUpTo, profBonus, columnAt, source, grantResources, derivedAttacks,
   pendingChoices, weaponAttack, featAbilities, initBonus, castingOf, grantedSpells, spellChoices, spellCounts, spellLists, featBonus,
-  GENDERS, genderLabel, speciesFacts,
+  GENDERS, genderLabel, speciesFacts, SPECIES_ICON, speciesIcon, givenLanguages,
 } from '../core/dnd.js';
 import { pickSpells, spellTip } from './spellui.js';
 import { roll } from '../core/dice.js';
@@ -20,15 +20,7 @@ const CLASS_ICON = {
   barbaro: '🪓', bardo: '🎻', brujo: '👁️', clerigo: '✨', druida: '🌿', explorador: '🏹',
   guerrero: '⚔️', hechicero: '🔥', mago: '📖', monje: '👊', paladin: '🛡️', picaro: '🗡️', artificiero: '🔧',
 };
-export const SPECIES_ICON = {
-  aasimar: '😇', draconido: '🐉', elfo: '🧝', enano: '⛏️', gnomo: '⚙️', goliat: '🏔️', humano: '🧑', mediano: '🍀', orco: '💪', tiefling: '😈',
-  jentil: '🪨', lamina: '🦆', basajaun: '🌲', iratxo: '🧚',
-  aarakocra: '🦅', osgo: '🐻', centauro: '🐎', cambiaformas: '🐺', cambiante: '🎭', duergar: '⚒️', eladrin: '🍂', elfo_mar: '🐚',
-  firbolg: '🌳', genasi: '🌪️', githyanki: '⚔️', githzerai: '🧘', gnomo_profundidades: '💎', goblin: '👺', hada: '🧚‍♀️', harengon: '🐇',
-  hobgoblin: '🎖️', kenku: '🐦‍⬛', kobold: '🦎', hombre_lagarto: '🐊', minotauro: '🐂', satiro: '🐐', shadar_kai: '🌑', tabaxi: '🐆',
-  tortuga: '🐢', triton: '🔱', yuan_ti: '🐍', buhonido: '🦉', grung: '🐸', locathah: '🐟', verdan: '🧠', semielfo: '🧝‍♂️', semiorco: '🗿',
-  leonido: '🦁', loxodon: '🐘', hibrido_simic: '🧬', vedalken: '🔷', dhampiro: '🧛', sangre_maldita: '🧙‍♀️', renacido: '💀',
-};
+export { SPECIES_ICON }; // (vive en core/dnd.js)
 // Grupos de especies en el creador, en este orden, con una nota para los que no son del manual
 const SPECIES_GROUPS = [
   ['Manual del Jugador (2024)', ''],
@@ -48,7 +40,7 @@ export async function openCreator({ onCreate }) {
   let R = await reference();
   const st = {
     step: 0, classId: '', classSkills: [], classChoice: '', backgroundId: '', speciesId: '', lineage: '', size: '', speciesSkills: [], humanFeat: '',
-    languages: ['Común'], method: 'estandar', assign: blank(''), points: blank(8), rolled: [], rolledAssign: blank(''),
+    extraLanguages: [], extraWhy: '', method: 'estandar', assign: blank(''), points: blank(8), rolled: [], rolledAssign: blank(''),
     bgMode: '2-1', plus2: '', plus1: '', name: '', player: '', alignment: 'Neutral bueno', level: 1, subclass: '', style: '', asi: {},
     kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)], spells: [], picks: {},
     height: '', weight: '', appearance: '', personality: '', age: '', gender: '', genderOther: '',
@@ -104,7 +96,6 @@ export async function openCreator({ onCreate }) {
       if (sp().options && !st.lineage) return `Elige ${sp().options_label.toLowerCase()}.`;
       if (st.speciesSkills.length < speciesSkillCount(sp())) return `Elige ${speciesSkillCount(sp())} habilidades de tu especie.`;
       if (sp().origin_feat_choice && !st.humanFeat) return 'Elige la dote de origen de «Versátil».';
-      if (st.languages.length !== 3) return 'Elige dos idiomas además del común.';
       if (st.classSkills.length !== c.skills.choose) return 'Te falta una habilidad de clase (tu trasfondo ya te daba alguna).';
     }
     if (step === 2) {
@@ -245,9 +236,9 @@ export async function openCreator({ onCreate }) {
     if (b) st.classSkills = st.classSkills.filter((k) => !b.skills.includes(k));
     const originFeats = R.feats.filter((f) => f.category === 'origen');
     const speciesCard = (k) => h('button', {
-      class: `cr-card ${k.id === st.speciesId ? 'sel' : ''} ${k.page ? '' : 'homebrew'}`, type: 'button', 'data-tip': k.lore || k.summary || null,
+      class: `cr-card ${k.id === st.speciesId ? 'sel' : ''} ${k.origin === 'Euskal Herria' ? 'homebrew' : ''} ${k.homebrew_id && !k.edited ? 'custom' : ''}`, type: 'button', 'data-tip': k.lore || k.summary || null,
       onclick: (e) => { if (st.speciesId !== k.id) { Object.assign(st, { speciesId: k.id, lineage: '', speciesSkills: [], humanFeat: '', size: k.size.split(' o ')[0] }); sfx.click(); } choose(e); },
-    }, h('span', { class: 'cr-emoji' }, SPECIES_ICON[k.id] || '🧬'), h('b', {}, k.name),
+    }, h('span', { class: 'cr-emoji' }, speciesIcon(k)), h('b', {}, k.name),
     h('span', { class: 'tiny muted' }, `${k.size} · ${fmtM(k.speed)}${k.darkvision ? ` · visión ${k.darkvision} m` : ''}`));
     const nSkills = speciesSkillCount(s);
     return h('div', { class: 'stack' },
@@ -277,7 +268,7 @@ export async function openCreator({ onCreate }) {
               h('span', { class: 'tiny muted' }, 'Crea la tuya')))];
       }),
       s && h('section', { class: 'panel cr-detail' },
-        h('div', { class: 'panel-head' }, h('h3', {}, SPECIES_ICON[s.id] || '🧬', ' ', s.name),
+        h('div', { class: 'panel-head' }, h('h3', {}, speciesIcon(s), ' ', s.name),
           h('div', { class: 'actions' }, h('button', { class: 'btn xs', type: 'button', 'data-tip': s.homebrew_id && !s.edited ? 'Editar tu especie' : 'Editar esta especie del manual para tu mesa (todas sus fichas la usarán así)',
             onclick: async () => { const R2 = await editSpecies(s, R, await api.list('characters')); if (R2) { R = R2; render(); } } }, icon('edit', 13), 'Editar'),
             h('span', { class: 'chip' }, source(s)))),
@@ -300,17 +291,32 @@ export async function openCreator({ onCreate }) {
         s.origin_feat_choice && [h('div', { class: 'eyebrow' }, 'Versátil: una dote de origen'),
           h('div', { class: 'cr-options' }, originFeats.map((f) => option(st.humanFeat === f.name, () => { st.humanFeat = f.name; }, f.name, f.summary)))]),
       h('h3', { class: 'cr-h' }, '3 · Idiomas'),
-      h('p', { class: 'small muted' }, 'Sabes común y otros dos idiomas estándar.'),
-      h('div', { class: 'cr-skills' }, R.languages.estandar.map((l) => {
-        const on = st.languages.includes(l);
-        return h('button', { class: `chip pick ${on ? 'on' : ''}`, type: 'button', disabled: l === 'Común',
-          onclick: () => {
-            if (on) st.languages = st.languages.filter((x) => x !== l);
-            else if (st.languages.length < 3) st.languages.push(l);
-            else st.languages = ['Común', st.languages[2], l];
-            refresh();
-          } }, on ? '✓ ' : '', l);
-      })));
+      languagesStep());
+  }
+
+  // Idiomas: los que da su origen (común, su especie, su clase y su trasfondo) y, solo si su historia lo explica, alguno
+  // más. Nada de dos idiomas estándar gratis sin contexto.
+  function languagesStep() {
+    const given = givenLanguages(sp(), cls(), bg());
+    const from = (l) => [
+      l === 'Común' && 'todo el mundo', (sp()?.languages || []).includes(l) && sp().name, (cls()?.languages || []).includes(l) && cls().name,
+      (bg()?.languages || []).includes(l) && bg().name].filter(Boolean).join(' · ');
+    const all = [...new Set([...R.languages.estandar, ...R.languages.inusuales, ...R.species.flatMap((x) => x.languages || [])])].filter((l) => !given.includes(l));
+    st.extraLanguages = st.extraLanguages.filter((l) => !given.includes(l));
+    return [
+      h('p', { class: 'small muted' }, 'Hablas común, el idioma de tu especie y los que te den tu clase o tu trasfondo. Otro idioma solo si tu historia lo explica (te criaste entre enanos, estudiaste en un templo…).'),
+      h('div', { class: 'cr-skills' }, given.map((l) => h('span', { class: 'chip pick on', 'data-tip': `Por ${from(l)}` }, '✓ ', l, h('span', { class: 'tiny muted' }, ` · ${from(l)}`)))),
+      !sp() && h('p', { class: 'tiny muted' }, 'Elige tu especie para ver su idioma.'),
+      h('details', { class: 'cr-extra-lang', open: st.extraLanguages.length > 0 },
+        h('summary', { class: 'small' }, `Otros idiomas por su historia (opcional)${st.extraLanguages.length ? `: ${st.extraLanguages.join(', ')}` : ''}`),
+        h('div', { class: 'cr-skills' }, all.map((l) => {
+          const on = st.extraLanguages.includes(l);
+          return h('button', { class: `chip pick ${on ? 'on' : ''}`, type: 'button',
+            onclick: () => { st.extraLanguages = on ? st.extraLanguages.filter((x) => x !== l) : [...st.extraLanguages, l]; refresh(); } }, on ? '✓ ' : '', l);
+        })),
+        st.extraLanguages.length > 0 && h('label', { class: 'field' }, '¿Por qué los sabe?',
+          h('input', { value: st.extraWhy, placeholder: 'Se crio en una mina enana; aprendió silvano de su abuela druida…', oninput: (e) => { st.extraWhy = e.target.value; } }))),
+    ];
   }
 
   // Paso 3: características
@@ -511,12 +517,12 @@ export async function openCreator({ onCreate }) {
       feats: [b.feat, st.humanFeat, st.style, ...levelFeats].filter(Boolean), masteries: [],
       weaponTraining: [...new Set([...c.weapon_training, ...(effects.weapons || [])])], armorTraining: [...new Set([...c.armor_training, ...(effects.armor || [])])],
       tools: [b.tool, c.tools, s.tool].filter(Boolean).join('; '),
-      languages: st.languages.join(', '),
+      languages: [...givenLanguages(s, c, b), ...st.extraLanguages].join(', '),
       speed: s.lineage_speed?.[st.lineage] ?? s.speed,
       hitDie: `d${c.hit_die}`, hitDiceLeft: st.level,
       spellAbility: c.spell_ability || c.subclass_casting?.[st.subclass]?.spell_ability || '', autoSlots: !!(c.caster || c.subclass_casting?.[st.subclass]), acMode: 'auto',
       spellList: [...st.spells], spellPicks: structuredClone(st.picks),
-      notes: `Especie: ${s.name}${lineageText}. Trasfondo: ${b.name}. Alineamiento: ${st.alignment}.`,
+      notes: `Especie: ${s.name}${lineageText}. Trasfondo: ${b.name}. Alineamiento: ${st.alignment}.${st.extraLanguages.length && st.extraWhy.trim() ? ` Idiomas (${st.extraLanguages.join(', ')}): ${st.extraWhy.trim()}` : ''}`,
     });
     // equipo inicial: armas a la lista de ataques, armadura y escudo a la CA, el resto al inventario
     const kit = c.kits[st.kit];

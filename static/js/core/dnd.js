@@ -17,6 +17,7 @@ export const CONDITION_ICON = {
   Agarrado: '🤝', Apresado: '⛓️', Asustado: '😱', Aturdido: '💫', Cansancio: '🥱', Cegado: '🙈', Derribado: '🛌',
   Ensordecido: '🔇', Envenenado: '🤢', Hechizado: '💘', Incapacitado: '🚫', Inconsciente: '💤',
   Invisible: '👻', Paralizado: '🧊', Petrificado: '🗿', Concentrado: '🔮', Bendecido: '✨', Marcado: '🎯', Maltrecho: '🩸', Oculto: '🫥',
+  Debilitado: '🥴', Ralentizado: '🐌', Molestado: '😤', // maestrías de armas
 };
 export const condLabel = (name) => `${CONDITION_ICON[name] || '•'} ${name}`;
 
@@ -56,6 +57,22 @@ export const hasFeat = (ch, name) => (ch.feats || []).some((f) => norm(f).starts
 export const GENDERS = [['', '—'], ['masculino', 'Masculino'], ['femenino', 'Femenino'], ['no binario', 'No binario'], ['otro', 'Otro…']];
 export const genderLabel = (ch) => (ch.gender === 'otro' ? (ch.genderOther || '').trim() : GENDERS.find(([k]) => k && k === ch.gender)?.[1] || '');
 // Datos generales de una especie para la ficha: altura típica y esperanza de vida.
+// Emoticono de cada especie en el selector; las propias y las editadas pueden llevar el suyo (sp.emoji).
+export const SPECIES_ICON = {
+  aasimar: '😇', draconido: '🐉', elfo: '🧝', enano: '⛏️', gnomo: '⚙️', goliat: '🏔️', humano: '🧑', mediano: '🍀', orco: '💪', tiefling: '😈',
+  jentil: '🪨', lamina: '🦆', basajaun: '🌲', iratxo: '🧚',
+  aarakocra: '🦅', osgo: '🐻', centauro: '🐎', cambiaformas: '🐺', cambiante: '🎭', duergar: '⚒️', eladrin: '🍂', elfo_mar: '🐚',
+  firbolg: '🌳', genasi: '🌪️', githyanki: '⚔️', githzerai: '🧘', gnomo_profundidades: '💎', goblin: '👺', hada: '🧚‍♀️', harengon: '🐇',
+  hobgoblin: '🎖️', kenku: '🐦‍⬛', kobold: '🦎', hombre_lagarto: '🐊', minotauro: '🐂', satiro: '🐐', shadar_kai: '🌑', tabaxi: '🐆',
+  tortuga: '🐢', triton: '🔱', yuan_ti: '🐍', buhonido: '🦉', grung: '🐸', locathah: '🐟', verdan: '🧠', semielfo: '🧝‍♂️', semiorco: '🗿',
+  leonido: '🦁', loxodon: '🐘', hibrido_simic: '🧬', vedalken: '🔷', dhampiro: '🧛', sangre_maldita: '🧙‍♀️', renacido: '💀',
+};
+export const speciesIcon = (sp) => sp?.emoji || SPECIES_ICON[sp?.id] || '🧬';
+
+// Idiomas que sabe un personaje sin elegir nada: común, los de su especie, los de su clase (druídico, jerga de
+// ladrones) y los de su trasfondo. Los demás solo si su historia lo justifica (se añaden aparte).
+export const givenLanguages = (sp, cls, bg) => [...new Set(['Común', ...(sp?.languages || []), ...(cls?.languages || []), ...(bg?.languages || [])])];
+
 export const speciesFacts = (sp) => [sp?.height && `Altura: ${sp.height}`, sp?.lifespan && `Esperanza de vida: ${sp.lifespan}`].filter(Boolean).join(' · ');
 // Dónde mirar una regla: la página del manual o el origen del material propio (Euskal Herria).
 export const source = (x) => (x?.page ? `MdJ p. ${x.page}` : x?.origin || '');

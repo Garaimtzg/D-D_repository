@@ -27,7 +27,8 @@ export function ensureBoard(c) {
 // Velocidad que le queda a una criatura este turno (cansancio y estados que la dejan a 0).
 export function speedOf(x) {
   if (x.conditions?.some((k) => NO_SPEED.includes(k.name))) return 0;
-  return Math.max(0, (Number(x.speed) || 9) - 1.5 * (x.exhaustion || 0));
+  const slowed = x.conditions?.some((k) => k.name === 'Ralentizado') ? 3 : 0; // maestría Ralentizar (no se acumula)
+  return Math.max(0, (Number(x.speed) || 9) - 1.5 * (x.exhaustion || 0) - slowed);
 }
 
 // Fichas para el tablero. En modo jugadores se esconden los ocultos y los PG exactos de los enemigos.

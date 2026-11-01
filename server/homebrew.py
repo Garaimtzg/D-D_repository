@@ -18,7 +18,18 @@ WEAPONS = ("sencilla", "marcial")
 ARMOR_TEXT = {"ligera": "ligeras", "media": "medias", "pesada": "pesadas"}
 UPLOAD = re.compile(r"^/uploads/[a-f0-9]{32}\.[a-z0-9]{2,5}$")
 # Campos de una especie que el editor reescribe del todo: si la edición los quita, se quitan también de la original.
-SPECIES_EDITABLE = ("natural_ac", "hp_per_level", "carry_bigger", "tool", "skill_choice", "skill_count", "image", "lore", "height", "lifespan")
+SPECIES_EDITABLE = ("natural_ac", "hp_per_level", "carry_bigger", "tool", "skill_choice", "skill_count", "image", "lore", "height", "lifespan",
+                    "emoji", "languages")
+
+
+def _languages(value):
+    """Idiomas: nombres cortos, sin repetir y sin el común (que lo habla todo el mundo)."""
+    out = []
+    for v in _list(value):
+        name = _txt(v, 40)
+        if name and name.lower() != "común" and name not in out:
+            out.append(name)
+    return out[:6]
 
 
 def _txt(value, limit=200):
@@ -83,6 +94,9 @@ def species(doc: dict) -> dict:
         out["carry_bigger"] = True
     if isinstance(doc.get("image"), str) and UPLOAD.match(doc["image"]):
         out["image"] = doc["image"]  # foto de la especie: la ficha y el creador la muestran
+    if _txt(doc.get("emoji"), 16):
+        out["emoji"] = _txt(doc.get("emoji"), 16)  # el emoticono del selector de especies
+    out["languages"] = _languages(doc.get("languages"))
     for key, limit in (("lore", 1500), ("height", 60), ("lifespan", 60)):
         if _txt(doc.get(key)):
             out[key] = _txt(doc.get(key), limit)
@@ -144,6 +158,7 @@ def klass(doc: dict) -> dict:
         "subclass_features": {s: feats for s, feats in subclasses},
         "subclass_source": {s: "Personalizada" for s, _ in subclasses},
         "choice": None, "style_level": None, "expertise": [], "kits": [], "subclass_unarmored": {},
+        "languages": _languages(doc.get("languages")),
     }
 
 
@@ -171,6 +186,7 @@ def background(doc: dict) -> dict:
         "feat": doc.get("feat") if doc.get("feat") in ORIGIN_FEATS else "Habilidoso",
         "skills": skills, "tool": _txt(doc.get("tool"), 80) or "Una herramienta a elegir",
         "kit": {"items": items, "gold": _num(doc.get("gold"), 0, 50, 0)}, "kit_gold": 50,
+        "languages": _languages(doc.get("languages")),
     }
 
 

@@ -2,7 +2,7 @@
 // los convierte a la misma forma que los del manual (server/homebrew.py), así el creador y la ficha los usan igual.
 import { api } from '../core/api.js';
 import { h, clear, icon, bind, field, selectEl, modal, confirmDialog, toast, toastError, pickFiles } from '../core/dom.js';
-import { ABILITY_KEYS, ABILITY_SHORT, reloadReference } from '../core/dnd.js';
+import { ABILITY_KEYS, ABILITY_SHORT, reloadReference, SPECIES_ICON } from '../core/dnd.js';
 
 const SIZES = ['Mediano', 'Pequeño', 'Mediano o Pequeño', 'Grande'];
 const USES = [['1', '1 vez por descanso'], ['2', '2 veces'], ['3', '3 veces'], ['pb', 'Bonif. por competencia']];
@@ -19,6 +19,41 @@ function chips(options, chosen, { max = 99 } = {}) {
       else { chosen.push(k); if (chosen.length > max) chosen.shift(); }
       draw();
     } }, chosen.includes(k) ? '✓ ' : '', label)));
+  draw();
+  return box;
+}
+
+// Emoticonos sugeridos para una especie (también vale escribir o pegar cualquier otro).
+const EMOJIS = ['🧝', '🧙', '🧛', '🧜', '🧚', '🧞', '🧟', '🧌', '👹', '👺', '😈', '😇', '👽', '🤖', '💀', '👻', '🐉', '🐲', '🦄', '🐺', '🦊', '🐻', '🦁',
+  '🐯', '🐆', '🐘', '🦅', '🦉', '🐦‍⬛', '🦇', '🐸', '🐍', '🦎', '🐢', '🐙', '🦈', '🐟', '🦀', '🐝', '🦋', '🕷️', '🐌', '🍄', '🌲', '🌿', '🌸', '🍂', '🌙', '☀️',
+  '⭐', '🔥', '❄️', '🌊', '⚡', '🌪️', '🪨', '💎', '⚙️', '🗿', '🧠', '👁️', '🦴', '🪶', '🎭', '⚔️', '🛡️', '🔮', '🧬'];
+
+// Selector de emoticono: el elegido grande, un campo para escribir o pegar cualquiera y una rejilla de sugerencias.
+function emojiPicker(doc, fallback) {
+  const box = h('div', { class: 'emoji-picker' });
+  const draw = () => clear(box,
+    h('div', { class: 'row nowrap' },
+      h('span', { class: 'emoji-big', 'aria-hidden': 'true' }, doc.emoji || fallback),
+      h('input', { class: 'inline', value: doc.emoji || '', maxlength: 16, placeholder: fallback, 'aria-label': 'Emoticono de la especie', style: { width: '6em' },
+        onchange: (e) => { doc.emoji = e.target.value.trim(); draw(); } }),
+      doc.emoji && h('button', { class: 'btn xs ghost', type: 'button', onclick: () => { doc.emoji = ''; draw(); } }, 'Quitar')),
+    h('div', { class: 'emoji-grid' }, EMOJIS.map((e) => h('button', { type: 'button', class: doc.emoji === e ? 'on' : '', 'aria-label': e, onclick: () => { doc.emoji = e; draw(); } }, e))));
+  draw();
+  return box;
+}
+
+// Idiomas que da una especie, un trasfondo o una clase: los del manual en fichas y cualquier otro escrito a mano.
+function languagePicker(doc, R) {
+  doc.languages ||= [];
+  const known = [...new Set([...R.languages.estandar, ...R.languages.inusuales, ...R.species.flatMap((x) => x.languages || []), ...doc.languages])].filter((l) => l !== 'Común');
+  const box = h('div', { class: 'stack-sm' });
+  const draw = () => clear(box,
+    h('div', { class: 'cr-skills' }, [...new Set([...known, ...doc.languages])].map((l) => {
+      const on = doc.languages.includes(l);
+      return h('button', { class: `chip pick ${on ? 'on' : ''}`, type: 'button', onclick: () => { doc.languages = on ? doc.languages.filter((x) => x !== l) : [...doc.languages, l]; draw(); } }, on ? '✓ ' : '', l);
+    })),
+    h('input', { class: 'inline', placeholder: 'Otro idioma (Intro para añadir)', 'aria-label': 'Otro idioma',
+      onkeydown: (e) => { const v = e.target.value.trim(); if (e.key === 'Enter' && v && !doc.languages.includes(v)) { e.preventDefault(); doc.languages.push(v); draw(); } } }));
   draw();
   return box;
 }
@@ -45,12 +80,12 @@ const resourceRow = (row, abilityUses = false) => [bind(row, 'name', { placehold
 // footer: algo más que poner al final del formulario (la casilla de aplicar a las fichas).
 export async function editHomebrew(kind, R, existing = null, { prefill = null, footer = null } = {}) {
   const blank = {
-    species: { kind, name: '', summary: '', creature: 'Humanoide', size: 'Mediano', speed: 9, darkvision: 0, natural_ac: 0, hp_per_level: false,
+    species: { kind, name: '', emoji: '', languages: [], summary: '', creature: 'Humanoide', size: 'Mediano', speed: 9, darkvision: 0, natural_ac: 0, hp_per_level: false,
       traits: [{ name: '', text: '' }], skills: [], skill_count: 0, skill_choice: [], tool: '', spells: [], resources: [] },
     class: { kind, name: '', summary: '', hit_die: 8, primary: ['fue'], saves: ['fue', 'con'], skills_choose: 2, skills_from: [], armor_training: ['ligera'],
       weapon_training: ['sencilla'], tools: '', masteries: 0, gold: 100, caster: '', spell_ability: 'int', spell_list: '', cantrips: 0, asi: true,
       features: [{ level: 1, name: '', text: '' }], resources: [], subclass_level: 3, subclasses: [] },
-    background: { kind, name: '', summary: '', abilities: [], feat: 'Habilidoso', skills: [], tool: '', equipment: '', gold: 0 },
+    background: { kind, name: '', summary: '', abilities: [], feat: 'Habilidoso', skills: [], tool: '', equipment: '', gold: 0, languages: [] },
   };
   const doc = structuredClone(existing || prefill || blank[kind]);
   const isEdit = !!doc.base; // especie del manual editada: borrarla es volver a la original
@@ -98,6 +133,8 @@ function speciesForm(doc, R, skillOpts) {
       ? 'Editas una especie del manual para esta mesa: los cambios valen para todas las fichas de esta especie (sus rasgos, recursos y magia se leen de aquí). «Volver al original» la deja como en el libro.'
       : 'Como en 2024, la especie no sube características (lo da el trasfondo). Para equilibrarla, compárala con las del manual: un rasgo fuerte, un par menores y, si acaso, magia a nivel 3 y 5.'),
     pic,
+    h('div', { class: 'row wrap', style: { alignItems: 'flex-start' } },
+      field('Emoticono en el selector', emojiPicker(doc, doc.base ? SPECIES_ICON[doc.base] || '🧬' : '🧬'), 'grow')),
     h('div', { class: 'row wrap' },
       field('Nombre', bind(doc, 'name', { placeholder: 'Ent joven, gente polilla…' }), 'grow'),
       field('Tipo de criatura', bind(doc, 'creature', { placeholder: 'Humanoide' })),
@@ -116,6 +153,7 @@ function speciesForm(doc, R, skillOpts) {
       field('Herramienta', bind(doc, 'tool', { placeholder: 'Opcional' }))),
     h('div', { class: 'eyebrow' }, 'Rasgos'),
     rows(doc.traits, featureRowNoLevel, () => ({ name: '', text: '' }), 'Añadir rasgo'),
+    h('div', { class: 'eyebrow' }, 'Idioma propio (además del común)'), languagePicker(doc, R),
     h('div', { class: 'eyebrow' }, 'Competencias en habilidades que siempre tiene'), chips(skillOpts, doc.skills),
     h('div', { class: 'row wrap' }, field('Habilidades a elegir', selectEl([0, 1, 2, 3, 4], doc.skill_count, (v) => { doc.skill_count = Number(v); }))),
     h('p', { class: 'tiny muted', style: { margin: 0 } }, 'De cuáles se eligen (ninguna marcada = cualquiera):'), chips(skillOpts, doc.skill_choice),
@@ -156,6 +194,7 @@ function classForm(doc, R, skillOpts, abilOpts) {
       field('Maestrías con armas', selectEl([0, 1, 2, 3], doc.masteries, (v) => { doc.masteries = Number(v); })),
       field('Herramientas', bind(doc, 'tools', { placeholder: 'Opcional' }), 'grow')),
     h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Habilidades de la clase (ninguna marcada = cualquiera):'), chips(skillOpts, doc.skills_from),
+    h('div', { class: 'eyebrow' }, 'Idioma que enseña la clase (opcional, como el druídico o la jerga de ladrones)'), languagePicker(doc, R),
     h('div', { class: 'grid cols-2' },
       h('div', {}, h('div', { class: 'eyebrow' }, 'Armaduras'), chips([['ligera', 'Ligeras'], ['media', 'Medias'], ['pesada', 'Pesadas'], ['escudo', 'Escudos']], doc.armor_training)),
       h('div', {}, h('div', { class: 'eyebrow' }, 'Armas'), chips([['sencilla', 'Sencillas'], ['marcial', 'Marciales']], doc.weapon_training))),
@@ -192,6 +231,7 @@ function backgroundForm(doc, R, skillOpts, abilOpts) {
     h('div', { class: 'eyebrow' }, 'Características (elige 3)'), chips(abilOpts, doc.abilities, { max: 3 }),
     field('Dote de origen', selectEl(feats, doc.feat, (v) => { doc.feat = v; showFeat(); })), featInfo,
     h('div', { class: 'eyebrow' }, 'Habilidades (elige 2)'), chips(skillOpts, doc.skills, { max: 2 }),
+    h('div', { class: 'eyebrow' }, 'Idiomas que da (opcional: un sabio, un marinero de muchos puertos…)'), languagePicker(doc, R),
     h('div', { class: 'row wrap' },
       field('Equipo (uno por línea; «2 Dagas» para varios)', bind(doc, 'equipment', { type: 'textarea', rows: 4, placeholder: 'Cayado\n2 Mantas\nRopas de viaje' }), 'grow'),
       field('Oro además del equipo', bind(doc, 'gold', { type: 'number', min: 0, max: 50 }))));
@@ -209,6 +249,7 @@ export function docFromSpecies(sp) {
     spells: (sp.spells || []).map(([level, name, uses, reset]) => ({ level, name, uses: uses ?? '', reset: reset || 'largo' })),
     resources: (sp.resources || []).map(([name, uses, reset, level]) => ({ name, uses, reset, level })),
     image: sp.image || '', lore: sp.lore || '', height: sp.height || '', lifespan: sp.lifespan || '',
+    emoji: sp.emoji || '', languages: [...(sp.languages || [])],
   };
 }
 
