@@ -23,7 +23,6 @@ const TOOLS = [
 const TERRAIN_TOOLS = ['paint', 'line', 'rect', 'fill', 'room'];
 const SCATTER_SETS = [['bosque', '🌳 Bosque'], ['matorral', '🌿 Matorral'], ['rocas', '🪨 Rocas'], ['cueva', '🍄 Cueva'], ['ruinas', '🏛️ Ruinas'],
   ['cementerio', '🪦 Cementerio'], ['desierto', '🌵 Desierto'], ['cienaga', '🥀 Ciénaga'], ['agua', '🪷 Agua'], ['objeto', '◆ El objeto elegido']];
-const ROTATIONS = [[0, '0°'], [90, '90°'], [180, '180°'], [270, '270°']];
 // Fondo liso de la muestra de cada grupo de adornos (para que el adorno se vea bien en pequeño)
 const DECAL_GROUND = { Suelo: ['#8a857c', '#5f5a52'], 'Mazmorra y hogar': ['#8b5a31', '#5a3a1e'], Naturaleza: ['#5d8f45', '#3f6a2c'], Agua: ['#4a93b5', '#25607f'], 'Nieve y fuego': ['#8f9aa6', '#4a4f57'], Magia: ['#3d3550', '#1c1828'] };
 const LIGHT_ICON = { dia: '☀️', penumbra: '🌆', noche: '🌙', oscuridad: '🌑' };
@@ -332,16 +331,31 @@ async function mount(root, [sceneId]) {
     const propName = Object.fromEntries(cat.props.map((p) => [p.code, p.name]));
     const decalName = Object.fromEntries(cat.decals.map((d) => [d.code, d.name]));
 
+    // Giro del objeto que se va a colocar: botones de 90° y 45° (este, solo si su hueco es cuadrado) y una brújula que
+    // muestra hacia dónde mira. También con R (90°), Mayús + R (al revés), E y Q (45°).
+    function rotationRow() {
+      const square = ed.w === ed.h;
+      const turn = (step) => bm.turnProp(step);
+      return h('div', { class: 'stack-sm' },
+        h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Giro'),
+          h('button', { class: 'btn xs', type: 'button', onclick: () => turn(-90), 'data-tip': 'Girar 90° a la izquierda (Mayús + R)' }, '⟲ 90°'),
+          h('span', { class: 'rot-dial', style: { '--rot': `${ed.rot}deg` }, 'aria-label': `Girado ${ed.rot}°` }, h('i'), h('b', {}, `${ed.rot}°`)),
+          h('button', { class: 'btn xs', type: 'button', onclick: () => turn(90), 'data-tip': 'Girar 90° a la derecha (R)' }, '90° ⟳'),
+          h('button', { class: 'btn xs', type: 'button', disabled: !square, onclick: () => turn(45), 'data-tip': square ? 'Girar 45° (E; Q al revés)' : 'En diagonal solo los objetos de hueco cuadrado' }, '45° ↻')),
+        h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Arrastra para poner varios en fila: las vallas, los muros bajos y las puertas de valla se unen solos (esquinas incluidas) para cercar un terreno.'));
+    }
+
     // Lo elegido con «Elegir y mover»: qué es y qué se le puede hacer.
     function selectionPanel() {
       const sel = bm.selection;
-      if (!sel) return h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Pulsa un objeto o un adorno para elegirlo y arrástralo para moverlo. R lo gira, Supr lo borra y Ctrl + D lo duplica.');
+      if (!sel) return h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Pulsa un objeto o un adorno para elegirlo y arrástralo para moverlo. R lo gira 90°, E y Q 45°, Supr lo borra y Ctrl + D lo duplica.');
       const it = sel.item;
       return h('div', { class: 'stack-sm sel-box' },
         h('div', { class: 'row between nowrap' }, h('b', {}, sel.type === 'prop' ? propName[it.k] || it.k : decalName[it.k] || it.k),
           h('span', { class: 'tiny muted' }, sel.type === 'prop' ? `${it.w || 1}×${it.h || 1} · ${it.rot || 0}°` : `adorno · ${Math.round(it.a || 0)}°`)),
         h('div', { class: 'ed-row' },
-          h('button', { class: 'btn sm', type: 'button', onclick: () => bm.rotateSelected(90), 'data-tip': 'Girar (R; Mayús + R al revés)' }, icon('refresh', 14), 'Girar'),
+          h('button', { class: 'btn sm', type: 'button', onclick: () => bm.rotateSelected(90), 'data-tip': 'Girar 90° (R; Mayús + R al revés)' }, icon('refresh', 14), 'Girar 90°'),
+          (sel.type === 'decal' || (it.w || 1) === (it.h || 1)) && h('button', { class: 'btn sm', type: 'button', onclick: () => bm.rotateSelected(45), 'data-tip': 'Girar 45° (E; Q al revés)' }, '45° ↻'),
           h('button', { class: 'btn sm', type: 'button', onclick: () => bm.duplicateSelected(), 'data-tip': 'Duplicar (Ctrl + D)' }, icon('copy', 14), 'Duplicar'),
           h('button', { class: 'btn sm ghost danger', type: 'button', onclick: () => bm.deleteSelected(), 'data-tip': 'Borrar (Supr)' }, icon('trash', 14), 'Borrar')),
         sel.type === 'prop' && h('label', { class: 'check small' }, h('input', { type: 'checkbox', checked: !!it.hidden, onchange: (e) => bm.updateSelected({ hidden: e.target.checked }) }), 'Solo lo ve el máster'),
@@ -408,8 +422,7 @@ async function mount(root, [sceneId]) {
             h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Densidad'),
               segmented([['pocos', 'Pocos'], ['normal', 'Normal'], ['muchos', 'Muchos']], ed.density, (v) => { ed.density = v; applyEdit(); })),
             h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Arrastra un rectángulo y se siembran los objetos con separación, sin tapar las zonas de inicio ni caer en muros o peligros. Si no te gusta, Ctrl + Z y otra vez.')],
-          ed.tool === 'prop' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Giro'),
-            segmented(ROTATIONS, ed.rot, (v) => { ed.rot = v; applyEdit(); }), h('span', { class: 'tiny muted' }, 'o la tecla R')),
+          ed.tool === 'prop' && rotationRow(),
           ed.tool === 'prop' && h('div', { class: 'ed-row' }, h('span', { class: 'tiny muted' }, 'Tamaño'),
             selectEl([1, 2, 3, 4].map((n) => [n, `${n} de ancho`]), ed.w, (v) => { ed.w = Number(v); applyEdit(); }, { class: 'mini-sel', 'aria-label': 'Ancho del objeto' }),
             selectEl([1, 2, 3, 4].map((n) => [n, `${n} de alto`]), ed.h, (v) => { ed.h = Number(v); applyEdit(); }, { class: 'mini-sel', 'aria-label': 'Alto del objeto' }),

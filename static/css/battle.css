@@ -145,6 +145,9 @@ details.ed-group > summary:hover { color: var(--gold-2); }
 .ed-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .ed-row .seg button { padding: 4px 10px; }
 .ed-search { width: 100%; }
+.rot-dial { position: relative; display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line-2); background: radial-gradient(circle, rgba(255, 255, 255, .06), rgba(0, 0, 0, .25)); }
+.rot-dial i { position: absolute; left: 50%; top: 50%; width: 2px; height: 14px; margin: -14px 0 0 -1px; border-radius: 2px; background: var(--gold-2, #f8dc94); transform-origin: 50% 100%; transform: rotate(calc(var(--rot) + 90deg)); transition: transform .2s; }
+.rot-dial b { position: absolute; bottom: -15px; font: 700 .6rem var(--font); color: var(--muted); }
 .swatch.auto-decal .auto-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 7px; font-size: 1.4rem; background: radial-gradient(circle at 35% 30%, rgba(248, 220, 148, .35), rgba(0, 0, 0, .25)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1), 0 2px 5px rgba(0, 0, 0, .4); }
 .sel-box { padding: 8px 10px; border-radius: 10px; border: 1px dashed rgba(255, 217, 107, .55); background: rgba(255, 217, 107, .06); }
 .ed-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
@@ -175,3 +178,4 @@ details.ed-group > summary:hover { color: var(--gold-2); }
 .bm-fog { filter: blur(5px); transition: opacity .3s; }
 .bm-fog.dm { filter: blur(3px); }
 .bm-token[hidden] { display: none; }
+.rot-dial { margin-bottom: 14px; }

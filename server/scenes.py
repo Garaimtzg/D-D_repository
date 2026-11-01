@@ -167,6 +167,7 @@ PROPS = [
     ("o", "Pozo", "bloquea", "media", 0, False, _E),
     ("abrevadero", "Abrevadero", "bloquea", "media", 0, False, _E),
     ("valla", "Valla de madera", "bloquea", "media", 0, False, _E),
+    ("portillo", "Puerta de valla", "nada", "", 0, False, _E),
     ("muro_bajo", "Muro bajo", "dificil", "media", 0, False, _E),
     ("heno", "Bala de paja", "bloquea", "media", 0, False, _E),
     ("lena", "Pila de leña", "bloquea", "media", 0, False, _E),

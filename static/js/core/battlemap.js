@@ -764,7 +764,7 @@ const PP = {
   },
   A(ctx, x, y, w, hh, s, rand, env) {
     const cx = x + w / 2; const cy = y + hh / 2;
-    const dir = env.isWall(0, -1) ? -Math.PI / 2 : env.isWall(0, 1) ? Math.PI / 2 : env.isWall(-1, 0) ? Math.PI : 0;
+    const dir = env.rot ? 0 : env.isWall(0, -1) ? -Math.PI / 2 : env.isWall(0, 1) ? Math.PI / 2 : env.isWall(-1, 0) ? Math.PI : 0;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(dir);
@@ -1035,16 +1035,46 @@ function glowDot(ctx, cx, cy, r, color, s) {
   circle(ctx, cx, cy, r);
   ctx.restore();
 }
-// Valla y muro bajo: se unen con las piezas iguales de al lado.
-function joined(ctx, x, y, w, hh, s, env, k, thick, paint) {
+// Valla, muro bajo y portillo: piezas que se unen con las de al lado (keys: con qué se unen). Una pieza de una casilla
+// sale como un tramo con sus uniones (recto, esquina, T o cruce); una de varias casillas (1 × 3, 4 × 1…) es un tramo
+// largo a lo largo de su eje, que se une por sus extremos y por los lados con las vecinas. Las coordenadas de env son
+// locales del dibujo (ya giradas): (1, 0) es «a la derecha» del objeto tal como se dibuja.
+function joined(ctx, x, y, w, hh, s, env, keys, thick, paint) {
+  const has = (dc, dr) => keys.some((k) => env.hasProp(k, dc, dr));
+  const parts = []; const posts = [];
+  const n = Math.round(Math.max(w, hh) / s);
+  if (n > 1) {
+    const along = w >= hh; // tramo largo: siempre a lo largo de su lado mayor
+    const len = along ? w : hh;
+    const at = (i, side) => (along ? has(i, side) : has(side, i));
+    const startJoin = along ? has(-1, 0) : has(0, -1);
+    const endJoin = along ? has(n, 0) : has(0, n);
+    const side = (i) => at(i, -1) || at(i, 1);
+    // un extremo sin continuación: acaba en su poste si allí dobla una esquina, o casi en el borde si no
+    const a0 = startJoin ? 0 : side(0) ? s * 0.5 : s * 0.12;
+    const a1 = len - (endJoin ? 0 : side(n - 1) ? s * 0.5 : s * 0.12);
+    const mid = (along ? hh : w) / 2;
+    parts.push(along ? [x + a0, y + mid - thick / 2, a1 - a0, thick] : [x + mid - thick / 2, y + a0, thick, a1 - a0]);
+    for (let i = 0; i < n; i++) {
+      const c = (i + 0.5) * s;
+      posts.push(along ? [x + c, y + mid] : [x + mid, y + c]);
+      for (const side of [-1, 1]) { // ramal hacia una pieza que llega por el lado
+        if (!at(i, side)) continue;
+        if (along) parts.push([x + c - thick / 2, side < 0 ? y : y + mid, thick, mid]);
+        else parts.push([side < 0 ? x : x + mid, y + c - thick / 2, mid, thick]);
+      }
+    }
+    paint(parts, posts);
+    return;
+  }
   const cx = x + w / 2; const cy = y + hh / 2;
-  const L = env.hasProp(k, -1, 0); const R = env.hasProp(k, 1, 0); const T = env.hasProp(k, 0, -1); const B = env.hasProp(k, 0, 1);
+  const L = has(-1, 0); const R = has(1, 0); const T = has(0, -1); const B = has(0, 1);
   const lone = !L && !R && !T && !B;
-  const parts = [];
   if (L || R || lone) parts.push([L ? x : cx - (lone ? s * 0.4 : 0), cy - thick / 2, (R ? x + w : cx + (lone ? s * 0.4 : 0)) - (L ? x : cx - (lone ? s * 0.4 : 0)), thick]);
   if (T || B) parts.push([cx - thick / 2, T ? y : cy, thick, (B ? y + hh : cy) - (T ? y : cy)]);
   if ((L || R) && (T || B)) parts.push([cx - thick / 2, cy - thick / 2, thick, thick]);
-  paint(parts, cx, cy);
+  posts.push([cx, cy]);
+  paint(parts, posts);
 }
 
 Object.assign(PP, {
@@ -1240,7 +1270,7 @@ Object.assign(PP, {
   jarras(ctx, x, y, w, hh, s, rand) { iconScatter(ctx, ['🍺', '🍷', '🫙', '🍶'], 3, x, y, w, hh, s, rand, 0.28); },
   comida(ctx, x, y, w, hh, s, rand) { iconScatter(ctx, ['🍗', '🍞', '🧀', '🍎', '🥩'], 3, x, y, w, hh, s, rand, 0.28); },
   chimenea(ctx, x, y, w, hh, s, rand, env) {
-    const dir = env.isWall(0, -1) ? 0 : env.isWall(0, 1) ? Math.PI : env.isWall(-1, 0) ? -Math.PI / 2 : env.isWall(1, 0) ? Math.PI / 2 : 0;
+    const dir = env.rot ? 0 : env.isWall(0, -1) ? 0 : env.isWall(0, 1) ? Math.PI : env.isWall(-1, 0) ? -Math.PI / 2 : env.isWall(1, 0) ? Math.PI / 2 : 0;
     ctx.save(); ctx.translate(x + w / 2, y + hh / 2); ctx.rotate(dir);
     withShadow(ctx, s, () => { ctx.fillStyle = '#6d675d'; ctx.fillRect(-w / 2 + s * 0.05, -hh / 2, w - s * 0.1, hh * 0.7); });
     ctx.fillStyle = '#1d1a17'; ctx.fillRect(-w / 2 + s * 0.18, -hh / 2 + s * 0.05, w - s * 0.36, hh * 0.45);
@@ -1434,14 +1464,38 @@ Object.assign(PP, {
   },
   // exteriores y aldea
   valla(ctx, x, y, w, hh, s, rand, env) {
-    joined(ctx, x, y, w, hh, s, env, 'valla', s * 0.1, (parts, cx, cy) => {
+    joined(ctx, x, y, w, hh, s, env, ['valla', 'portillo'], s * 0.1, (parts, posts) => {
       withShadow(ctx, s, () => { ctx.fillStyle = '#8a5a2e'; parts.forEach(([a, b, c, d]) => ctx.fillRect(a, b, c, d)); }, 0.4);
+      ctx.fillStyle = 'rgba(255,220,170,.18)';
+      parts.forEach(([a, b, c, d]) => (c > d ? ctx.fillRect(a, b, c, Math.max(1, d * 0.3)) : ctx.fillRect(a, b, Math.max(1, c * 0.3), d)));
       ctx.fillStyle = '#5a3818';
-      circle(ctx, cx, cy, s * 0.08);
+      posts.forEach(([px, py]) => circle(ctx, px, py, s * 0.08));
+    });
+  },
+  // puerta de una valla: se une a las vallas de los lados y se dibuja abierta a medias
+  portillo(ctx, x, y, w, hh, s, rand, env) {
+    const along = !(env.hasProp('valla', 0, -1) || env.hasProp('valla', 0, 1)) || env.hasProp('valla', -1, 0) || env.hasProp('valla', 1, 0) || w > hh;
+    oriented(ctx, x, y, w, hh, (L) => {
+      ctx.save();
+      if (!along && w === hh) ctx.rotate(Math.PI / 2);
+      const len = L; const half = len / 2;
+      ctx.fillStyle = '#5a3818';
+      circle(ctx, -half + s * 0.08, 0, s * 0.09);
+      circle(ctx, half - s * 0.08, 0, s * 0.09);
+      withShadow(ctx, s, () => {
+        ctx.save(); ctx.translate(-half + s * 0.1, 0); ctx.rotate(-0.55);
+        ctx.fillStyle = '#a0703f'; ctx.fillRect(0, -s * 0.06, len * 0.78, s * 0.12);
+        ctx.restore();
+      }, 0.4);
+      ctx.save(); ctx.translate(-half + s * 0.1, 0); ctx.rotate(-0.55);
+      ctx.strokeStyle = '#5a3818'; ctx.lineWidth = Math.max(1, s * 0.025);
+      seg(ctx, len * 0.1, -s * 0.05, len * 0.65, s * 0.05);
+      ctx.restore();
+      ctx.restore();
     });
   },
   muro_bajo(ctx, x, y, w, hh, s, rand, env) {
-    joined(ctx, x, y, w, hh, s, env, 'muro_bajo', s * 0.3, (parts) => {
+    joined(ctx, x, y, w, hh, s, env, ['muro_bajo'], s * 0.3, (parts) => {
       withShadow(ctx, s, () => { ctx.fillStyle = '#8f897f'; parts.forEach(([a, b, c, d]) => ctx.fillRect(a, b, c, d)); }, 0.5);
       ctx.strokeStyle = 'rgba(50,46,40,.5)'; ctx.lineWidth = Math.max(0.6, s * 0.015);
       parts.forEach(([a, b, c, d]) => { ctx.strokeRect(a, b, c, d); if (c > d) for (let i = 1; i < c / (s * 0.25); i++) seg(ctx, a + i * s * 0.25, b, a + i * s * 0.25, b + d); });
@@ -1693,23 +1747,37 @@ function tree(ctx, x, y, w, hh, s, rand, colors) {
   foliage(ctx, x + w / 2, y + hh / 2, Math.min(w, hh) * 0.58, rand, colors, 9 + Math.round(Math.min(w, hh) / s) * 2);
 }
 
-// Giro de un objeto (0, 90, 180 o 270 grados). Con 90 o 270 su hueco en el tablero (w × h) es el dibujo tumbado.
-export const propRot = (p) => (((Math.round((p.rot || 0) / 90) % 4) + 4) % 4) * 90;
-// Pinta un objeto en su hueco, girado si hace falta. env: isWall / hasProp en coordenadas del tablero.
+// Giro de un objeto en grados: múltiplos de 90 (y de 45 si su hueco es cuadrado: un tronco o un carro en diagonal).
+// Con 90 o 270 su hueco en el tablero (w × h) es el dibujo tumbado.
+export const propRot = (p) => {
+  const r = ((((Math.round((p.rot || 0) / 45)) % 8) + 8) % 8) * 45;
+  return r % 90 && (p.w || 1) !== (p.h || 1) ? r - 45 : r;
+};
+// Pinta un objeto en su hueco, girado si hace falta. env: isWall / hasProp relativos a la casilla de arriba a la
+// izquierda del objeto en el tablero; el pintor los recibe en su propio marco (ya girado), así las vallas giradas se
+// siguen uniendo con sus vecinas y un cañón girado no se reorienta solo hacia el muro (env.rot).
 export function paintProp(ctx, p, s, env, alpha = 1) {
   const paint = PP[p.k];
   if (!paint) return;
-  const W = (p.w || 1) * s; const H = (p.h || 1) * s;
+  const W = p.w || 1; const H = p.h || 1;
   const rot = propRot(p);
+  const quarter = (Math.round(rot / 90) % 4 + 4) % 4;
+  const [pw, ph] = quarter % 2 ? [H, W] : [W, H];
+  // casilla local (lx, ly) del dibujo -> desplazamiento en el tablero respecto a (p.c, p.r)
+  const toBoard = (lx, ly) => {
+    let dx = lx + 0.5 - pw / 2; let dy = ly + 0.5 - ph / 2;
+    for (let i = 0; i < quarter; i++) [dx, dy] = [-dy, dx];
+    return [Math.floor(W / 2 + dx), Math.floor(H / 2 + dy)];
+  };
+  const local = rot ? { rot, isWall: (lx, ly) => env.isWall(...toBoard(lx, ly)), hasProp: (k, lx, ly) => env.hasProp(k, ...toBoard(lx, ly)) } : env;
   ctx.save();
   if (alpha !== 1) ctx.globalAlpha = alpha;
   const rand = cellRand(p.c, p.r, 3);
-  if (!rot) paint(ctx, p.c * s, p.r * s, W, H, s, rand, env);
+  if (!rot) paint(ctx, p.c * s, p.r * s, W * s, H * s, s, rand, local);
   else {
-    const [pw, ph] = rot % 180 ? [H, W] : [W, H];
-    ctx.translate(p.c * s + W / 2, p.r * s + H / 2);
+    ctx.translate((p.c + W / 2) * s, (p.r + H / 2) * s);
     ctx.rotate((rot * Math.PI) / 180);
-    paint(ctx, -pw / 2, -ph / 2, pw, ph, s, rand, env);
+    paint(ctx, (-pw / 2) * s, (-ph / 2) * s, pw * s, ph * s, s, rand, local);
   }
   ctx.restore();
 }
@@ -2923,12 +2991,22 @@ export function createBattleMap(opts = {}) {
   }
   const covers = (p, c, r) => c >= p.c && c < p.c + (p.w || 1) && r >= p.r && r < p.r + (p.h || 1);
   // Hueco del objeto que se va a colocar: con giro de 90° o 270° se cambian el ancho y el alto.
-  const footprint = () => (edit.rot % 180 ? [edit.h, edit.w] : [edit.w, edit.h]);
-  function placeProp(c, r) {
+  const footprint = () => (edit.rot % 180 === 90 ? [edit.h, edit.w] : [edit.w, edit.h]);
+  // Gira el objeto que se va a colocar: 45° solo si su hueco es cuadrado (si no, 90°).
+  function turnEdit(step) {
+    if (edit.w !== edit.h && step % 90) step = Math.sign(step) * 90;
+    edit.rot = ((edit.rot + step) % 360 + 360) % 360;
+    drawOverlay();
+    o.onEdit?.({ rot: edit.rot });
+    return true;
+  }
+  // keep: al arrastrar en fila no se pisa lo que ya hay (solo se coloca en huecos libres).
+  function placeProp(c, r, keep = false) {
     const [w, hh] = footprint();
     c = Math.max(0, Math.min(c, scene.cols - w)); r = Math.max(0, Math.min(r, scene.rows - hh));
     const overlaps = (p) => p.c < c + w && p.c + (p.w || 1) > c && p.r < r + hh && p.r + (p.h || 1) > r;
     const floor = FLOOR_PROPS.has(edit.prop); // una alfombra puede ir debajo de una mesa
+    if (keep && scene.props.some((p) => overlaps(p) && FLOOR_PROPS.has(p.k) === floor)) return false;
     scene.props = scene.props.filter((p) => !overlaps(p) || FLOOR_PROPS.has(p.k) !== floor);
     const item = { k: edit.prop, c, r };
     if (w > 1 || hh > 1) Object.assign(item, { w, h: hh });
@@ -2938,6 +3016,7 @@ export function createBattleMap(opts = {}) {
     redraw({ c0: c - 2, r0: r - 2, c1: c + w + 1, r1: r + hh + 1 });
     o.onChange?.(scene);
     sfx.step();
+    return true;
   }
   const near = (d, p) => Math.hypot(d.x - p.x, d.y - p.y) <= 0.32 * (d.s || 1) + 0.12;
   const propBox = (q) => ({ c0: q.c - 2, r0: q.r - 2, c1: q.c + (q.w || 1) + 1, r1: q.r + (q.h || 1) + 1 });
@@ -3013,10 +3092,11 @@ export function createBattleMap(opts = {}) {
   function rotateSel(step = 90) {
     if (sel?.type === 'decal') return changeSel((d) => { d.a = (((d.a || 0) + step) % 360 + 360) % 360; });
     return changeSel((q) => {
-      q.rot = (propRot(q) + step + 360) % 360;
-      if (!q.rot) delete q.rot;
       const w = q.w || 1; const hh = q.h || 1;
-      if (w !== hh) { q.w = hh; q.h = w; } // al girar 90° el hueco se tumba
+      if (w !== hh && step % 90) step = Math.sign(step) * 90; // 45° solo con hueco cuadrado
+      q.rot = ((propRot(q) + step) % 360 + 360) % 360;
+      if (!q.rot) delete q.rot;
+      if (w !== hh && Math.abs(step) % 180 === 90) { q.w = hh; q.h = w; } // al girar 90° el hueco se tumba
       q.c = Math.max(0, Math.min(q.c, scene.cols - (q.w || 1))); q.r = Math.max(0, Math.min(q.r, scene.rows - (q.h || 1)));
     });
   }
@@ -3061,14 +3141,15 @@ export function createBattleMap(opts = {}) {
     o.onChange?.(scene);
   }
 
-  // Teclas del editor (la vista las manda aunque el foco esté en el panel): R gira lo elegido o el objeto que se va a
-  // colocar (Mayús + R, al revés), Supr borra lo elegido, Ctrl + D lo duplica y Esc lo suelta. Devuelve si la usó.
+  // Teclas del editor (la vista las manda aunque el foco esté en el panel): R gira 90° lo elegido o el objeto que se va
+  // a colocar (Mayús + R, al revés), E y Q lo giran 45°, Supr borra lo elegido, Ctrl + D lo duplica y Esc lo suelta.
   function editorKey(e) {
     if (!o.editable || !scene) return false;
     const k = e.key.toLowerCase();
-    if (k === 'r' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (tool === 'select' && sel) return rotateSel(e.shiftKey ? -90 : 90);
-      if (tool === 'prop') { edit.rot = (edit.rot + (e.shiftKey ? 270 : 90)) % 360; drawOverlay(); o.onEdit?.({ rot: edit.rot }); return true; }
+    const step = k === 'r' ? (e.shiftKey ? -90 : 90) : k === 'e' ? 45 : k === 'q' ? -45 : 0; // R: 90°, E/Q: 45°
+    if (step && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (tool === 'select' && sel) return rotateSel(step);
+      if (tool === 'prop') return turnEdit(step);
       return false;
     }
     if ((e.key === 'Delete' || e.key === 'Backspace') && sel) return deleteSel();
@@ -3137,7 +3218,7 @@ export function createBattleMap(opts = {}) {
     else if (tool === 'rect' || tool === 'room' || tool === 'scatter') { pushUndo(); edit.rect = { a: cell, b: cell }; drawOverlay(); }
     else if (tool === 'line') { pushUndo(); edit.line = { a: cell, b: cell }; drawOverlay(); }
     else if (tool === 'fill') { pushUndo(); floodFill(cell.c, cell.r, edit.terrain); sfx.brush(); }
-    else if (tool === 'prop') { pushUndo(); placeProp(cell.c, cell.r); }
+    else if (tool === 'prop') { pushUndo(); placeProp(cell.c, cell.r); edit.stroke = cell; } // arrastrar: más en fila
     else if (tool === 'erase') { pushUndo(); edit.stroke = p; if (!eraseAt(p)) undoStack.pop(); }
     else if (tool === 'decor') { pushUndo(); edit.stroke = p; dabDecals(p); }
     else if (tool === 'select') {
@@ -3212,6 +3293,22 @@ export function createBattleMap(opts = {}) {
           const cells = lineCells(edit.stroke, cell).flatMap((q) => brushCells(q.c, q.r));
           edit.stroke = cell;
           setTiles(cells, edit.terrain);
+        }
+      } else if (tool === 'prop' && edit.stroke) {
+        // en fila: vallas, muros bajos, barriles… siguiendo el arrastre (las vallas y los muros bajos se unen solos)
+        const [w, hh] = footprint();
+        const dc = cell.c - edit.stroke.c; const dr = cell.r - edit.stroke.r;
+        if (w === 1 && hh === 1) {
+          if (dc || dr) { lineCells(edit.stroke, cell).slice(1).forEach((q) => placeProp(q.c, q.r, true)); edit.stroke = cell; }
+        } else {
+          // piezas largas: la siguiente justo a continuación, en la dirección en que más se ha arrastrado
+          const horiz = Math.abs(dc) >= Math.abs(dr);
+          const len = horiz ? w : hh;
+          if ((horiz ? Math.abs(dc) : Math.abs(dr)) >= len) {
+            const next = { c: edit.stroke.c + (horiz ? Math.sign(dc) * len : 0), r: edit.stroke.r + (horiz ? 0 : Math.sign(dr) * len) };
+            placeProp(next.c, next.r, true);
+            edit.stroke = next;
+          }
         }
       } else if (tool === 'erase' && edit.stroke) {
         if (Math.hypot(p.x - edit.stroke.x, p.y - edit.stroke.y) >= 0.3) { edit.stroke = p; eraseAt(p); }
@@ -3396,6 +3493,7 @@ export function createBattleMap(opts = {}) {
     get selection() { return sel; },
     editorKey,
     rotateSelected: rotateSel,
+    turnProp: turnEdit,
     deleteSelected: deleteSel,
     duplicateSelected: duplicateSel,
     updateSelected(patch) { return changeSel((it) => { for (const [k, v] of Object.entries(patch)) { if (v == null || v === false) delete it[k]; else it[k] = v; } }); },
