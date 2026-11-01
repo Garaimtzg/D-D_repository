@@ -537,6 +537,61 @@ class SceneTests(unittest.TestCase):
         self.assertEqual(cat["grids"][0]["key"], "linea")
 
 
+class BestiaryEditTests(unittest.TestCase):
+    """Habilidades del bestiario y ediciones de la mesa (criaturas y especies)."""
+
+    def test_monsters_have_keys_and_skills(self):
+        from server import monsters
+        keys = [m["key"] for m in monsters.BASE]
+        self.assertEqual(len(keys), len(set(keys)))
+        wolf = monsters.BY_KEY["wolf"]
+        # Lobo (VD 1/4, SAB 12, DES 15): Percepción +5 es pericia y Sigilo +4 competencia
+        self.assertEqual(wolf["skills"], {"percepcion": 2, "sigilo": 1})
+        with_line = [m for m in monsters.BASE if "Habilidades:" in (m.get("traits") or "")]
+        self.assertTrue(all(m["skills"] for m in with_line))
+        self.assertGreater(len(with_line), 200)
+
+    def test_bestiary_edits_and_new_creatures(self):
+        from server import monsters
+        docs = [
+            {"id": "e1", "base": "wolf", "name": "Lobo", "hp": 30, "cr": "1", "portrait": "/uploads/" + "a" * 32 + ".png",
+             "skills": {"percepcion": 2, "sigilo": 2, "supervivencia": 1, "inventada": 1}},
+            {"id": "n1", "name": "Lobo de ceniza", "cr": "2", "creature": "Elemental", "portrait": "https://malo.example/x.png",
+             "attacks": [{"name": "Mordisco", "bonus": "5", "damage": "2d6+3"}, {"name": ""}]},
+            {"id": "x1", "cr": "99"},
+        ]
+        cat = monsters.catalog(docs)
+        self.assertEqual(len(cat), len(monsters.BASE) + 2)
+        wolf = next(m for m in cat if m["key"] == "wolf")
+        self.assertTrue(wolf["edited"])
+        self.assertEqual((wolf["hp"], wolf["cr"]), (30, "1"))
+        self.assertEqual(wolf["skills"], {"percepcion": 2, "sigilo": 2, "supervivencia": 1})
+        self.assertIn("Habilidades: Percepción +5, Sigilo +6, Supervivencia +3.", wolf["traits"])  # línea reescrita
+        self.assertTrue(wolf["portrait"].startswith("/uploads/"))
+        self.assertEqual(wolf["en"], "Wolf")  # lo que no se edita sale de la original
+        new = next(m for m in cat if m["key"] == "custom-n1")
+        self.assertTrue(new["custom"])
+        self.assertNotIn("portrait", new)  # solo imágenes subidas a la mesa
+        self.assertEqual(new["attacks"], [{"name": "Mordisco", "bonus": 5, "damage": "2d6+3", "notes": ""}])
+        self.assertEqual(next(m for m in cat if m["key"] == "custom-x1")["cr"], "1")  # VD imposible: 1
+
+    def test_edited_species_replace_the_original(self):
+        from server import homebrew, rules
+        before = rules.reference()["species"]
+        ref = homebrew.merge(rules.reference(), [{
+            "id": "s1", "kind": "species", "base": "enano", "name": "Enano de las montañas", "size": "Mediano", "speed": 7.5, "darkvision": 36,
+            "traits": [{"name": "Robustez", "text": "+2 PG por nivel."}], "skills": ["historia"], "image": "/uploads/" + "b" * 32 + ".jpg",
+            "lore": "Mineros y herreros.", "spells": [{"level": 1, "name": "Luz", "uses": 1, "reset": "corto"}]}])
+        self.assertEqual(len(ref["species"]), len(before))
+        dwarf = next(s for s in ref["species"] if s["id"] == "enano")
+        self.assertEqual((dwarf["name"], dwarf["speed"], dwarf["darkvision"], dwarf["page"]), ("Enano de las montañas", 7.5, 36, 190))
+        self.assertTrue(dwarf["edited"])
+        self.assertNotIn("hp_per_level", dwarf)  # el editor lo quitó: se quita también de la original
+        self.assertEqual(dwarf["skills"], ["historia"])
+        self.assertEqual(dwarf["spells"], [[1, "Luz", 1, "corto"]])
+        self.assertTrue(dwarf["image"].startswith("/uploads/"))
+
+
 class MobilePageTests(unittest.TestCase):
     def test_mobile_page_is_up_to_date(self):
         import importlib.util
@@ -744,6 +799,16 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 201)
         _, listed = self.json_call("GET", "/api/scenes")
         self.assertEqual([x["name"] for x in listed], ["Sala"])
+
+    def test_bestiary_collection_changes_the_monsters(self):
+        status, doc = self.json_call("POST", "/api/bestiary", {"base": "wolf", "name": "Lobo gris", "hp": 15})
+        self.assertEqual(status, 201)
+        _, all_monsters = self.json_call("GET", "/api/monsters")
+        wolf = next(m for m in all_monsters if m["key"] == "wolf")
+        self.assertEqual((wolf["name"], wolf["hp"], wolf["editId"]), ("Lobo gris", 15, doc["id"]))
+        self.json_call("DELETE", f"/api/bestiary/{doc['id']}")
+        _, all_monsters = self.json_call("GET", "/api/monsters")
+        self.assertEqual(next(m for m in all_monsters if m["key"] == "wolf")["name"], "Lobo")
 
     def test_removed_network_routes(self):
         self.assertEqual(self.call("GET", "/api/player")[0], 404)

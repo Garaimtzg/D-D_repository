@@ -3,8 +3,7 @@ import re
 import time
 import uuid
 
-from . import config, dice, dungeon, gaueko, generators, homebrew, rules, scenes
-from .monsters import MONSTERS
+from . import config, dice, dungeon, gaueko, generators, homebrew, monsters as bestiary, rules, scenes
 
 SAFE_UPLOAD = re.compile(r"^[a-f0-9]{32}\.[a-z0-9]{2,5}$")
 
@@ -81,7 +80,7 @@ def reference(app, p, body):
 
 
 def monsters(app, p, body):
-    return 200, MONSTERS
+    return 200, bestiary.catalog(app.store.list("bestiary"))  # con las criaturas editadas y las nuevas de la mesa
 
 
 def generate(app, p, body):

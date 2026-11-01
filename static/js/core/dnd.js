@@ -34,6 +34,7 @@ export const reloadReference = () => { refPromise = null; return reference(); };
 export const ref = () => REF;
 let monstersPromise;
 export const monsters = () => (monstersPromise ??= api.get('/api/monsters'));
+export const reloadMonsters = () => { monstersPromise = null; return monsters(); }; // tras editar el bestiario
 
 export const mod = (score) => Math.floor(((Number(score) || 10) - 10) / 2);
 export const fmtMod = (n) => (n >= 0 ? `+${n}` : `${n}`);
@@ -384,6 +385,30 @@ export function newCharacter(type = 'jugador', extra = {}) {
   };
 }
 
+// Competencias de la línea «Habilidades: Percepción +5, Sigilo +4» de un texto de bestiario: {clave: 1 | 2}.
+// (Bonificador − modificador de la característica, entre el bonificador por competencia: el doble es pericia.)
+const SKILL_KEYS = {
+  acrobacias: ['acrobacias', 'des'], 'conocimiento arcano': ['arcanos', 'int'], arcanos: ['arcanos', 'int'], atletismo: ['atletismo', 'fue'],
+  'engaño': ['engano', 'car'], historia: ['historia', 'int'], 'interpretación': ['interpretacion', 'car'], 'intimidación': ['intimidacion', 'car'],
+  'investigación': ['investigacion', 'int'], 'juego de manos': ['juego_manos', 'des'], medicina: ['medicina', 'sab'], naturaleza: ['naturaleza', 'int'],
+  'percepción': ['percepcion', 'sab'], perspicacia: ['perspicacia', 'sab'], 'persuasión': ['persuasion', 'car'], 'religión': ['religion', 'int'],
+  sigilo: ['sigilo', 'des'], supervivencia: ['supervivencia', 'sab'], 'trato con animales': ['trato_animales', 'sab'],
+};
+export function skillsFromText(text, ch) {
+  const line = /Habilidades:\s*([^\n]*)/.exec(text || '');
+  if (!line) return {};
+  const pb = profBonus(ch);
+  const out = {};
+  for (const part of line[1].replace(/\.$/, '').split(',')) {
+    const m = /^\s*(.+?)\s*([+-]\d+)/.exec(part);
+    const hit = m && SKILL_KEYS[m[1].toLowerCase()];
+    if (!hit) continue;
+    const extra = Number(m[2]) - mod(ch.abilities?.[hit[1]]);
+    out[hit[0]] = extra >= 2 * pb - 1 ? 2 : 1;
+  }
+  return out;
+}
+
 // Ficha guardada con una versión anterior de la app: se completa y se pasa a las unidades de 2024.
 export function migrateCharacter(c) {
   const out = { ...newCharacter(c.type), look: null, ...c }; // sin cara al azar: las fichas antiguas siguen con sus iniciales
@@ -392,17 +417,41 @@ export function migrateCharacter(c) {
   }
   if (Number(out.speed) > 15) out.speed = Math.round((Number(out.speed) * 0.3) / 1.5) * 1.5; // pies -> metros
   out.slots = (out.slots || []).map((s) => ({ max: s.max || 0, used: s.used || 0 }));
+  // enemigos sacados del bestiario antes de que se marcaran sus habilidades: se leen de su texto
+  if (out.type === 'enemigo' && !Object.values(out.skills || {}).some(Boolean) && /Habilidades:/.test(out.features || '')) out.skills = skillsFromText(out.features, out);
   while (out.slots.length < 9) out.slots.push({ max: 0, used: 0 });
   return out;
 }
 
+// Ficha de enemigo a partir de una criatura del bestiario (ya con las ediciones de la mesa): sus competencias en
+// habilidades marcadas, su retrato o su muñeco, y enlazada a su modelo (monster) para poder actualizarla después.
 export function fromMonster(m) {
-  return newCharacter('enemigo', {
-    name: m.name, cr: m.cr, creature: m.creature, ac: m.ac, hp: m.hp, maxHp: m.hp, hpDice: m.hpDice,
-    speed: m.speed, size: m.size || 'Mediano', abilities: { ...m.abilities }, attacks: m.attacks.map((a) => ({ notes: '', ...a })),
-    saves: [...(m.saves || [])], initBonus: m.init ?? '', alignment: m.alignment || '',
-    features: m.traits, notes: m.source ? `${m.eu} · mitología de Euskal Herria (criatura propia de esta app)` : m.en ? `${m.en} · SRD 5.2.1 (CC-BY-4.0)` : '',
-  });
+  return newCharacter('enemigo', monsterStats(m, {
+    name: m.name, monster: m.key || '',
+    notes: m.source ? `${m.eu} · mitología de Euskal Herria (criatura propia de esta app)` : m.en ? `${m.en} · SRD 5.2.1 (CC-BY-4.0)` : m.custom ? 'Criatura propia de esta mesa' : '',
+  }));
+}
+// Lo que una ficha toma de su modelo del bestiario (también al aplicar una edición a las fichas ya creadas).
+export function monsterStats(m, extra = {}) {
+  return {
+    cr: m.cr, creature: m.creature, ac: m.ac, hp: m.hp, maxHp: m.hp, hpDice: m.hpDice, acMode: 'manual',
+    speed: m.speed, size: m.size || 'Mediano', abilities: { ...m.abilities }, attacks: (m.attacks || []).map((a) => ({ notes: '', ...a })),
+    saves: [...(m.saves || [])], skills: { ...(m.skills || {}) }, initBonus: m.init ?? '', alignment: m.alignment || '',
+    features: m.traits, portrait: m.portrait || '', look: m.look || null, ...(m.color ? { color: m.color } : {}),
+    ...(m.lore ? { appearance: m.lore } : {}),
+    ...extra,
+  };
+}
+// Datos de bestiario a partir de una ficha de enemigo: para «Fijar como modelo» (lo que se guarda en la colección bestiary).
+export function monsterFromCharacter(ch) {
+  return {
+    name: ch.name, cr: ch.cr || '1', creature: ch.creature || 'Bestia', ac: Number(ch.ac) || 10, hp: Number(ch.maxHp) || Number(ch.hp) || 1,
+    hpDice: ch.hpDice || '', speed: Number(ch.speed) || 9, size: ch.size || 'Mediano', alignment: ch.alignment || '',
+    init: ch.initBonus ?? '', saves: [...(ch.saves || [])], abilities: { ...ch.abilities },
+    skills: Object.fromEntries(Object.entries(ch.skills || {}).filter(([, v]) => v > 0)),
+    attacks: (ch.attacks || []).map(({ name, bonus, damage, notes, save }) => ({ name, bonus, damage, notes, ...(save ? { save } : {}) })),
+    traits: ch.features || '', portrait: ch.portrait || '', look: ch.look || null, color: ch.color || '',
+  };
 }
 
 export const uid = () => Math.random().toString(36).slice(2, 10);

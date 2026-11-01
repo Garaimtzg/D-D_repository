@@ -1,8 +1,8 @@
 // Especies, clases y trasfondos propios: un editor para cada uno que guarda en la colección «homebrew». El servidor
 // los convierte a la misma forma que los del manual (server/homebrew.py), así el creador y la ficha los usan igual.
 import { api } from '../core/api.js';
-import { h, clear, icon, bind, field, selectEl, modal, confirmDialog, toast, toastError } from '../core/dom.js';
-import { ABILITY_KEYS, ABILITY_SHORT } from '../core/dnd.js';
+import { h, clear, icon, bind, field, selectEl, modal, confirmDialog, toast, toastError, pickFiles } from '../core/dom.js';
+import { ABILITY_KEYS, ABILITY_SHORT, reloadReference } from '../core/dnd.js';
 
 const SIZES = ['Mediano', 'Pequeño', 'Mediano o Pequeño', 'Grande'];
 const USES = [['1', '1 vez por descanso'], ['2', '2 veces'], ['3', '3 veces'], ['pb', 'Bonif. por competencia']];
@@ -41,7 +41,9 @@ const resourceRow = (row, abilityUses = false) => [bind(row, 'name', { placehold
   selectEl(LEVELS, row.level || 1, (v) => { row.level = Number(v); }, { class: 'mini-sel', 'aria-label': 'Desde el nivel' })];
 
 // Abre el editor. Devuelve el documento guardado, 'deleted' o null si se cancela.
-export async function editHomebrew(kind, R, existing = null) {
+// prefill: documento de partida que aún no está guardado (una especie del manual que se va a editar).
+// footer: algo más que poner al final del formulario (la casilla de aplicar a las fichas).
+export async function editHomebrew(kind, R, existing = null, { prefill = null, footer = null } = {}) {
   const blank = {
     species: { kind, name: '', summary: '', creature: 'Humanoide', size: 'Mediano', speed: 9, darkvision: 0, natural_ac: 0, hp_per_level: false,
       traits: [{ name: '', text: '' }], skills: [], skill_count: 0, skill_choice: [], tool: '', spells: [], resources: [] },
@@ -50,17 +52,21 @@ export async function editHomebrew(kind, R, existing = null) {
       features: [{ level: 1, name: '', text: '' }], resources: [], subclass_level: 3, subclasses: [] },
     background: { kind, name: '', summary: '', abilities: [], feat: 'Habilidoso', skills: [], tool: '', equipment: '', gold: 0 },
   };
-  const doc = structuredClone(existing || blank[kind]);
+  const doc = structuredClone(existing || prefill || blank[kind]);
+  const isEdit = !!doc.base; // especie del manual editada: borrarla es volver a la original
   const skillOpts = R.skills.map((k) => [k.key, k.name]);
   const abilOpts = ABILITY_KEYS.map((k) => [k, ABILITY_SHORT[k]]);
   const body = kind === 'species' ? speciesForm(doc, R, skillOpts) : kind === 'class' ? classForm(doc, R, skillOpts, abilOpts) : backgroundForm(doc, R, skillOpts, abilOpts);
+  if (footer) body.append(footer);
   const actions = [{ label: 'Cancelar', value: null },
-    ...(existing ? [{ label: 'Eliminar', value: 'delete', class: 'danger', icon: 'trash' }] : []),
+    ...(existing ? [isEdit ? { label: 'Volver al original', value: 'delete', icon: 'undo' } : { label: 'Eliminar', value: 'delete', class: 'danger', icon: 'trash' }] : []),
     { label: 'Guardar', value: 'save', class: 'primary', icon: 'check' }];
   const what = { species: 'especie', class: 'clase', background: 'trasfondo' }[kind];
-  const choice = await modal(`${existing ? 'Editar' : kind === 'background' ? 'Nuevo' : 'Nueva'} ${what}`, body, actions, { wide: true, iconName: 'sparkle' });
+  const title = isEdit ? `Editar la especie «${doc.name}»` : `${existing ? 'Editar' : kind === 'background' ? 'Nuevo' : 'Nueva'} ${what}`;
+  const choice = await modal(title, body, actions, { wide: true, iconName: 'sparkle' });
   if (choice === 'delete') {
-    if (!(await confirmDialog(`Se eliminará «${existing.name}». Las fichas que la usen se quedan con su nombre pero sin sus rasgos.`))) return null;
+    if (!(await confirmDialog(isEdit ? `«${existing.name}» volverá a ser la del manual. Las fichas de esa especie recuperan sus rasgos originales.`
+      : `Se eliminará «${existing.name}». Las fichas que la usen se quedan con su nombre pero sin sus rasgos.`, isEdit ? 'Volver al original' : 'Eliminar'))) return null;
     await api.remove('homebrew', existing.id).catch(toastError);
     return 'deleted';
   }
@@ -68,20 +74,39 @@ export async function editHomebrew(kind, R, existing = null) {
   if (!doc.name.trim()) { toast('Ponle un nombre.', { kind: 'error' }); return null; }
   try {
     const saved = existing ? await api.update('homebrew', doc) : await api.create('homebrew', doc);
-    toast(`«${saved.name}» ${kind === 'background' ? 'guardado' : 'guardada'}: ya aparece al crear personajes.`, { kind: 'good', iconName: 'sparkle' });
+    toast(isEdit ? `«${saved.name}» guardada: todas las fichas de esta especie usan ya sus rasgos nuevos.` : `«${saved.name}» ${kind === 'background' ? 'guardado' : 'guardada'}: ya aparece al crear personajes.`, { kind: 'good', iconName: 'sparkle' });
     return saved;
   } catch (e) { toastError(e); return null; }
 }
 
 function speciesForm(doc, R, skillOpts) {
   const spellNames = R.spells.map((s) => [s.name, `${s.name} (${s.level ? `nv ${s.level}` : 'truco'})`]);
+  const pic = h('div', { class: 'be-pic' });
+  const drawPic = () => clear(pic,
+    h('span', { class: 'species-pic', style: doc.image ? { backgroundImage: `url("${doc.image}")` } : {} }, doc.image ? '' : '🧬'),
+    h('div', { class: 'stack-sm' },
+      h('button', { class: 'btn sm', type: 'button', onclick: async () => {
+        const [file] = await pickFiles('image/*');
+        if (!file) return;
+        try { doc.image = (await api.upload(file)).url; drawPic(); } catch (e) { toastError(e); }
+      } }, icon('image', 14), doc.image ? 'Cambiar la imagen' : 'Imagen de la especie'),
+      doc.image && h('button', { class: 'btn sm ghost', type: 'button', onclick: () => { doc.image = ''; drawPic(); } }, icon('trash', 14), 'Quitar'),
+      h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Sale en el creador, en Reglas y en la ficha; también puede ser el retrato de las fichas de esta especie que no tengan uno.')));
+  drawPic();
   return h('div', { class: 'stack hb-form' },
-    h('p', { class: 'small muted', style: { margin: 0 } }, 'Como en 2024, la especie no sube características (lo da el trasfondo). Para equilibrarla, compárala con las del manual: un rasgo fuerte, un par menores y, si acaso, magia a nivel 3 y 5.'),
+    h('p', { class: 'small muted', style: { margin: 0 } }, doc.base
+      ? 'Editas una especie del manual para esta mesa: los cambios valen para todas las fichas de esta especie (sus rasgos, recursos y magia se leen de aquí). «Volver al original» la deja como en el libro.'
+      : 'Como en 2024, la especie no sube características (lo da el trasfondo). Para equilibrarla, compárala con las del manual: un rasgo fuerte, un par menores y, si acaso, magia a nivel 3 y 5.'),
+    pic,
     h('div', { class: 'row wrap' },
       field('Nombre', bind(doc, 'name', { placeholder: 'Ent joven, gente polilla…' }), 'grow'),
       field('Tipo de criatura', bind(doc, 'creature', { placeholder: 'Humanoide' })),
       field('Tamaño', selectEl(SIZES, doc.size, (v) => { doc.size = v; }))),
     field('Resumen', bind(doc, 'summary', { placeholder: 'En una línea: quiénes son' })),
+    field('Descripción', bind(doc, 'lore', { type: 'textarea', rows: 3, placeholder: 'Cómo son, dónde viven, cómo los ven los demás…' })),
+    h('div', { class: 'row wrap' },
+      field('Altura típica', bind(doc, 'height', { placeholder: '1,50 – 1,80 m' })),
+      field('Esperanza de vida', bind(doc, 'lifespan', { placeholder: 'unos 80 años' }))),
     h('div', { class: 'row wrap' },
       field('Velocidad (m)', bind(doc, 'speed', { type: 'number', min: 1.5, max: 30, step: 1.5 })),
       field('Visión en la oscuridad', selectEl([[0, 'No'], [18, '18 m'], [36, '36 m']], doc.darkvision, (v) => { doc.darkvision = Number(v); })),
@@ -97,7 +122,8 @@ function speciesForm(doc, R, skillOpts) {
     h('div', { class: 'eyebrow' }, 'Magia de la especie'),
     rows(doc.spells, (row) => [selectEl([[1, 'Nivel 1'], [3, 'Nivel 3'], [5, 'Nivel 5'], ...LEVELS.filter(([l]) => ![1, 3, 5].includes(l))], row.level, (v) => { row.level = Number(v); }, { class: 'mini-sel', 'aria-label': 'Desde el nivel' }),
       selectEl([['', '— Conjuro —'], ...spellNames], row.name, (v) => { row.name = v; }, { class: 'grow', 'aria-label': 'Conjuro' }),
-      selectEl([['', 'Truco / a voluntad'], ['1', '1 vez gratis por descanso largo'], ['pb', 'Competencia veces por descanso largo']], String(row.uses || ''), (v) => { row.uses = v === '1' ? 1 : v; }, { class: 'mini-sel', 'aria-label': 'Usos' })],
+      selectEl([['', 'Truco / a voluntad'], ['1', '1 vez gratis por descanso largo'], ['pb', 'Competencia veces por descanso largo'], ['1c', '1 vez gratis por descanso corto']],
+        row.reset === 'corto' && String(row.uses) === '1' ? '1c' : String(row.uses || ''), (v) => { row.uses = v === '1' || v === '1c' ? 1 : v; row.reset = v === '1c' ? 'corto' : 'largo'; }, { class: 'mini-sel', 'aria-label': 'Usos' })],
     () => ({ level: 1, name: '', uses: '' }), 'Añadir conjuro'),
     h('div', { class: 'eyebrow' }, 'Recursos con usos'),
     rows(doc.resources, (row) => resourceRow(row), () => ({ name: '', uses: 'pb', reset: 'largo', level: 1 }), 'Añadir recurso'));
@@ -169,4 +195,48 @@ function backgroundForm(doc, R, skillOpts, abilOpts) {
     h('div', { class: 'row wrap' },
       field('Equipo (uno por línea; «2 Dagas» para varios)', bind(doc, 'equipment', { type: 'textarea', rows: 4, placeholder: 'Cayado\n2 Mantas\nRopas de viaje' }), 'grow'),
       field('Oro además del equipo', bind(doc, 'gold', { type: 'number', min: 0, max: 50 }))));
+}
+
+// Documento del editor a partir de una especie del manual (para editarla en esta mesa).
+export function docFromSpecies(sp) {
+  const type = sp.traits.find(([n]) => n === 'Tipo de criatura');
+  return {
+    kind: 'species', base: sp.id, name: sp.name, summary: sp.summary || '', creature: type ? type[1].replace(/\.$/, '') : 'Humanoide',
+    size: sp.size, speed: sp.speed, darkvision: sp.darkvision || 0, natural_ac: Number(sp.natural_ac) || 0, hp_per_level: !!sp.hp_per_level,
+    carry_bigger: !!sp.carry_bigger, tool: sp.tool || '',
+    traits: sp.traits.filter(([n]) => n !== 'Tipo de criatura').map(([name, text]) => ({ name, text })),
+    skills: [...(sp.skills || [])], skill_count: sp.skill_count || (sp.skill_choice ? 1 : 0), skill_choice: Array.isArray(sp.skill_choice) ? [...sp.skill_choice] : [],
+    spells: (sp.spells || []).map(([level, name, uses, reset]) => ({ level, name, uses: uses ?? '', reset: reset || 'largo' })),
+    resources: (sp.resources || []).map(([name, uses, reset, level]) => ({ name, uses, reset, level })),
+    image: sp.image || '', lore: sp.lore || '', height: sp.height || '', lifespan: sp.lifespan || '',
+  };
+}
+
+const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+// Editar cualquier especie (del manual o propia) y, si se quiere, aplicar a las fichas que ya la tienen lo que se
+// guarda en ellas (velocidad, tamaño, competencias fijas de la especie y la imagen como retrato de quien no tenga).
+// Devuelve la referencia recargada o null.
+export async function editSpecies(sp, R, chars = []) {
+  const existing = sp.homebrew_id ? (await api.list('homebrew')).find((d) => d.id === sp.homebrew_id) || null : null;
+  const linked = chars.filter((c) => c.speciesId === sp.id || (!c.speciesId && norm(c.race) && norm(c.race) === norm(sp.name)));
+  const opts = { apply: linked.length > 0 };
+  const footer = linked.length > 0 ? h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: true, onchange: (e) => { opts.apply = e.target.checked; } }),
+    `Ajustar ${linked.length === 1 ? 'la ficha' : `las ${linked.length} fichas`} de esta especie: velocidad, tamaño, sus competencias fijas y la imagen como retrato de quien no tenga retrato ni muñeco. (Los rasgos, recursos y magia ya se leen de la especie.)`) : null;
+  const saved = await editHomebrew('species', R, existing, { prefill: existing ? null : docFromSpecies(sp), footer });
+  if (!saved) return null;
+  const R2 = await reloadReference();
+  const ns = R2.species.find((x) => x.id === (saved === 'deleted' ? sp.id : saved.base || `hb-${saved.id}`));
+  if (ns && opts.apply) {
+    for (const c of linked) {
+      c.speed = ns.lineage_speed?.[c.lineage] ?? ns.speed;
+      if (!ns.size.includes(' o ')) c.size = ns.size;
+      c.skills ||= {};
+      for (const k of ns.skills || []) c.skills[k] = Math.max(1, c.skills[k] || 0);
+      if (ns.image && !c.portrait && !c.look) c.portrait = ns.image;
+      c.race = ns.name;
+      await api.update('characters', c).catch(toastError);
+    }
+    if (linked.length) toast(`${linked.length === 1 ? 'Ajustada 1 ficha' : `Ajustadas ${linked.length} fichas`} de ${ns.name}.`, { kind: 'good', iconName: 'personajes' });
+  }
+  return R2;
 }
