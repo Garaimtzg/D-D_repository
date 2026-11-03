@@ -36,7 +36,7 @@ const COLORS = ['#5b9cff', '#4cc38a', '#e2b456', '#a77bff', '#e0524a', '#ff8a3d'
 // Alternativas al estilo de combate que dan el paladín y el explorador
 const STYLE_EXTRA = { paladin: ['Guerrero bendito', 'Dos trucos de clérigo (por ejemplo guía y llama sagrada).'], explorador: ['Guerrero druídico', 'Dos trucos de druida (por ejemplo guía y voluta estelar).'] };
 
-export async function openCreator({ onCreate }) {
+export async function openCreator({ onCreate, speciesId = '' }) {
   let R = await reference();
   const st = {
     step: 0, classId: '', classSkills: [], classChoice: '', backgroundId: '', speciesId: '', lineage: '', size: '', speciesSkills: [], humanFeat: '',
@@ -45,6 +45,11 @@ export async function openCreator({ onCreate }) {
     kit: 0, bgKit: 0, color: COLORS[Math.floor(Math.random() * COLORS.length)], spells: [], picks: {},
     height: '', weight: '', appearance: '', personality: '', age: '', gender: '', genderOther: '',
   };
+  const preset = speciesId && R.species.find((s) => s.id === speciesId);
+  if (preset) { // desde el compendio de especies: ya elegida (se ve en el paso «Origen»)
+    Object.assign(st, { speciesId, size: preset.size.split(' o ')[0] });
+    setTimeout(() => toast(`${speciesIcon(preset)} ${preset.name}: especie ya elegida. Empieza por la clase; la verás en «Origen».`, { iconName: 'sparkle', ms: 5500 }), 300);
+  }
   const cls = () => R.classes.find((c) => c.id === st.classId);
   const bg = () => R.backgrounds.find((b) => b.id === st.backgroundId);
   const sp = () => R.species.find((s) => s.id === st.speciesId);

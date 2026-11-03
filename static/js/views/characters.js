@@ -3,7 +3,7 @@
 import { api, debounced } from '../core/api.js';
 import {
   h, clear, icon, bind, field, selectEl, segmented, searchBox, hpBar, shield, modal, confirmDialog,
-  toast, toastError, pickFiles, floatNum, prefs, bigBanner, avatar, token,
+  toast, toastError, pickFiles, dropZone, floatNum, prefs, bigBanner, avatar, token,
   SKINS, HAIR_COLORS, EYE_COLORS, BODY_COLORS, HAIRS, EXPRESSIONS, LOOK_SLOTS, LOOK_NAMES, lookPiece, randomLook, hasExtras, isSvgHat,
 } from '../core/dom.js';
 import {
@@ -16,7 +16,8 @@ import {
 } from '../core/dnd.js';
 import { openCreator } from './creator.js';
 import { bestiaryDialog as openBestiary, fixAsModel } from './bestiary.js';
-import { editSpecies } from './homebrew.js';
+import { parseStatblock, statblockView } from '../core/statblock.js';
+import { editSpecies, speciesDialog } from './homebrew.js';
 import { spellTip, spellMeta, spellCard, pickSpells } from './spellui.js';
 import { sfx } from '../core/sfx.js';
 import { roll } from '../core/dice.js';
@@ -42,6 +43,14 @@ async function mount(root, [selId]) {
     savers.get(ch.id)();
   };
   const flushAll = () => savers.forEach((s) => s.pending && s.flush());
+  const editingText = new Set(); // fichas de criatura cuyo perfil se está editando como texto
+  // Cambiar o quitar una imagen: primero se guarda la ficha sin ella y luego se borra el fichero (el servidor no lo
+  // borra si otra cosa la sigue usando, como la criatura del bestiario de la que salió esta ficha).
+  const dropUpload = async (ch, url) => {
+    if (!url) return;
+    await savers.get(ch.id)?.flush();
+    await api.removeUpload(url).catch(() => {});
+  };
 
   function open(c) {
     flushAll();
@@ -83,7 +92,9 @@ async function mount(root, [selId]) {
             h('button', { class: 'btn primary', type: 'button', onclick: () => openCreator({ onCreate: create }), 'data-tip': 'Paso a paso, según el Manual del Jugador 2024' }, icon('sparkle', 16), 'Crear aventurero'),
             TYPES.map(([t, l]) => h('button', { class: 'btn', type: 'button', onclick: () => create(newCharacter(t)), 'data-tip': t === 'jugador' ? 'Ficha de jugador en blanco' : null },
               icon(TYPE_ICON[t], 16), `+ ${t === 'pnj' ? 'PNJ' : t === 'jugador' ? 'En blanco' : l}`)),
-            h('button', { class: 'btn', type: 'button', onclick: bestiaryDialog }, icon('book', 16), 'Bestiario'))),
+            h('button', { class: 'btn', type: 'button', onclick: bestiaryDialog }, icon('book', 16), 'Bestiario'),
+            h('button', { class: 'btn', type: 'button', onclick: () => speciesDialog({ chars: state.chars, onCreate: (sp) => openCreator({ onCreate: create, speciesId: sp.id }) }),
+              'data-tip': 'Compendio de especies jugables: rasgos, imagen, editar y crear un aventurero' }, '🧬 ', 'Especies'))),
         h('div', { class: 'row party-actions' }, h('span', { class: 'eyebrow', style: { margin: 0 } }, 'Grupo'),
           h('button', { class: 'btn sm', type: 'button', onclick: () => partyRest('corto'), 'data-tip': 'Recupera los recursos de descanso corto' }, icon('hourglass', 15), 'Descanso corto'),
           h('button', { class: 'btn sm', type: 'button', onclick: () => partyRest('largo'), 'data-tip': 'PG al máximo, espacios de conjuro y recursos' }, icon('moon', 15), 'Descanso largo'),
@@ -509,9 +520,10 @@ async function mount(root, [selId]) {
     if (!file) return;
     try {
       const up = await api.upload(file);
-      await api.removeUpload(c.portrait);
+      const old = c.portrait;
       c.portrait = up.url;
       save(c);
+      await dropUpload(c, old);
     } catch (e) { toastError(e); }
   }
 
@@ -581,7 +593,7 @@ async function mount(root, [selId]) {
         group('Estilo', h('div', { class: 'row' },
           segmented([['cara', '🙂 Cara'], ['iniciales', 'Aa Iniciales']], L.base, (v) => set('base', v)),
           h('button', { class: 'btn sm', type: 'button', onclick: async () => { await uploadPortrait(c); draw(); } }, icon('image', 14), c.portrait ? 'Cambiar retrato' : 'Usar una imagen'),
-          c.portrait && h('button', { class: 'btn sm ghost', type: 'button', onclick: async () => { await api.removeUpload(c.portrait).catch(() => {}); c.portrait = ''; save(c); draw(); } }, icon('trash', 14), 'Quitar imagen'))),
+          c.portrait && h('button', { class: 'btn sm ghost', type: 'button', onclick: async () => { const old = c.portrait; c.portrait = ''; save(c); draw(); await dropUpload(c, old); } }, icon('trash', 14), 'Quitar imagen'))),
         segmented([['cara', 'Cara'], ['pelo', 'Pelo'], ['ropa', 'Ropa'], ['complementos', 'Complementos'], ['fondo', 'Fondo']], lookTab, (v) => { lookTab = v; draw(); }),
         !face && lookTab !== 'complementos' && h('p', { class: 'small muted' }, c.portrait ? 'Con una imagen solo se ven los complementos. Quita la imagen para dibujar la cara.' : 'Elige «Cara» en el estilo para dibujarla.'),
         TABS[lookTab]());
@@ -1110,8 +1122,7 @@ async function mount(root, [selId]) {
     ['origen', 'general', 'estilo de combate', 'don épico'].map((cat) => h('optgroup', { label: cat[0].toUpperCase() + cat.slice(1) },
       ref.feats.filter((f) => f.category === cat).map((f) => h('option', { value: f.name }, `${f.name}${f.prereq ? ` (${f.prereq})` : ''}`)))));
     const columns = cls ? Object.keys(cls.columns || {}).map((k) => [k, columnAt(cls, k, level)]).filter(([, v]) => v != null) : [];
-    return [
-      (cls || sp || c.feats.length || c.type === 'jugador') && section('Rasgos y dotes', 'sparkle',
+    const traitsAndFeats = (cls || sp || c.feats.length || c.type === 'jugador') && section('Rasgos y dotes', 'sparkle',
         cls && h('div', { class: 'traits-block' },
           h('div', { class: 'row between' }, h('b', {}, `${cls.name} ${level}`, c.subclass ? ` · ${c.subclass}` : ''), h('span', { class: 'tiny muted' }, source(cls))),
           columns.length > 0 && h('div', { class: 'row' }, columns.map(([k, v]) => h('span', { class: 'chip' }, `${k}: `, h('b', {}, v)))),
@@ -1128,13 +1139,31 @@ async function mount(root, [selId]) {
           speciesFacts(sp) && h('div', { class: 'tiny muted' }, speciesFacts(sp)),
           h('ul', { class: 'trait-list' }, sp.traits.map(([n, t]) => h('li', {}, h('b', {}, n), h('span', { class: 'tiny muted' }, ` — ${t}`))),
             c.lineage && sp.options && h('li', {}, h('b', {}, c.lineage), h('span', { class: 'tiny muted' }, ` — ${sp.options.find(([n]) => n === c.lineage)?.[1] || ''}`)))),
-        h('div', { class: 'traits-block' }, h('b', {}, 'Dotes'), h('ul', { class: 'feat-list' }, ownFeats), featAdd)),
-      section('Otros rasgos y competencias', 'scroll',
-        bind(c, 'features', { type: 'textarea', rows: 5, onChange: () => save(c), placeholder: 'Invocaciones, maniobras, metamagia, objetos mágicos, bendiciones…' }),
-        h('div', { class: 'row' },
-          field('Idiomas', bind(c, 'languages', { onChange: () => save(c) }), 'grow'),
-          field('Herramientas', bind(c, 'tools', { onChange: () => save(c) }), 'grow'))),
-      c.type !== 'enemigo' && section('Aspecto y personalidad', 'user',
+        h('div', { class: 'traits-block' }, h('b', {}, 'Dotes'), h('ul', { class: 'feat-list' }, ownFeats), featAdd));
+    const notes = section(c.type === 'jugador' ? 'Historia y notas' : 'Notas del máster', 'feather',
+      bind(c, 'notes', { type: 'textarea', rows: 8, onChange: () => save(c), placeholder: c.type === 'jugador' ? 'Trasfondo, aliados, objetivos…' : 'Secretos, motivaciones, tácticas…' }));
+    // Tres columnas independientes: lo que crece en una (un texto largo, una sección estirada) no mueve a las otras.
+    const langTools = () => h('div', { class: 'row' },
+      field('Idiomas', bind(c, 'languages', { onChange: () => save(c) }), 'grow'),
+      field('Herramientas', bind(c, 'tools', { onChange: () => save(c) }), 'grow'));
+    // Criaturas del bestiario: su texto («Sentidos: …», «Acciones: … · …») se enseña ordenado por secciones; el lápiz
+    // vuelve al texto para editarlo (es lo que se guarda y lo que va al bestiario al fijar como modelo).
+    const sb = parseStatblock(c.features);
+    const asText = !sb || editingText.has(c.id);
+    const other = asText
+      ? section(sb ? 'Perfil de la criatura (texto)' : 'Otros rasgos y competencias', 'scroll',
+        bind(c, 'features', { type: 'textarea', rows: sb ? 14 : 5, onChange: () => save(c), placeholder: 'Invocaciones, maniobras, metamagia, objetos mágicos, bendiciones…' }),
+        sb && h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Una línea por apartado («Sentidos:», «Idiomas:», «Rasgos:», «Acciones:»…) y los elementos separados por « · ».'),
+        sb && h('div', { class: 'row' }, h('button', { class: 'btn sm primary', type: 'button', onclick: () => { editingText.delete(c.id); refresh(); } }, icon('check', 14), 'Ver ordenado')),
+        langTools())
+      : section('Perfil de la criatura', 'book',
+        statblockView(sb, { who: c.name, speed: c.speed, extra: (it) => actionButtons(c, it), onEdit: () => { editingText.add(c.id); refresh(); } }),
+        (c.languages || c.tools) && langTools());
+    return [
+      h('div', { class: 'sheet-col' }, traitsAndFeats, notes),
+      h('div', { class: 'sheet-col' }, other),
+      h('div', { class: 'sheet-col' },
+        c.type !== 'enemigo' && section('Aspecto y personalidad', 'user',
         h('div', { class: 'row' },
           field('Edad', bind(c, 'age', { onChange: () => save(c), placeholder: '25 años' }), 'grow'),
           field('Género', h('div', { class: 'row nowrap' },
@@ -1146,9 +1175,43 @@ async function mount(root, [selId]) {
           field('Tamaño', h('div', { class: 'static-val' }, c.size || '—'), 'grow')),
         field('Descripción física', bind(c, 'appearance', { type: 'textarea', rows: 4, onChange: () => save(c), placeholder: 'Edad, ojos, pelo, piel, cicatrices, cómo viste, cómo se mueve…' })),
         field('Personalidad', bind(c, 'personality', { type: 'textarea', rows: 4, onChange: () => save(c), placeholder: 'Cómo es, qué valora, a qué o quién se debe, sus defectos y manías…' }))),
-      section(c.type === 'jugador' ? 'Historia y notas' : 'Notas del máster', 'feather',
-        bind(c, 'notes', { type: 'textarea', rows: 8, onChange: () => save(c), placeholder: c.type === 'jugador' ? 'Trasfondo, aliados, objetivos…' : 'Secretos, motivaciones, tácticas…' })),
+        fullBodySection(c)),
     ];
+  }
+
+  // Botones de una acción del bloque de criatura que es uno de sus ataques: tirar el ataque y el daño.
+  function actionButtons(c, it) {
+    const a = (c.attacks || []).find((x) => x.name && x.name.split(' (')[0].toLowerCase() === it.name.toLowerCase());
+    if (!a) return null;
+    return [
+      !a.save && h('button', { class: 'sb-chip roll', type: 'button', onclick: () => test(c, Number(a.bonus) || 0, `Ataque con ${a.name}`, state.attackMode) }, '🎲 ', fmtMod(Number(a.bonus) || 0)),
+      a.damage && a.damage !== '0' && h('button', { class: 'sb-chip roll', type: 'button', 'data-tip': a.save ? `${a.save}: tira el daño` : 'Daño', onclick: () => rollAs(c, a.damage, `Daño de ${a.name}`) }, '💥 ', a.damage),
+    ];
+  }
+
+  // Imagen de cuerpo entero (vertical y grande), aparte del retrato: se sube, se cambia, se amplía y se quita.
+  function fullBodySection(c) {
+    const upload = async (files) => {
+      const file = (files || await pickFiles('image/*')).find((f) => f.type.startsWith('image/'));
+      if (!file) return;
+      try {
+        const up = await api.upload(file);
+        const old = c.fullBody;
+        c.fullBody = up.url;
+        save(c); refresh();
+        await dropUpload(c, old);
+      } catch (e) { toastError(e); }
+    };
+    const frame = h('div', { class: `fullbody ${c.fullBody ? 'has-img' : ''}`, role: 'button', tabindex: 0,
+      'data-tip': c.fullBody ? 'Ver en grande' : 'Sube una imagen vertical del personaje de cuerpo entero (o suéltala aquí)',
+      onclick: () => (c.fullBody ? modal(c.name, h('img', { class: 'fullbody-big', src: c.fullBody, alt: `${c.name} de cuerpo entero` }), undefined, { wide: true, iconName: 'user' }) : upload()) },
+    c.fullBody ? h('img', { src: c.fullBody, alt: `${c.name} de cuerpo entero` })
+      : h('div', { class: 'fullbody-empty' }, h('span', { class: 'fullbody-sil', 'aria-hidden': 'true' }, '🧍'), h('b', {}, 'Imagen de cuerpo entero'), h('span', { class: 'tiny' }, 'Vertical, de la cabeza a los pies')));
+    dropZone(frame, (files) => upload(files));
+    return section('Cuerpo entero', 'user', frame,
+      h('div', { class: 'row' },
+        h('button', { class: 'btn sm', type: 'button', onclick: () => upload() }, icon('image', 14), c.fullBody ? 'Cambiar imagen' : 'Subir imagen'),
+        c.fullBody && h('button', { class: 'btn sm ghost', type: 'button', onclick: async () => { const old = c.fullBody; c.fullBody = ''; save(c); refresh(); await dropUpload(c, old); } }, icon('trash', 14), 'Quitar')));
   }
 
   // ------------------------------------------------------------ acciones de ficha
@@ -1163,7 +1226,8 @@ async function mount(root, [selId]) {
     if (!(await confirmDialog(`Se eliminará la ficha de «${c.name}».`))) return;
     try {
       await api.remove('characters', c.id);
-      await api.removeUpload(c.portrait);
+      await api.removeUpload(c.portrait); // el servidor no la borra si la usa otra cosa (su criatura del bestiario…)
+      await api.removeUpload(c.fullBody);
       state.chars = state.chars.filter((x) => x !== c);
       savers.delete(c.id);
       open(null);

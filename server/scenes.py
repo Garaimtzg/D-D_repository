@@ -236,6 +236,8 @@ GRIDS = [("linea", "Líneas"), ("puntos", "Puntos en las esquinas"), ("cruces", 
 
 LIGHTS = [
     ("dia", "Pleno día"),
+    ("amanecer", "Amanecer (luz rosada y dorada)"),
+    ("atardecer", "Atardecer (luz anaranjada)"),
     ("penumbra", "Penumbra"),
     ("noche", "Noche (luz de las llamas)"),
     ("oscuridad", "Oscuridad total"),

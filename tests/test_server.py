@@ -349,6 +349,23 @@ class MctTests(unittest.TestCase):
         self.assertEqual(cl["cantrips"][3], 3)
 
 
+class EuskalFriendsTests(unittest.TestCase):
+    def test_mari_and_olentzero_are_not_villains(self):
+        from server.monsters import BY_KEY
+        mari, olentzero = BY_KEY["eu-mari"], BY_KEY["eu-olentzero"]
+        self.assertEqual((mari["cr"], olentzero["cr"]), ("20", "4"))
+        for m in (mari, olentzero, BY_KEY["eu-basajaun"], BY_KEY["eu-lamina"], BY_KEY["eu-akerbeltz"]):
+            self.assertNotIn("malvado", m["alignment"], m["name"])
+            self.assertIn("\nTrato: ", m["traits"], m["name"])  # cómo ganarse su favor
+        self.assertEqual(set(mari["skills"]), {"arcanos", "naturaleza", "percepcion", "perspicacia", "persuasion", "intimidacion"})
+        self.assertIn("Acciones legendarias: 3 usos", mari["traits"])
+
+    def test_new_light_levels_and_dodge_marker(self):
+        keys = [l["key"] for l in scenes.catalog()["lights"]]
+        self.assertEqual(keys[:3], ["dia", "amanecer", "atardecer"])
+        self.assertIn("Esquivando", [t["name"] for t in rules.reference()["trackers"]])
+
+
 class GauekoTests(unittest.TestCase):
     def test_tables_use_real_creatures(self):
         from server import gaueko
@@ -846,6 +863,23 @@ class ApiTests(unittest.TestCase):
         self.json_call("DELETE", f"/api/bestiary/{doc['id']}")
         _, all_monsters = self.json_call("GET", "/api/monsters")
         self.assertEqual(next(m for m in all_monsters if m["key"] == "wolf")["name"], "Lobo")
+
+    def test_shared_image_is_not_deleted_while_in_use(self):
+        """Una ficha sacada del bestiario comparte la foto de su criatura: borrar la ficha no puede borrar la foto."""
+        url = json.loads(self.call("POST", "/api/uploads", raw=b"\x89PNG lobo", headers={"X-Filename": "lobo.png"})[1])["url"]
+        name = url.rsplit("/", 1)[1]
+        _, beast = self.json_call("POST", "/api/bestiary", {"name": "Lobo de Urbasa", "hp": 11, "portrait": url})
+        _, sheet = self.json_call("POST", "/api/characters", {"name": "Lobo de Urbasa", "type": "enemigo", "portrait": url})
+        self.json_call("DELETE", f"/api/characters/{sheet['id']}")
+        status, res = self.json_call("DELETE", f"/api/uploads/{name}")  # lo que hace la ficha al eliminarse
+        self.assertEqual((status, res.get("kept")), (200, True))
+        self.assertEqual(self.call("GET", url)[0], 200)  # la criatura conserva su foto
+        _, all_monsters = self.json_call("GET", "/api/monsters")
+        self.assertEqual(next(m for m in all_monsters if m.get("editId") == beast["id"])["portrait"], url)
+        self.json_call("DELETE", f"/api/bestiary/{beast['id']}")
+        status, res = self.json_call("DELETE", f"/api/uploads/{name}")  # ya nadie la usa: ahora sí se borra
+        self.assertEqual((status, res.get("kept")), (200, None))
+        self.assertEqual(self.call("GET", url)[0], 404)
 
     def test_removed_network_routes(self):
         self.assertEqual(self.call("GET", "/api/player")[0], 404)

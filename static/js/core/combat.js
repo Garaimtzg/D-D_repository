@@ -2,7 +2,7 @@
 // salvaciones de muerte y sincronización de los PG de los jugadores con su ficha.
 import { api } from './api.js';
 import { h, toast, toastError, modal, field, selectEl, bind, token } from './dom.js';
-import { applyDamage, applyHealing, fmtMod, ABILITY_KEYS, ABILITY_SHORT } from './dnd.js';
+import { applyDamage, applyHealing, fmtMod, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME } from './dnd.js';
 import { roll } from './dice.js';
 import { sfx } from './sfx.js';
 
@@ -172,8 +172,49 @@ export function healthWord(x) {
   return r >= 1 ? 'Ileso' : r > 0.5 ? 'Herido' : r > 0.25 ? 'Maltrecho' : 'A las puertas';
 }
 
+// ------------------------------------------------------------- tiradas de salvación
+// Lo que cambia una salvación según los estados (reglas de 2024): paralizado, aturdido, inconsciente o petrificado
+// fallan las de FUE y DES sin tirar; apresado, desventaja en DES; esquivando, ventaja en DES; bendecido, +1d4;
+// y el cansancio resta 2 por nivel a toda prueba con d20.
+const AUTO_FAIL = ['Paralizado', 'Aturdido', 'Inconsciente', 'Petrificado'];
+export function saveInfo(x, k) {
+  const names = (x.conditions || []).map((c) => c.name || c);
+  const physical = k === 'fue' || k === 'des';
+  const fail = physical ? names.find((n) => AUTO_FAIL.includes(n)) : null;
+  const dis = k === 'des' && names.includes('Apresado');
+  const adv = k === 'des' && names.includes('Esquivando') && !fail;
+  const blessed = names.includes('Bendecido');
+  const bonus = (Number(x.saves?.[k]) || 0) - 2 * (x.exhaustion || 0);
+  const notes = [fail && `${fail.toLowerCase()}: falla sin tirar`, dis && 'apresado: desventaja', adv && 'esquivando: ventaja',
+    blessed && 'bendecido: +1d4', x.exhaustion && `cansancio ${x.exhaustion}: −${2 * x.exhaustion}`].filter(Boolean);
+  return { bonus, fail, adv, dis, blessed, expr: `1d20${fmtMod(bonus)}${blessed ? '+1d4' : ''}`, notes };
+}
+// Ventaja y desventaja se anulan entre sí (la elegida en la bandeja más la de los estados).
+const mergeMode = (...modes) => {
+  const adv = modes.includes('adv'); const dis = modes.includes('dis');
+  return adv && dis ? '' : adv ? 'adv' : dis ? 'dis' : '';
+};
+// Tira la salvación de un participante y la apunta en el registro. Con CD dice si salva.
+// Devuelve { total, saved, auto } (auto: falló sin tirar) o null si se cancela.
+export async function saveRoll(c, x, k, { mode = '', dc = null, quiet = false } = {}) {
+  const s = saveInfo(x, k);
+  const what = `salvación de ${ABILITY_NAME[k]}`;
+  if (s.fail) {
+    log(c, `${x.name} falla la ${what} sin tirar (${s.fail.toLowerCase()}).`);
+    if (!quiet) toast(`${x.name} falla la ${what}: está ${s.fail.toLowerCase()}.`, { iconName: 'shield' });
+    return { total: null, saved: false, auto: true };
+  }
+  const r = await roll(s.expr, { label: `${x.name}: ${what}${dc ? ` (CD ${dc})` : ''}`, who: x.name, mode: mergeMode(mode, s.adv && 'adv', s.dis && 'dis'),
+    secret: !!x.hidden, color: x.color, quiet });
+  if (!r) return null;
+  const saved = dc ? r.total >= Number(dc) : null;
+  log(c, `${x.name}: ${what} ${r.total}${dc ? ` contra CD ${dc}: ${saved ? 'salva' : 'falla'}` : ''}.`);
+  if (dc && !quiet) toast(h('span', {}, h('b', {}, x.name), ` ${saved ? 'supera' : 'falla'} la ${what} (${r.total} contra CD ${dc})`), { kind: saved ? 'good' : 'error', iconName: 'shield' });
+  return { ...r, saved, auto: false };
+}
+
 // Daño en área con salvación: se tira la salvación de cada objetivo con su bonificador
-// (y su cansancio) y se aplica el daño, la mitad si salva. Devuelve true si se aplicó.
+// (su cansancio y sus estados) y se aplica el daño, la mitad si salva. Devuelve true si se aplicó.
 export async function areaDialog(c, { chars = [], preselect = null, title = 'Daño en área' } = {}) {
   const opts = { ability: 'des', dc: 13, damage: '8d6', half: true };
   const targets = new Set(preselect || c.combatants.filter((x) => x.type !== 'jugador' && x.hp > 0).map((x) => x.cid));
@@ -194,15 +235,50 @@ export async function areaDialog(c, { chars = [], preselect = null, title = 'Da�
   if (!dmgRoll) return false;
   const lines = [];
   for (const x of c.combatants.filter((y) => targets.has(y.cid))) {
-    const r = await roll(`1d20${fmtMod((x.saves?.[opts.ability] || 0) - 2 * (x.exhaustion || 0))}`, { label: `${x.name}: salvación de ${ABILITY_SHORT[opts.ability]}`, who: x.name, quiet: true, secret: x.hidden });
+    const r = await saveRoll(c, x, opts.ability, { dc: opts.dc, quiet: true });
     if (!r) continue;
-    const saved = r.total >= opts.dc;
+    const saved = r.saved;
     const dmg = saved ? (opts.half ? Math.floor(dmgRoll.total / 2) : 0) : dmgRoll.total;
     if (dmg) { damage(c, x, dmg, 'área'); syncCharacter(chars, x); }
     lines.push(h('li', { class: saved ? 'saved' : 'failed' }, token(x, { size: 30 }), h('b', { class: 'grow' }, x.name),
-      h('span', { class: 'chip' }, `🎲 ${r.total}`), h('span', { class: `chip ${saved ? 'good' : 'bad'}` }, saved ? 'Salva' : 'Falla'), h('b', { class: 'dmg' }, `−${dmg}`)));
+      h('span', { class: 'chip' }, r.auto ? '✖ sin tirar' : `🎲 ${r.total}`), h('span', { class: `chip ${saved ? 'good' : 'bad'}` }, saved ? 'Salva' : 'Falla'), h('b', { class: 'dmg' }, `−${dmg}`)));
   }
   log(c, `Área de ${ABILITY_SHORT[opts.ability]} CD ${opts.dc}: ${dmgRoll.total} de daño.`);
   modal('Resultado del área', h('ul', { class: 'area-result' }, lines), undefined, { iconName: 'flame' });
+  return true;
+}
+
+// Salvación de grupo, sin daño: aliento que asusta, presencia aterradora, un conjuro que hechiza… Cada objetivo tira
+// la suya contra la CD y, si se elige, quien falla queda con ese estado. Devuelve true si se tiró.
+export async function saveDialog(c, { conditions = [], preselect = null } = {}) {
+  const opts = { ability: 'sab', dc: 13, cond: '', rounds: 10 };
+  const targets = new Set(preselect || c.combatants.filter((x) => x.type === 'jugador' && x.hp > 0).map((x) => x.cid));
+  const body = h('div', { class: 'stack' },
+    h('div', { class: 'row' },
+      field('Salvación', selectEl(ABILITY_KEYS.map((k) => [k, ABILITY_NAME[k]]), opts.ability, (v) => { opts.ability = v; })),
+      field('CD', bind(opts, 'dc', { type: 'number', class: 'inline' })),
+      field('Si falla, queda', selectEl([['', '— nada —'], ...conditions.map((n) => [n, n])], opts.cond, (v) => { opts.cond = v; })),
+      field('Durante', selectEl([[0, 'Indefinido'], [1, '1 turno'], [10, '1 minuto (10)']], opts.rounds, (v) => { opts.rounds = Number(v); }))),
+    h('div', { class: 'eyebrow' }, 'Quién tira'),
+    h('div', { class: 'targets' }, c.combatants.map((x) => h('label', { class: `target ${x.type}` },
+      h('input', { type: 'checkbox', checked: targets.has(x.cid), onchange: (e) => (e.target.checked ? targets.add(x.cid) : targets.delete(x.cid)) }),
+      token(x, { size: 30 }), h('span', {}, x.name), h('span', { class: 'tiny muted' }, ` ${fmtMod(saveInfo(x, opts.ability).bonus)}`)))),
+    h('p', { class: 'tiny muted' }, 'Cada uno tira con su bonificador, su cansancio y sus estados (paralizado o aturdido fallan FUE y DES; apresado, desventaja en DES; esquivando, ventaja en DES; bendecido, +1d4).'));
+  if (!(await modal('Salvación', body, [{ label: 'Cancelar', value: false }, { label: 'Tirar', value: true, class: 'primary', icon: 'shield' }], { iconName: 'shield' }))) return false;
+  const lines = [];
+  for (const x of c.combatants.filter((y) => targets.has(y.cid))) {
+    const r = await saveRoll(c, x, opts.ability, { dc: opts.dc, quiet: true });
+    if (!r) continue;
+    if (!r.saved && opts.cond && !x.conditions.some((k) => k.name === opts.cond)) {
+      x.conditions.push({ name: opts.cond, rounds: opts.rounds || null });
+      log(c, `${x.name} queda ${opts.cond.toLowerCase()}.`);
+    }
+    lines.push(h('li', { class: r.saved ? 'saved' : 'failed' }, token(x, { size: 30 }), h('b', { class: 'grow' }, x.name),
+      h('span', { class: 'chip' }, r.auto ? '✖ sin tirar' : `🎲 ${r.total}`), h('span', { class: `chip ${r.saved ? 'good' : 'bad'}` }, r.saved ? 'Salva' : 'Falla'),
+      !r.saved && opts.cond && h('span', { class: 'chip cond' }, opts.cond)));
+  }
+  if (!lines.length) return false;
+  sfx.magic();
+  modal(`Salvación de ${ABILITY_NAME[opts.ability]} · CD ${opts.dc}`, h('ul', { class: 'area-result' }, lines), undefined, { iconName: 'shield' });
   return true;
 }

@@ -8,7 +8,7 @@ import {
   h, clear, icon, dieIcon, token, hpBar, shield, floatNum, modal, promptDialog, toast, toastError,
   selectEl, segmented, pickFiles, dropZone, prefs, fmtTime,
 } from '../core/dom.js';
-import { TYPE_LABEL, condLabel, fmtMod, initBonus, uid, applyDamage, applyHealing, passivePerception } from '../core/dnd.js';
+import { TYPE_LABEL, condLabel, fmtMod, initBonus, uid, applyDamage, applyHealing, passivePerception, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME } from '../core/dnd.js';
 import * as combatRules from '../core/combat.js';
 import { createWeather, WEATHERS } from '../core/weather.js';
 import { ambience } from '../core/ambience.js';
@@ -668,6 +668,13 @@ async function mount(root, params, opts = {}) {
         ? h('div', { class: 'tk-hp' }, h('span', { class: 'tnum' }, h('b', {}, info.hp), ` / ${info.maxHp}`, info.tempHp ? h('span', { class: 'temp' }, ` +${info.tempHp}`) : ''), hpBar(info.hp, info.maxHp, info.tempHp))
         : h('div', { class: 'tk-hp' }, h('span', { class: 'chip' }, combatRules.healthWord(info)))),
       info.conditions.length > 0 && h('div', { class: 'row' }, info.conditions.map((c) => h('span', { class: 'chip cond' }, condLabel(c)))),
+      !state.player && info.cmb && state.combat && h('div', { class: 'row tk-saves' }, ABILITY_KEYS.map((k) => { // salvaciones (con los estados)
+        const sv = combatRules.saveInfo(info.cmb, k);
+        return h('button', { class: `btn xs save-btn ${sv.fail ? 'auto-fail' : sv.adv && !sv.dis ? 'adv' : sv.dis && !sv.adv ? 'dis' : ''}`, type: 'button',
+          'data-tip': [`Salvación de ${ABILITY_NAME[k]}`, ...sv.notes].join(' · '),
+          onclick: async () => { if (await combatRules.saveRoll(state.combat, info.cmb, k)) saveCombat(state.combat); } },
+        ABILITY_SHORT[k], h('b', {}, sv.fail ? '✖' : fmtMod(sv.bonus)));
+      })),
       !state.player && target && h('div', { class: 'row' },
         h('button', { class: 'btn sm danger', type: 'button', onclick: () => hpDialog(target, info.cmb) }, icon('drop', 15), 'PG'),
         info.ch && h('button', { class: 'btn sm', type: 'button', onclick: () => { location.hash = `#/personajes/${info.ch.id}`; } }, icon('scroll', 15), 'Ficha'),

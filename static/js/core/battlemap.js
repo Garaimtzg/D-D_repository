@@ -34,7 +34,13 @@ export function spaceFree(t, c, r, others) {
   return tinyHere < 4;
 }
 export const AREA_SHAPES = [['esfera', 'Esfera'], ['cubo', 'Cubo'], ['cono', 'Cono'], ['linea', 'Línea'], ['emanacion', 'Emanación']];
-export const LIGHT_ALPHA = { dia: 0, penumbra: 0.38, noche: 0.66, oscuridad: 0.86 };
+export const LIGHT_ALPHA = { dia: 0, amanecer: 0.3, atardecer: 0.36, penumbra: 0.38, noche: 0.66, oscuridad: 0.86 };
+// Luz del cielo al amanecer y al atardecer: un velo cálido por el lado del sol (este al amanecer, oeste al atardecer)
+// que se vuelve violeta y más oscuro por el otro. [color y opacidad del lado del sol, del otro lado, ¿sol al este?]
+const LIGHT_SKY = {
+  amanecer: [[255, 150, 95], 0.34, [120, 80, 170], 0.36, true],
+  atardecer: [[255, 100, 20], 0.4, [80, 25, 95], 0.5, false],
+};
 const AREA_NAME = Object.fromEntries(AREA_SHAPES);
 
 let catalogPromise;
@@ -2079,7 +2085,15 @@ export function drawLight(ctx, glow, sc, cat, s, open = null) {
     }
   }
   if (alpha) {
-    ctx.fillStyle = `rgba(6,8,24,${alpha})`;
+    const sky = LIGHT_SKY[sc.light];
+    if (sky) {
+      const [sun, sunA, far, farA, east] = sky;
+      const g = ctx.createLinearGradient(east ? W : 0, H * 0.3, east ? 0 : W, H * 0.7);
+      g.addColorStop(0, `rgba(${sun},${sunA})`);
+      g.addColorStop(0.6, `rgba(${sun.map((v, i) => Math.round((v + far[i]) / 2))},${(sunA + farA) / 2})`);
+      g.addColorStop(1, `rgba(${far},${farA})`);
+      ctx.fillStyle = g;
+    } else ctx.fillStyle = `rgba(6,8,24,${alpha})`;
     ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'destination-out';
     for (const L of sources) {
