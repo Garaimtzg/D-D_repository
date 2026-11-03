@@ -706,6 +706,7 @@ CONDITIONS = [
 TRACKERS = [  # marcadores útiles en la mesa que no son estados del manual
     ("Concentrado", "Mantienes un conjuro: al recibir daño, salvación de CON CD 10 o la mitad del daño (máx. 30)."),
     ("Bendecido", "+1d4 a tiradas de ataque y salvación (bendición)."),
+    ("Esquivando", "Acción Esquivar: hasta el inicio de su próximo turno, los ataques contra él tienen desventaja y tiene ventaja en las salvaciones de DES (no si está incapacitado o con velocidad 0)."),
     ("Marcado", "Marca del cazador, maleficio u otro efecto que sigue al objetivo."),
     ("Maltrecho", "Le quedan la mitad de sus PG o menos."),
     ("Oculto", "Superó la acción de esconderse; la CD para encontrarlo es su resultado de Sigilo."),

@@ -25,7 +25,7 @@ const SCATTER_SETS = [['bosque', '🌳 Bosque'], ['matorral', '🌿 Matorral'], 
   ['cementerio', '🪦 Cementerio'], ['desierto', '🌵 Desierto'], ['cienaga', '🥀 Ciénaga'], ['agua', '🪷 Agua'], ['objeto', '◆ El objeto elegido']];
 // Fondo liso de la muestra de cada grupo de adornos (para que el adorno se vea bien en pequeño)
 const DECAL_GROUND = { Suelo: ['#8a857c', '#5f5a52'], 'Mazmorra y hogar': ['#8b5a31', '#5a3a1e'], Naturaleza: ['#5d8f45', '#3f6a2c'], Agua: ['#4a93b5', '#25607f'], 'Nieve y fuego': ['#8f9aa6', '#4a4f57'], Magia: ['#3d3550', '#1c1828'] };
-const LIGHT_ICON = { dia: '☀️', penumbra: '🌆', noche: '🌙', oscuridad: '🌑' };
+const LIGHT_ICON = { dia: '☀️', amanecer: '🌅', atardecer: '🌇', penumbra: '🌆', noche: '🌙', oscuridad: '🌑' };
 
 async function mount(root, [sceneId]) {
   const [cat, custom, combats] = await Promise.all([sceneCatalog(), api.list('scenes'), api.list('combats')]);

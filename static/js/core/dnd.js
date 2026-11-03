@@ -17,7 +17,7 @@ export const CONDITION_ICON = {
   Agarrado: '🤝', Apresado: '⛓️', Asustado: '😱', Aturdido: '💫', Cansancio: '🥱', Cegado: '🙈', Derribado: '🛌',
   Ensordecido: '🔇', Envenenado: '🤢', Hechizado: '💘', Incapacitado: '🚫', Inconsciente: '💤',
   Invisible: '👻', Paralizado: '🧊', Petrificado: '🗿', Concentrado: '🔮', Bendecido: '✨', Marcado: '🎯', Maltrecho: '🩸', Oculto: '🫥',
-  Debilitado: '🥴', Ralentizado: '🐌', Molestado: '😤', // maestrías de armas
+  Esquivando: '🌀', Debilitado: '🥴', Ralentizado: '🐌', Molestado: '😤', // maestrías de armas
 };
 export const condLabel = (name) => `${CONDITION_ICON[name] || '•'} ${name}`;
 
@@ -442,9 +442,12 @@ export function migrateCharacter(c) {
 
 // Ficha de enemigo a partir de una criatura del bestiario (ya con las ediciones de la mesa): sus competencias en
 // habilidades marcadas, su retrato o su muñeco, y enlazada a su modelo (monster) para poder actualizarla después.
+// La actitud sale de su alineamiento: no todas las criaturas son enemigas (Basajaun, Olentzero o Mari no atacan a
+// quien los trata bien).
+export const attitudeFor = (alignment) => (/malvad/i.test(alignment || '') ? 'hostil' : /buen/i.test(alignment || '') ? 'amistoso' : 'neutral');
 export function fromMonster(m) {
   return newCharacter('enemigo', monsterStats(m, {
-    name: m.name, monster: m.key || '',
+    name: m.name, monster: m.key || '', attitude: attitudeFor(m.alignment),
     notes: m.source ? `${m.eu} · mitología de Euskal Herria (criatura propia de esta app)` : m.en ? `${m.en} · SRD 5.2.1 (CC-BY-4.0)` : m.custom ? 'Criatura propia de esta mesa' : '',
   }));
 }

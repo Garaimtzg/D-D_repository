@@ -168,9 +168,25 @@ def upload(app, p, body):
     return 201, {"url": f"/uploads/{stored}", "name": filename, "size": len(raw)}
 
 
+def upload_in_use(app, name):
+    """¿Sigue algo guardado usando esta imagen? Una criatura del bestiario y las fichas que salen de ella (o la ficha
+    que se fijó como modelo) comparten el mismo fichero: borrar una ficha no puede dejar a la criatura sin su foto."""
+    needle = f"/uploads/{name}"
+    with app.store.lock:
+        for path in app.data_dir.glob("*.json"):  # colecciones y ajustes (las copias de backups/ no cuentan)
+            try:
+                if needle in path.read_text(encoding="utf-8"):
+                    return True
+            except OSError:
+                continue
+    return False
+
+
 def delete_upload(app, p, body):
     if not SAFE_UPLOAD.match(p["name"]):
         raise ApiError(400, "Nombre no válido")
+    if upload_in_use(app, p["name"]):
+        return 200, {"ok": True, "kept": True}  # otra cosa la sigue usando: se queda
     path = app.upload_dir / p["name"]
     if path.exists():
         path.unlink()

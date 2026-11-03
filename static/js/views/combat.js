@@ -5,7 +5,7 @@ import {
   h, clear, append, icon, bigBanner, bind, field, selectEl, segmented, hpBar, token, shield, modal, confirmDialog, toast, toastError, fmtDate, floatNum,
 } from '../core/dom.js';
 import {
-  TYPE_LABEL, TYPE_ICON, condLabel, reference, monsters, fmtMod, combatantFrom, fromMonster, critExpr,
+  TYPE_LABEL, TYPE_ICON, condLabel, reference, monsters, fmtMod, combatantFrom, fromMonster, critExpr, ABILITY_KEYS, ABILITY_SHORT, ABILITY_NAME, saveBonus,
 } from '../core/dnd.js';
 import * as R from '../core/combat.js';
 import { createBattleMap, sceneThumb, fmtMeters, SIZES } from '../core/battlemap.js';
@@ -20,7 +20,7 @@ async function mount(root, [selId]) {
     reference(), api.list('combats'), api.list('characters'), monsters(), api.settings(), loadScenes(),
   ]);
   combats.forEach((c) => c.combatants.forEach((x) => { const ch = chars.find((y) => y.id === x.charId); if (ch) x.look = ch.look; })); // aspecto al día
-  const state = { combats, chars, settings, sel: combats.find((c) => c.id === (selId || settings.activeCombat)) || null, mode: '' };
+  const state = { combats, chars, settings, sel: combats.find((c) => c.id === (selId || settings.activeCombat)) || null, mode: '', dc: '' };
   if (!state.sel && combats.length) state.sel = combats.find((c) => c.status === 'active') || combats.find((c) => c.status === 'planned') || null;
   const masteryStates = ref.mastery_states || [];
   const allConds = [...ref.conditions, ...masteryStates, ...ref.trackers];
@@ -421,6 +421,7 @@ async function mount(root, [selId]) {
         h('button', { class: 'btn xs success', type: 'button', onclick: apply('heal'), 'data-tip': 'Curar (Mayús + Intro)' }, icon('heart', 13)),
         h('button', { class: 'btn xs', type: 'button', onclick: apply('temp'), 'data-tip': 'PG temporales' }, icon('shield', 13))),
       x.conditions.length > 0 && h('div', { class: 'row' }, x.conditions.map((k) => h('span', { class: 'chip cond' }, condLabel(k.name), k.rounds ? ` (${k.rounds})` : ''))),
+      h('div', { class: 'row tk-saves' }, saveButtons(c, x, true)),
       h('div', { class: 'row' },
         x.attacks?.slice(0, 3).map((a) => h('button', { class: 'btn xs', type: 'button', onclick: () => (a.save
           ? roll(a.damage, { label: `${x.name}: ${a.name} (${a.save})`, who: x.name, secret: x.hidden, color: x.color })
@@ -478,6 +479,8 @@ async function mount(root, [selId]) {
       active: [h('button', { class: 'btn', type: 'button', onclick: () => step(c, -1) }, icon('prev', 16), 'Anterior'),
         h('button', { class: 'btn primary lg', type: 'button', onclick: () => step(c, 1) }, 'Siguiente turno', icon('next', 18)),
         h('button', { class: 'btn', type: 'button', onclick: () => areaDialog(c) }, icon('flame', 16), 'Daño en área'),
+        h('button', { class: 'btn', type: 'button', 'data-tip': 'Varios tiran la misma salvación contra una CD (y, si quieres, quien falla queda asustado, hechizado…)',
+          onclick: async () => { if (await R.saveDialog(c, { conditions: ref.conditions.map((k) => k.name) })) commit(); } }, icon('shield', 16), 'Salvación'),
         state.settings.activeCombat !== c.id && h('button', { class: 'btn', type: 'button', onclick: async () => { await setActive(c.id); render(); } }, icon('mesa', 16), 'Llevar a la mesa'),
         h('a', { class: 'btn', href: '#/mesa' }, icon('mesa', 16), 'Ver en la mesa'),
         h('button', { class: 'btn danger', type: 'button', onclick: () => finish(c) }, icon('crown', 16), 'Terminar')],
@@ -506,8 +509,10 @@ async function mount(root, [selId]) {
     if (!c.combatants.length) return h('div', { class: 'empty' }, icon('personajes'), h('p', {}, 'Sin participantes todavía.'));
     return h('div', { class: 'panel' },
       h('div', { class: 'panel-head' }, h('h3', {}, icon('list'), 'Orden de iniciativa'),
-        h('div', { class: 'actions' }, h('span', { class: 'tiny muted' }, 'Ataques con'),
-          segmented([['', 'Normal'], ['adv', 'Ventaja'], ['dis', 'Desventaja']], state.mode, (v) => { state.mode = v; }))),
+        h('div', { class: 'actions' }, h('span', { class: 'tiny muted' }, 'Tiradas con'),
+          segmented([['', 'Normal'], ['adv', 'Ventaja'], ['dis', 'Desventaja']], state.mode, (v) => { state.mode = v; }),
+          h('label', { class: 'row nowrap tiny muted save-dc', 'data-tip': 'CD de las salvaciones: si la pones, cada salvación dice si la supera y queda en el registro' },
+            '🛡 CD', bind(state, 'dc', { type: 'number', min: 1, max: 40, class: 'inline mini', placeholder: '—', 'aria-label': 'CD de las salvaciones' })))),
       h('ol', { class: 'tracker' }, c.combatants.map((x, i) => combatantRow(c, x, i))));
   }
 
@@ -575,6 +580,7 @@ async function mount(root, [selId]) {
             h('button', { class: 'btn xs', type: 'button', onclick: apply('temp'), 'data-tip': 'PG temporales' }, icon('shield', 13)))),
         x.type === 'jugador' && down && deathSaveRow(c, x),
         vexRow(c, x),
+        saveRow(c, x),
         x.attacks?.length > 0 && h('div', { class: 'row cbt-attacks' }, x.attacks.map((a) => h('span', { class: 'attack', 'data-tip': a.notes || null },
           a.save
             ? h('button', { class: 'btn xs', type: 'button', onclick: () => roll(a.damage, { label: `${x.name}: ${a.name} (${a.save})`, who: x.name, secret: x.hidden, color: x.color }) }, icon('flame', 12), `${a.name} · ${a.save} · ${a.damage}`)
@@ -600,6 +606,28 @@ async function mount(root, [selId]) {
           h('button', { class: 'btn icon xs ghost', type: 'button', 'aria-label': `Quitar a ${x.name}`, 'data-tip': 'Quitar del combate', onclick: () => removeCombatant(c, i) }, icon('close', 15)))),
     ]);
     return row;
+  }
+
+  // ------------------------------------------------- tiradas de salvación
+  // Seis botones (FUE … CAR) con su bonificador. La ficha manda: si ha subido de nivel o cambiado sus
+  // características, el combate lo recoge. Los estados que cambian la tirada se marcan en el botón.
+  function syncSaves(x) {
+    const ch = charOf(x);
+    if (ch?.abilities) x.saves = Object.fromEntries(ABILITY_KEYS.map((k) => [k, saveBonus(ch, k)]));
+  }
+  function saveButtons(c, x, small = false) {
+    syncSaves(x);
+    return ABILITY_KEYS.map((k) => {
+      const s = R.saveInfo(x, k);
+      return h('button', {
+        class: `btn xs save-btn ${s.fail ? 'auto-fail' : s.adv && !s.dis ? 'adv' : s.dis && !s.adv ? 'dis' : ''}`, type: 'button',
+        'data-tip': [`Salvación de ${ABILITY_NAME[k]}`, ...s.notes].join(' · '),
+        onclick: async () => { if (await R.saveRoll(c, x, k, { mode: state.mode, dc: Number(state.dc) || null })) commit(); },
+      }, small ? ABILITY_SHORT[k].slice(0, 3) : ABILITY_SHORT[k], h('b', {}, s.fail ? '✖' : fmtMod(s.bonus)), s.blessed && h('small', {}, '+d4'));
+    });
+  }
+  function saveRow(c, x) {
+    return h('div', { class: 'row cbt-saves' }, h('span', { class: 'tiny muted', 'data-tip': 'Tiradas de salvación: para resistir o esquivar ataques especiales, alientos, conjuros…' }, '🛡 Salvaciones'), saveButtons(c, x));
   }
 
   // ------------------------------------------------- maestrías de armas

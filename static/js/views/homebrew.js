@@ -1,8 +1,8 @@
 // Especies, clases y trasfondos propios: un editor para cada uno que guarda en la colección «homebrew». El servidor
 // los convierte a la misma forma que los del manual (server/homebrew.py), así el creador y la ficha los usan igual.
 import { api } from '../core/api.js';
-import { h, clear, icon, bind, field, selectEl, modal, confirmDialog, toast, toastError, pickFiles } from '../core/dom.js';
-import { ABILITY_KEYS, ABILITY_SHORT, reloadReference, SPECIES_ICON } from '../core/dnd.js';
+import { h, clear, icon, bind, field, selectEl, modal, confirmDialog, toast, toastError, pickFiles, searchBox } from '../core/dom.js';
+import { ABILITY_KEYS, ABILITY_SHORT, reloadReference, SPECIES_ICON, reference, speciesIcon, speciesFacts, source, fmtM } from '../core/dnd.js';
 
 const SIZES = ['Mediano', 'Pequeño', 'Mediano o Pequeño', 'Grande'];
 const USES = [['1', '1 vez por descanso'], ['2', '2 veces'], ['3', '3 veces'], ['pb', 'Bonif. por competencia']];
@@ -280,4 +280,58 @@ export async function editSpecies(sp, R, chars = []) {
     if (linked.length) toast(`${linked.length === 1 ? 'Ajustada 1 ficha' : `Ajustadas ${linked.length} fichas`} de ${ns.name}.`, { kind: 'good', iconName: 'personajes' });
   }
   return R2;
+}
+
+// ------------------------------------------------------------------ compendio de especies
+// Las especies jugables (del manual, del «Manual para casi todo», de Euskal Herria y las propias) en una ventana como
+// la del bestiario: buscar, ver sus rasgos, editarlas para la mesa, crear una nueva o empezar un aventurero con ella.
+const SPECIES_SOURCE = (s) => (s.homebrew_id && !s.edited ? 'propia' : s.origin === 'Euskal Herria' ? 'Euskal Herria' : s.page ? 'Manual del Jugador' : s.origin || '');
+export async function speciesDialog({ chars = [], onCreate = null } = {}) {
+  let R = await reference();
+  let q = '';
+  const grid = h('div', { class: 'species-grid' });
+  const norm2 = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const close = () => grid.closest('.modal-back')?.remove();
+  const meta = (s) => [s.size, fmtM(s.speed), s.darkvision ? `visión en la oscuridad ${s.darkvision} m` : ''].filter(Boolean).join(' · ');
+  const reload = async (R2) => { if (R2) { R = R2; draw(); } };
+  const detail = async (s) => {
+    const body = h('div', { class: 'stack sp-detail' },
+      h('div', { class: 'row nowrap', style: { alignItems: 'flex-start' } },
+        h('span', { class: 'species-pic', style: s.image ? { backgroundImage: `url("${s.image}")` } : {} }, s.image ? '' : speciesIcon(s)),
+        h('div', { class: 'grow stack-sm' },
+          h('div', { class: 'row' }, h('span', { class: 'chip' }, SPECIES_SOURCE(s)), s.edited && h('span', { class: 'chip' }, 'editada'), h('span', { class: 'tiny muted' }, source(s))),
+          h('div', { class: 'small' }, meta(s)),
+          h('div', { class: 'small' }, `Idiomas: común${s.languages?.length ? `, ${s.languages.join(', ').toLowerCase()}` : ''}`),
+          speciesFacts(s) && h('div', { class: 'tiny muted' }, speciesFacts(s)))),
+      (s.lore || s.summary) && h('p', { class: 'species-lore', style: { margin: 0 } }, s.lore || s.summary),
+      h('dl', { class: 'ref compact' }, s.traits.map(([n, t]) => [h('dt', {}, n), h('dd', {}, t)])),
+      s.options && h('div', { class: 'stack-sm' }, h('div', { class: 'eyebrow' }, s.options_label || 'Linajes'),
+        h('dl', { class: 'ref compact' }, s.options.map(([n, t]) => [h('dt', {}, n), h('dd', {}, t)]))));
+    const choice = await modal(`${speciesIcon(s)} ${s.name}`, body, [
+      { label: 'Cerrar', value: null },
+      { label: 'Editar', value: 'edit', icon: 'edit' },
+      onCreate && { label: 'Crear un aventurero', value: 'create', class: 'primary', icon: 'sparkle' },
+    ].filter(Boolean), { wide: true, iconName: 'personajes' });
+    if (choice === 'edit') reload(await editSpecies(s, R, chars));
+    if (choice === 'create') { close(); onCreate(s); }
+  };
+  const draw = () => {
+    const list = R.species.filter((s) => norm2(`${s.name} ${SPECIES_SOURCE(s)} ${s.edited ? 'editada' : ''} ${s.traits.map(([n]) => n).join(' ')} ${s.size}`).includes(norm2(q)));
+    clear(grid, list.length ? list.map((s) => h('div', { class: `sp-card ${s.origin === 'Euskal Herria' ? 'homebrew' : ''} ${s.homebrew_id && !s.edited ? 'custom' : ''} ${s.edited ? 'edited' : ''}` },
+      h('button', { class: 'sp-card-main', type: 'button', onclick: () => detail(s), 'data-tip': s.summary || null },
+        h('span', { class: 'species-pic', style: s.image ? { backgroundImage: `url("${s.image}")` } : {} }, s.image ? '' : speciesIcon(s)),
+        h('b', {}, s.name),
+        h('span', { class: 'tiny muted' }, meta(s)),
+        h('span', { class: 'tiny sp-src' }, SPECIES_SOURCE(s), s.edited ? ' · editada' : '')),
+      h('button', { class: 'btn icon xs beast-edit', type: 'button', 'aria-label': `Editar ${s.name}`, 'data-tip': 'Editar la especie para tu mesa',
+        onclick: async () => reload(await editSpecies(s, R, chars)) }, icon('edit', 13))))
+      : h('p', { class: 'muted' }, 'Ninguna especie coincide con la búsqueda.'));
+  };
+  draw();
+  modal('Especies', h('div', { class: 'stack' },
+    h('div', { class: 'row nowrap' }, h('div', { class: 'grow' }, searchBox('Buscar por nombre, rasgo u origen (vasca, propia, editada…)', (v) => { q = v; draw(); })),
+      h('button', { class: 'btn', type: 'button', onclick: async () => { if (await editHomebrew('species', R)) reload(await reloadReference()); } }, icon('plus', 15), 'Nueva especie')),
+    grid,
+    h('p', { class: 'tiny muted', style: { margin: 0 } }, 'Pulsa una especie para ver sus rasgos, editarla para tu mesa o empezar un aventurero con ella. Con el lápiz la editas directamente (los cambios valen para todas las fichas de esa especie).')),
+  [], { wide: true, iconName: 'personajes' });
 }
